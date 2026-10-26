@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800">
+  <rect width="1000" height="800" fill="#ffffff"/>
+  <line x1="0" y1="0" x2="0" y2="800" stroke="#245" stroke-width="2"/>
+  <line x1="100" y1="0" x2="100" y2="800" stroke="#9aa" stroke-width="1"/>
+  <line x1="200" y1="0" x2="200" y2="800" stroke="#9aa" stroke-width="1"/>
+  <line x1="300" y1="0" x2="300" y2="800" stroke="#9aa" stroke-width="1"/>
+  <line x1="400" y1="0" x2="400" y2="800" stroke="#9aa" stroke-width="1"/>
+  <line x1="500" y1="0" x2="500" y2="800" stroke="#245" stroke-width="2"/>
+  <line x1="600" y1="0" x2="600" y2="800" stroke="#9aa" stroke-width="1"/>
+  <line x1="700" y1="0" x2="700" y2="800" stroke="#9aa" stroke-width="1"/>
+  <line x1="800" y1="0" x2="800" y2="800" stroke="#9aa" stroke-width="1"/>
+  <line x1="900" y1="0" x2="900" y2="800" stroke="#9aa" stroke-width="1"/>
+  <line x1="1000" y1="0" x2="1000" y2="800" stroke="#245" stroke-width="2"/>
+  <line x1="0" y1="0" x2="1000" y2="0" stroke="#245" stroke-width="2"/>
+  <line x1="0" y1="100" x2="1000" y2="100" stroke="#9aa" stroke-width="1"/>
+  <line x1="0" y1="200" x2="1000" y2="200" stroke="#9aa" stroke-width="1"/>
+  <line x1="0" y1="300" x2="1000" y2="300" stroke="#9aa" stroke-width="1"/>
+  <line x1="0" y1="400" x2="1000" y2="400" stroke="#9aa" stroke-width="1"/>
+  <line x1="0" y1="500" x2="1000" y2="500" stroke="#245" stroke-width="2"/>
+  <line x1="0" y1="600" x2="1000" y2="600" stroke="#9aa" stroke-width="1"/>
+  <line x1="0" y1="700" x2="1000" y2="700" stroke="#9aa" stroke-width="1"/>
+  <line x1="0" y1="800" x2="1000" y2="800" stroke="#9aa" stroke-width="1"/>
+  <text x="4" y="14" font-size="12" fill="#245">0 m</text>
+  <text x="104" y="14" font-size="12" fill="#245">10 m</text>
+  <text x="204" y="14" font-size="12" fill="#245">20 m</text>
+  <text x="304" y="14" font-size="12" fill="#245">30 m</text>
+  <text x="404" y="14" font-size="12" fill="#245">40 m</text>
+  <text x="504" y="14" font-size="12" fill="#245">50 m</text>
+  <text x="604" y="14" font-size="12" fill="#245">60 m</text>
+  <text x="704" y="14" font-size="12" fill="#245">70 m</text>
+  <text x="804" y="14" font-size="12" fill="#245">80 m</text>
+  <text x="904" y="14" font-size="12" fill="#245">90 m</text>
+  <path d="M88 100H112M100 88V112" stroke="#d22" stroke-width="3"/><circle cx="100" cy="100" r="5" fill="none" stroke="#d22" stroke-width="2"/>
+  <path d="M588 100H612M600 88V112" stroke="#d22" stroke-width="3"/><circle cx="600" cy="100" r="5" fill="none" stroke="#d22" stroke-width="2"/>
+  <path d="M88 700H112M100 688V712" stroke="#22d" stroke-width="3"/><circle cx="100" cy="700" r="5" fill="none" stroke="#22d" stroke-width="2"/>
+  <text x="500" y="420" font-size="28" text-anchor="middle" fill="#245">Testraster 10 m · 1000 × 800</text>
+</svg>

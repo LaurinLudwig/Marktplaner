@@ -1,0 +1,51 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie erwartet.
+labels: [Fehler]
+body:
+  - type: markdown
+    attributes:
+      value: Danke für die Meldung! Bitte keine echten Händlerdaten anhängen. Sicherheitslücken bitte nicht hier, sondern wie in SECURITY.md beschrieben melden.
+  - type: textarea
+    id: beschreibung
+    attributes:
+      label: Was ist passiert?
+      description: Was hast du erwartet, und was ist stattdessen passiert?
+    validations:
+      required: true
+  - type: textarea
+    id: schritte
+    attributes:
+      label: Schritte zum Nachstellen
+      placeholder: |
+        1. Neues Projekt, Festplatz anlegen
+        2. Geschäft-Werkzeug (G), in die Grundfläche klicken
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App-Version
+      description: Steht unten in jedem PDF- oder CSV-Export, z. B. „Marktplaner, Version 0.1.0“.
+    validations:
+      required: true
+  - type: dropdown
+    id: umgebung
+    attributes:
+      label: Wo läuft die App?
+      options:
+        - Desktop-App Windows
+        - Desktop-App macOS
+        - Browser-Version
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Betriebssystem bzw. Browser mit Version
+      placeholder: z. B. Windows 11, macOS 26, Firefox 150
+  - type: textarea
+    id: anhang
+    attributes:
+      label: Screenshots oder Beispieldatei
+      description: Gern eine kleine `.mplan`-Datei, die den Fehler zeigt (ohne echte Händlerdaten).

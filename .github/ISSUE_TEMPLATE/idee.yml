@@ -1,0 +1,20 @@
+name: Idee oder Wunsch
+description: Eine neue Funktion oder Verbesserung vorschlagen.
+labels: [Idee]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Worum geht es?
+      description: Welche Aufgabe bei der Marktplanung ist heute umständlich oder nicht möglich?
+    validations:
+      required: true
+  - type: textarea
+    id: vorschlag
+    attributes:
+      label: Vorschlag
+      description: Wie könnte der Marktplaner dabei helfen?
+  - type: textarea
+    id: alternativen
+    attributes:
+      label: Wie löst du das bisher?

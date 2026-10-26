@@ -1,0 +1,1185 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Marktplan-Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: Werkzeugleiste oben, Zeichenfläche als ruhige Planfläche links, Seitenleiste (Auswahl + Statistik) rechts. */
+:root {
+  --bg: #eaeef0;
+  --panel: #fbfcfc;
+  --canvas: #f6f8f9;
+  --ink: #17242a;
+  --muted: #5d6c72;
+  --line: #d5dde0;
+  --grid-minor: #e6ebed;
+  --grid-major: #cbd5d9;
+  --area-fill: #e1e8eb;
+  --area-stroke: #8a9ca3;
+  --accent: #1c5d8a;
+  --accent-ink: #ffffff;
+  --accent-soft: #dae8f2;
+  --stand-fill: #ffffff;
+  --stand-stroke: #2b3b42;
+  --free: #2b8549;
+  --free-fill: #def2e4;
+  --warn: #d4761a;
+  --err: #d23c3c;
+  --ok: #2b8549;
+  --caution: #c9960f;
+  --shadow: 0 1px 2px rgba(23, 36, 42, .06), 0 4px 16px rgba(23, 36, 42, .05);
+  --f-ui: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1417; --panel: #151d21; --canvas: #11191c; --ink: #e1e9ec; --muted: #91a1a7; --line: #26333a;
+    --grid-minor: #172125; --grid-major: #233238; --area-fill: #1b262b; --area-stroke: #5a6e77;
+    --accent: #6cafe0; --accent-ink: #0b1a24; --accent-soft: #1b3343; --stand-fill: #1f2b30; --stand-stroke: #c3d0d5;
+    --free: #5cc07f; --free-fill: #163222; --warn: #f09d4c; --err: #f06868; --ok: #5cc07f; --caution: #e3bf45;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1417; --panel: #151d21; --canvas: #11191c; --ink: #e1e9ec; --muted: #91a1a7; --line: #26333a;
+  --grid-minor: #172125; --grid-major: #233238; --area-fill: #1b262b; --area-stroke: #5a6e77;
+  --accent: #6cafe0; --accent-ink: #0b1a24; --accent-soft: #1b3343; --stand-fill: #1f2b30; --stand-stroke: #c3d0d5;
+  --free: #5cc07f; --free-fill: #163222; --warn: #f09d4c; --err: #f06868; --ok: #5cc07f; --caution: #e3bf45;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 14px; line-height: 1.45; }
+* { box-sizing: border-box; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding-inline: 16px;
+  padding-block: 12px 16px;
+}
+
+/* ---------- Werkzeugleiste ---------- */
+.bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: 8px; }
+.brand h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.brand span { color: var(--muted); font-size: 12.5px; }
+.tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 12px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--panel); cursor: pointer;
+  font-size: 13.5px; font-weight: 500; white-space: nowrap;
+  transition: border-color .15s, background .15s;
+}
+.btn:hover { border-color: var(--area-stroke); }
+.btn svg { width: 15px; height: 15px; flex: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.danger:hover { border-color: var(--err); color: var(--err); }
+.btn.small { height: 30px; padding: 0 10px; font-size: 13px; }
+.spacer { flex: 1; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; user-select: none; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--warn); margin: 0; }
+
+/* ---------- Zeichenfläche ---------- */
+.stage {
+  position: relative; min-width: 0; min-height: 0;
+  background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+#cv { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; cursor: default; }
+#cv.panning, #cv.panning * { cursor: grab !important; }
+#cv.panning.dragging, #cv.panning.dragging * { cursor: grabbing !important; }
+
+.grid-minor { stroke: var(--grid-minor); stroke-width: 1; fill: none; }
+.grid-major { stroke: var(--grid-major); stroke-width: 1; fill: none; }
+
+.area { fill: var(--area-fill); stroke: var(--area-stroke); stroke-width: 1; vector-effect: non-scaling-stroke; cursor: move; }
+.area.sel { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.front { stroke: var(--accent); stroke-width: 4.5; stroke-linecap: square; vector-effect: non-scaling-stroke; pointer-events: none; }
+.area-label { fill: var(--muted); font-family: var(--f-ui); font-weight: 500; pointer-events: none; }
+.front-label { fill: var(--accent); font-family: var(--f-ui); font-weight: 600; letter-spacing: .08em; pointer-events: none; }
+
+.free { fill: url(#hatch); stroke: var(--free); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.free.blink { animation: blink .32s ease-in-out 6 alternate; stroke-width: 2.5; stroke-dasharray: none; }
+@keyframes blink { from { opacity: 1; } to { opacity: .15; } }
+.free-label { fill: var(--free); font-family: var(--f-ui); font-weight: 600; pointer-events: none; }
+.hatch-bg { fill: var(--free-fill); }
+.hatch-line { stroke: var(--free); stroke-opacity: .32; }
+
+.stand { fill: var(--stand-fill); stroke: var(--stand-stroke); stroke-width: 1.25; vector-effect: non-scaling-stroke; cursor: move; }
+.stand.warn { stroke: var(--warn); stroke-width: 2.5; }
+.stand.err { stroke: var(--err); stroke-width: 2.5; }
+.stand.sel { stroke-width: 2.5; }
+.sel-ring { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.stand-text { fill: var(--ink); font-family: var(--f-ui); pointer-events: none; }
+.stand-text .nr { font-family: var(--f-num); font-weight: 500; }
+.stand-text .dim { fill: var(--muted); font-family: var(--f-num); }
+.warn-icon { fill: var(--warn); pointer-events: none; }
+.warn-mark { fill: #fff; font-family: var(--f-ui); font-weight: 700; pointer-events: none; }
+.rot-line { stroke: var(--accent); stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
+.rot-handle { fill: var(--panel); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; cursor: grab; }
+
+.hud {
+  position: absolute; left: 10px; right: 10px; bottom: 10px;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  pointer-events: none;
+}
+.hud > * { pointer-events: auto; }
+.hud-box {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--muted);
+  backdrop-filter: blur(6px);
+}
+.hud-box b { color: var(--ink); font-weight: 500; font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+.hud .btn { height: 26px; font-size: 12px; padding: 0 8px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 10px; border-radius: 2px; border: 1.5px solid; flex: none; }
+.sw.front { border: none; height: 4px; background: var(--accent); border-radius: 1px; }
+.sw.free { border-color: var(--free); background: repeating-linear-gradient(45deg, var(--free-fill) 0 2px, color-mix(in srgb, var(--free) 35%, var(--free-fill)) 2px 3px); }
+.sw.warn { border-color: var(--warn); background: var(--stand-fill); }
+.sw.err { border-color: var(--err); background: var(--stand-fill); }
+.snap-msg { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--panel); font-size: 12px; padding: 4px 10px; border-radius: 99px; white-space: nowrap; pointer-events: none; }
+
+/* ---------- Seitenleiste ---------- */
+.side { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 16px; box-shadow: var(--shadow); }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.card h2 { margin: 2px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; overflow-wrap: anywhere; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.chip.err { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent); }
+
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 10px; margin-top: 14px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field label { font-size: 12px; color: var(--muted); }
+.inp { position: relative; display: flex; align-items: center; }
+.inp input {
+  width: 100%; height: 34px; padding: 0 9px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--canvas);
+}
+.inp input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input.num { font-family: var(--f-num); font-variant-numeric: tabular-nums; padding-right: 34px; }
+.inp input.bad { border-color: var(--err); }
+.inp .unit { position: absolute; right: 9px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.axis-info { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin: 0; }
+.axis-info b { color: var(--ink); font-family: var(--f-num); font-weight: 500; }
+
+.front-pick { grid-column: 1 / -1; display: grid; grid-template-columns: 112px 1fr; gap: 12px; align-items: center; }
+.front-pick svg { width: 112px; height: 80px; background: var(--canvas); border: 1px solid var(--line); border-radius: 6px; }
+.front-pick .edge-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
+.front-pick .edge { stroke: var(--area-stroke); stroke-width: 1.5; pointer-events: none; }
+.front-pick .edge.on { stroke: var(--accent); stroke-width: 4.5; }
+.front-pick .body { fill: var(--area-fill); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.seg button { height: 28px; border: 1px solid var(--line); background: var(--canvas); border-radius: 5px; font-size: 12.5px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.empty p { margin: 8px 0 0; color: var(--muted); max-width: 40ch; }
+.keys { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; font-size: 13px; }
+.keys li { display: flex; justify-content: space-between; gap: 10px; }
+.keys span:first-child { color: var(--muted); }
+kbd { font-family: var(--f-num); font-size: 11.5px; padding: 1px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--canvas); white-space: nowrap; }
+
+/* Statistik */
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 0; }
+.kpis div { min-width: 0; }
+.kpis dt { font-size: 12px; color: var(--muted); }
+.kpis dd { margin: 0; font-family: var(--f-num); font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.kpis dd small { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 2px; }
+.power { margin-top: 16px; }
+.power-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.power-head .val { font-family: var(--f-num); font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 6px; }
+.power-head input { width: 64px; height: 28px; padding: 0 6px; text-align: right; border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); font-family: var(--f-num); }
+.meter { height: 8px; border-radius: 99px; background: var(--line); margin-top: 8px; overflow: hidden; }
+.meter div { height: 100%; border-radius: 99px; transition: width .2s, background .2s; }
+.power-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.free-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 18px; }
+.free-head h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.free-head span { font-size: 12px; color: var(--muted); }
+.free-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
+.free-group { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 0 2px; }
+.free-list button {
+  width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; text-align: left;
+}
+.free-list button:hover { background: var(--free-fill); }
+.free-list .fdim { font-family: var(--f-num); font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 8px; }
+.free-list .fdim::before { content: ""; width: 10px; height: 10px; border-radius: 2px; border: 1.5px solid var(--free); background: var(--free-fill); }
+.free-list .fpos { font-size: 12px; color: var(--muted); font-family: var(--f-num); }
+.free-none { font-size: 13px; color: var(--muted); padding: 6px 0; }
+
+@media (max-width: 820px) {
+  html, body { height: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 62vh auto; }
+  .side { overflow: visible; }
+  .legend { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .free.blink { animation: none; stroke-width: 3; }
+  .meter div { transition: none; }
+}
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand"><h1>Marktplan</h1><span>Prototyp · Freiflächen</span></div>
+    <div class="tools">
+      <button class="btn primary" id="add-area" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="4" width="13" height="8" rx="1"/><path d="M1.5 12h13" stroke-width="3"/></svg>
+        Grundfläche hinzufügen</button>
+      <button class="btn primary" id="add-stand" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M8 5.5v5M5.5 8h5"/></svg>
+        Geschäft hinzufügen</button>
+      <button class="btn" id="renumber" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8h11M10 5l3 3-3 3"/></svg>
+        Neu nummerieren (links → rechts)</button>
+    </div>
+    <div class="spacer"></div>
+    <label class="toggle"><input type="checkbox" id="warn-outside" checked> Warnung außerhalb Grundfläche</label>
+  </header>
+
+  <main class="stage" id="stage">
+    <svg id="cv" aria-label="Marktplan-Zeichenfläche">
+      <defs>
+        <pattern id="hatch" patternUnits="userSpaceOnUse" width="1" height="1" patternTransform="rotate(45)">
+          <rect class="hatch-bg" x="0" y="0" width="1" height="1"></rect>
+          <line class="hatch-line" x1="0" y1="0" x2="0" y2="1" stroke-width="0.1"></line>
+        </pattern>
+      </defs>
+      <g id="grid"></g>
+      <g id="world"></g>
+    </svg>
+    <div class="snap-msg" id="snap-msg" hidden></div>
+    <div class="hud">
+      <div class="hud-box">
+        <span>x <b id="cur-x">–</b> · y <b id="cur-y">–</b> m</span>
+        <span>1 m = <b id="zoom">10</b> px</span>
+        <button class="btn" id="fit" type="button">Einpassen</button>
+      </div>
+      <div class="hud-box legend">
+        <span><i class="sw front"></i>Vorderseite</span>
+        <span><i class="sw free"></i>Freifläche</span>
+        <span><i class="sw warn"></i>außerhalb</span>
+        <span><i class="sw err"></i>Überlappung</span>
+      </div>
+    </div>
+  </main>
+
+  <aside class="side">
+    <section class="card" id="inspector"></section>
+    <section class="card stats">
+      <p class="eyebrow">Statistik</p>
+      <dl class="kpis">
+        <div><dt>Stände</dt><dd id="st-count">0</dd></div>
+        <div><dt>Frontmeter</dt><dd id="st-front">0</dd></div>
+        <div><dt>Frei</dt><dd id="st-free">0</dd></div>
+      </dl>
+      <div class="power">
+        <div class="power-head">
+          <span>Strom</span>
+          <span class="val"><span id="st-power">0</span> / <input id="power-limit" type="text" inputmode="decimal" value="25" aria-label="Stromlimit in kW"> kW</span>
+        </div>
+        <div class="meter"><div id="power-bar"></div></div>
+        <p class="power-note" id="power-note"></p>
+      </div>
+      <div class="free-head"><h3>Freiflächen</h3><span id="free-count"></span></div>
+      <ul class="free-list" id="free-list"></ul>
+    </section>
+  </aside>
+</div>
+
+<script>
+/* GEO-START */
+/* =========================================================================
+   GEOMETRIE-MODUL
+   -------------------------------------------------------------------------
+   Reine Funktionen ohne DOM und ohne Zustand – zur Übernahme in die App.
+
+   Konventionen
+   - Einheit: Meter. x nach rechts, y nach unten (wie SVG/Bildschirm).
+   - Drehung in Grad, positiv = im Uhrzeigersinn auf dem Bildschirm
+     (entspricht SVG rotate()).
+   - Rechteck: { cx, cy, w, d, rot } = Mittelpunkt, Breite entlang der
+     lokalen x-Achse, Tiefe entlang der lokalen y-Achse, Drehung.
+   - Ecken-/Kantenreihenfolge (lokal, ungedreht):
+       Ecke 0 = (-w/2,-d/2) oben links    Kante 0 = oben   (Ecke 0 → 1)
+       Ecke 1 = ( w/2,-d/2) oben rechts   Kante 1 = rechts (Ecke 1 → 2)
+       Ecke 2 = ( w/2, d/2) unten rechts  Kante 2 = unten  (Ecke 2 → 3)
+       Ecke 3 = (-w/2, d/2) unten links   Kante 3 = links  (Ecke 3 → 0)
+   - Ein Geschäft hat seine Vorderseite an Kante 2 (unten).
+   ========================================================================= */
+const Geo = (() => {
+  // ---------- Vektor-Grundlagen ----------
+  const vec = (x, y) => ({ x, y });
+  const add = (a, b) => vec(a.x + b.x, a.y + b.y);
+  const sub = (a, b) => vec(a.x - b.x, a.y - b.y);
+  const mul = (a, k) => vec(a.x * k, a.y * k);
+  const dot = (a, b) => a.x * b.x + a.y * b.y;
+  const cross = (a, b) => a.x * b.y - a.y * b.x;
+  const len = a => Math.hypot(a.x, a.y);
+  const normalize = a => { const l = len(a) || 1; return vec(a.x / l, a.y / l); };
+  const rad = deg => deg * Math.PI / 180;
+
+  /** Dreht Punkt p um den Ursprung (Grad, im Uhrzeigersinn auf dem Bildschirm). */
+  function rotate(p, deg) {
+    const c = Math.cos(rad(deg)), s = Math.sin(rad(deg));
+    return vec(p.x * c - p.y * s, p.x * s + p.y * c);
+  }
+
+  /** Die vier Weltkoordinaten-Ecken eines gedrehten Rechtecks (Reihenfolge s. oben). */
+  function rectCorners(r) {
+    return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+      const p = rotate(vec(sx * r.w / 2, sy * r.d / 2), r.rot);
+      return vec(r.cx + p.x, r.cy + p.y);
+    });
+  }
+
+  /** Vorzeichenbehaftete Fläche eines Polygons (Shoelace). Betrag = Fläche in m². */
+  function polygonArea(poly) {
+    let a = 0;
+    for (let i = 0; i < poly.length; i++) a += cross(poly[i], poly[(i + 1) % poly.length]);
+    return a / 2;
+  }
+
+  /** Schnittpunkt der Strecke p1→p2 mit der (unendlichen) Geraden durch a und b. */
+  function lineIntersect(p1, p2, a, b) {
+    const r = sub(p2, p1), s = sub(b, a);
+    const den = cross(r, s);
+    if (Math.abs(den) < 1e-12) return p1;
+    return add(p1, mul(r, cross(sub(a, p1), s) / den));
+  }
+
+  /**
+   * Schneidet ein Polygon mit einem KONVEXEN Polygon (Sutherland–Hodgman).
+   * Ergebnis: der Teil von `subject`, der innerhalb von `clip` liegt (evtl. leer).
+   * Funktioniert für beide Umlaufrichtungen von `clip`.
+   */
+  function clipPolygon(subject, clip) {
+    const orient = Math.sign(polygonArea(clip)) || 1;
+    let out = subject.slice();
+    for (let i = 0; i < clip.length && out.length; i++) {
+      const a = clip[i], b = clip[(i + 1) % clip.length];
+      const inside = p => orient * cross(sub(b, a), sub(p, a)) >= -1e-9;
+      const input = out;
+      out = [];
+      for (let j = 0; j < input.length; j++) {
+        const cur = input[j], prev = input[(j + input.length - 1) % input.length];
+        const cIn = inside(cur), pIn = inside(prev);
+        if (cIn) {
+          if (!pIn) out.push(lineIntersect(prev, cur, a, b));
+          out.push(cur);
+        } else if (pIn) {
+          out.push(lineIntersect(prev, cur, a, b));
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Koordinatensystem entlang der Vorderseite einer Grundfläche.
+   * area.front = Index der Vorderkante (0–3).
+   *
+   * Rückgabe { origin, u, v, length, depth }:
+   * - u: Einheitsvektor ENTLANG der Vorderseite, „von links nach rechts“
+   *      aus Sicht einer Person, die außen vor der Vorderseite steht und
+   *      auf die Fläche blickt.
+   * - v: Einheitsvektor senkrecht zur Vorderseite, ins Innere der Fläche.
+   * - origin: linker Endpunkt der Vorderkante (Achsenposition 0).
+   * - length: Länge der Vorderkante = Achsenbereich [0, length].
+   * - depth: Tiefe der Fläche senkrecht zur Vorderseite.
+   *
+   * Punkt p ↦ (s, t) mit s = Position entlang der Achse, t = Abstand von der Vorderseite.
+   */
+  function frontFrame(area) {
+    const c = rectCorners(area);
+    const i = ((area.front % 4) + 4) % 4;
+    const p0 = c[i], p1 = c[(i + 1) % 4];
+    const mid = mul(add(p0, p1), 0.5);
+    const v = normalize(sub(vec(area.cx, area.cy), mid));
+    // Rechte Hand bei Blickrichtung v (Bildschirm, y nach unten): (-v.y, v.x)
+    const u = vec(-v.y, v.x);
+    const origin = dot(sub(p1, p0), u) > 0 ? p0 : p1;
+    return { origin, u, v, length: len(sub(p1, p0)), depth: i % 2 === 0 ? area.d : area.w };
+  }
+
+  /** Weltpunkt → Achsenkoordinaten (s entlang, t in die Tiefe). */
+  const toFrame = (f, p) => { const d = sub(p, f.origin); return { s: dot(d, f.u), t: dot(d, f.v) }; };
+  /** Achsenkoordinaten → Weltpunkt. */
+  const fromFrame = (f, s, t) => add(f.origin, add(mul(f.u, s), mul(f.v, t)));
+  /** Drehwinkel (Grad), den ein Objekt braucht, damit seine lokale x-Achse = u ist. */
+  const frameAngle = f => Math.atan2(f.u.y, f.u.x) * 180 / Math.PI;
+
+  /** PROJEKTION: projiziert alle Punkte eines Polygons auf die Achse u → [min, max]. */
+  function projectInterval(poly, f) {
+    let min = Infinity, max = -Infinity;
+    for (const p of poly) {
+      const s = dot(sub(p, f.origin), f.u);
+      if (s < min) min = s;
+      if (s > max) max = s;
+    }
+    return [min, max];
+  }
+
+  /**
+   * BELEGTES INTERVALL eines Geschäfts auf der Achse einer Grundfläche.
+   * Nur der Teil des Geschäfts INNERHALB der Grundfläche zählt: Das Geschäft wird
+   * zuerst auf die Grundfläche zugeschnitten, dann wird der Rest projiziert.
+   * Rückgabe [a, b] mit 0 ≤ a < b ≤ length, oder null, wenn keine echte Überlappung
+   * (bloßes Berühren der Kante zählt nicht).
+   */
+  function occupiedInterval(areaPoly, f, standPoly, minOverlapArea = 1e-4) {
+    const inside = clipPolygon(standPoly, areaPoly);
+    if (inside.length < 3 || Math.abs(polygonArea(inside)) < minOverlapArea) return null;
+    const [a, b] = projectInterval(inside, f);
+    const lo = Math.max(0, Math.min(f.length, a));
+    const hi = Math.max(0, Math.min(f.length, b));
+    return hi - lo > 1e-9 ? [lo, hi] : null;
+  }
+
+  /** VEREINIGUNG: sortiert Intervalle und fasst überlappende/angrenzende zusammen. */
+  function mergeIntervals(list) {
+    const sorted = list.map(iv => [iv[0], iv[1]]).sort((p, q) => p[0] - q[0]);
+    const out = [];
+    for (const iv of sorted) {
+      const last = out[out.length - 1];
+      if (last && iv[0] <= last[1] + 1e-9) last[1] = Math.max(last[1], iv[1]);
+      else out.push(iv);
+    }
+    return out;
+  }
+
+  /**
+   * SUBTRAKTION: [0, length] minus eine Liste bereits VEREINIGTER, sortierter Intervalle.
+   * Rückgabe: die freien Lücken als [a, b].
+   */
+  function subtractIntervals(length, merged) {
+    const gaps = [];
+    let cursor = 0;
+    for (const [a, b] of merged) {
+      if (a > cursor) gaps.push([cursor, Math.min(a, length)]);
+      cursor = Math.max(cursor, b);
+      if (cursor >= length) break;
+    }
+    if (cursor < length) gaps.push([cursor, length]);
+    return gaps;
+  }
+
+  /**
+   * FREIFLÄCHEN einer Grundfläche.
+   * Freie Achsenabschnitte = [0, length] minus Vereinigung der belegten Intervalle.
+   * Jede Freifläche bekommt die VOLLE Tiefe der Grundfläche; hinter einem Stand
+   * entsteht daher nie eine Freifläche. Abschnitte schmaler als minWidth entfallen.
+   * Rückgabe je Fläche: { start, end, width, depth, polygon, center }.
+   */
+  function freeSpaces(f, occupied, minWidth = 0.5) {
+    const gaps = subtractIntervals(f.length, mergeIntervals(occupied));
+    return gaps
+      .filter(([a, b]) => b - a >= minWidth - 1e-9)
+      .map(([a, b]) => ({
+        start: a, end: b, width: b - a, depth: f.depth,
+        polygon: [fromFrame(f, a, 0), fromFrame(f, b, 0), fromFrame(f, b, f.depth), fromFrame(f, a, f.depth)],
+        center: fromFrame(f, (a + b) / 2, f.depth / 2),
+      }));
+  }
+
+  /**
+   * Überlappen sich zwei konvexe Polygone (Separating-Axis-Test)?
+   * Berührung bzw. Überlappung bis `tol` Meter zählt nicht als Überlappung.
+   */
+  function rectsOverlap(pa, pb, tol = 0.01) {
+    for (const poly of [pa, pb]) {
+      for (let i = 0; i < poly.length; i++) {
+        const e = sub(poly[(i + 1) % poly.length], poly[i]);
+        const n = normalize(vec(-e.y, e.x));
+        let minA = Infinity, maxA = -Infinity, minB = Infinity, maxB = -Infinity;
+        for (const p of pa) { const s = dot(p, n); minA = Math.min(minA, s); maxA = Math.max(maxA, s); }
+        for (const p of pb) { const s = dot(p, n); minB = Math.min(minB, s); maxB = Math.max(maxB, s); }
+        if (Math.min(maxA, maxB) - Math.max(minA, minB) <= tol) return false;
+      }
+    }
+    return true;
+  }
+
+  /** Liegt ein Polygon vollständig in einem konvexen Polygon (Toleranz in Metern)? */
+  function containedIn(poly, container, tol = 0.01) {
+    const orient = Math.sign(polygonArea(container)) || 1;
+    return poly.every(p => container.every((a, i) => {
+      const b = container[(i + 1) % container.length];
+      const e = sub(b, a);
+      return orient * cross(e, sub(p, a)) / (len(e) || 1) >= -tol;
+    }));
+  }
+
+  /** Winkel für Text, der nie auf dem Kopf steht: normiert auf (-90°, 90°]. */
+  function uprightAngle(deg) {
+    let a = ((deg % 360) + 540) % 360 - 180;
+    if (a > 90) a -= 180;
+    if (a <= -90) a += 180;
+    return a;
+  }
+
+  /**
+   * FANG an der Vorderseite.
+   * stand: { cx, cy, w, d } (Wunschposition), areas: [{ id, frame, others }],
+   * others = belegte Intervalle der ANDEREN Stände auf dieser Grundfläche.
+   * Liegt die Vorderkante des Stands näher als `tol` an einer Vorderseite, wird
+   * der Stand bündig daran gesetzt und übernimmt deren Ausrichtung. Zusätzlich
+   * rasten seine Seitenkanten an Achsenanfang/-ende und an Nachbarständen ein.
+   * Rückgabe { cx, cy, rot, areaId } oder null.
+   */
+  function snapToFront(stand, areas, tol) {
+    let best = null;
+    for (const ar of areas) {
+      const f = ar.frame;
+      const { s, t } = toFrame(f, vec(stand.cx, stand.cy));
+      const dist = Math.abs(t - stand.d / 2);
+      if (dist > tol) continue;
+      if (s < -stand.w / 2 || s > f.length + stand.w / 2) continue;
+      if (!best || dist < best.dist) best = { ar, s, dist };
+    }
+    if (!best) return null;
+    const f = best.ar.frame;
+    let s = best.s;
+    const edges = [0, f.length];
+    for (const [a, b] of best.ar.others || []) edges.push(a, b);
+    let shift = null;
+    for (const e of edges) {
+      for (const side of [-1, 1]) {
+        const ds = e - (s + side * stand.w / 2);
+        if (Math.abs(ds) <= tol && (shift === null || Math.abs(ds) < Math.abs(shift))) shift = ds;
+      }
+    }
+    if (shift !== null) s += shift;
+    const c = fromFrame(f, s, stand.d / 2);
+    return { cx: c.x, cy: c.y, rot: frameAngle(f), areaId: best.ar.id };
+  }
+
+  return {
+    vec, add, sub, mul, dot, len, rotate,
+    rectCorners, polygonArea, clipPolygon,
+    frontFrame, toFrame, fromFrame, frameAngle,
+    projectInterval, occupiedInterval, mergeIntervals, subtractIntervals, freeSpaces,
+    rectsOverlap, containedIn, uprightAngle, snapToFront,
+  };
+})();
+/* GEO-END */
+</script>
+
+<script>
+/* =========================================================================
+   EDITOR (Zustand, Darstellung, Bedienung) – Prototyp
+   ========================================================================= */
+const $ = s => document.querySelector(s);
+const svg = $('#cv'), gGrid = $('#grid'), gWorld = $('#world');
+const MIN_FREE = 0.5;
+
+const state = {
+  areas: [], stands: [], sel: null,
+  view: { scale: 10, tx: 0, ty: 0 },
+  warnOutside: true, powerLimit: 25,
+  blink: null,
+};
+let uid = 1;
+let spaceDown = false, drag = null, snapInfo = null;
+
+// ---------- Hilfen ----------
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = n => { const r = Math.round(n * 100) / 100; return (Math.abs(r) < 0.005 ? 0 : r).toLocaleString('de-DE', { maximumFractionDigits: 2 }); };
+const parseNum = s => { const n = parseFloat(String(s).trim().replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
+const norm360 = a => ((a % 360) + 360) % 360;
+const pts = poly => poly.map(p => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(' ');
+const findArea = id => state.areas.find(a => a.id === id);
+const findStand = id => state.stands.find(s => s.id === id);
+const selected = () => !state.sel ? null : state.sel.type === 'area' ? findArea(state.sel.id) : findStand(state.sel.id);
+const areaIndex = a => state.areas.indexOf(a) + 1;
+
+function newArea(o) { const a = { id: uid++, name: '', cx: 0, cy: 0, w: 20, d: 8, rot: 0, front: 2, ...o }; state.areas.push(a); return a; }
+function newStand(o) { const s = { id: uid++, nr: '', name: '', owner: '', ware: '', w: 3, d: 3, kw: 0, cx: 0, cy: 0, rot: 0, ...o }; state.stands.push(s); return s; }
+function nextNr() { return String(state.stands.reduce((m, s) => Math.max(m, parseInt(s.nr, 10) || 0), 0) + 1); }
+
+/** Setzt einen Stand bündig an die Vorderseite einer Grundfläche, beginnend bei Achsenposition s0. */
+function placeOnFront(area, s0, w, d) {
+  const f = Geo.frontFrame(area);
+  const c = Geo.fromFrame(f, s0 + w / 2, d / 2);
+  return { cx: c.x, cy: c.y, rot: Geo.frameAngle(f), w, d };
+}
+
+// ---------- Abgeleitete Daten ----------
+function derive() {
+  const areas = state.areas.map(a => ({ a, id: a.id, poly: Geo.rectCorners(a), frame: Geo.frontFrame(a) }));
+  const stands = state.stands.map(s => ({ s, id: s.id, poly: Geo.rectCorners(s), overlaps: [], inside: false, touches: false }));
+  for (const ad of areas) {
+    ad.occupied = [];
+    for (const sd of stands) {
+      const iv = Geo.occupiedInterval(ad.poly, ad.frame, sd.poly);
+      if (iv) { ad.occupied.push({ id: sd.id, iv }); sd.touches = true; }
+    }
+    ad.free = Geo.freeSpaces(ad.frame, ad.occupied.map(o => o.iv), MIN_FREE)
+      .map(fs => ({ ...fs, key: `${ad.id}:${fs.start.toFixed(2)}` }));
+  }
+  for (let i = 0; i < stands.length; i++)
+    for (let j = i + 1; j < stands.length; j++)
+      if (Geo.rectsOverlap(stands[i].poly, stands[j].poly)) { stands[i].overlaps.push(stands[j].s); stands[j].overlaps.push(stands[i].s); }
+  for (const sd of stands) {
+    const host = areas.find(ad => Geo.containedIn(sd.poly, ad.poly, 0.01));
+    sd.inside = !!host; sd.host = host ? host.a : null;
+  }
+  return { areas, stands };
+}
+
+// ---------- Text, der in eine Fläche passt ----------
+function fitFont(lines, along, across, maxFs) {
+  const byH = across * 0.8 / (lines.length * 1.25);
+  const byW = Math.min(...lines.map(l => along * 0.9 / (Math.max(l.length, 1) * 0.58)));
+  return Math.min(byH, byW, maxFs);
+}
+/** Wählt die Ausrichtung (entlang Breite oder Tiefe), in der der Text größer wird. */
+function bestTextLayout(lines, w, d, baseAngle, maxFs) {
+  const a = { fs: fitFont(lines, w, d, maxFs), ang: baseAngle };
+  const b = { fs: fitFont(lines, d, w, maxFs), ang: baseAngle + 90 };
+  const pick = b.fs > a.fs * 1.3 ? b : a;
+  return { fs: pick.fs, ang: Geo.uprightAngle(pick.ang) };
+}
+
+// ---------- Darstellung ----------
+let rafId = 0;
+function render() { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(draw); }
+
+function draw() {
+  const D = derive();
+  const { scale: k, tx, ty } = state.view;
+  gWorld.setAttribute('transform', `translate(${tx} ${ty}) scale(${k})`);
+  drawGrid();
+
+  // Schraffur in Bildschirmgröße halten
+  const hs = 8 / k, hatch = $('#hatch');
+  hatch.setAttribute('width', hs); hatch.setAttribute('height', hs);
+  hatch.querySelector('rect').setAttribute('width', hs); hatch.querySelector('rect').setAttribute('height', hs);
+  const hl = hatch.querySelector('line'); hl.setAttribute('y2', hs); hl.setAttribute('stroke-width', 1.6 / k);
+
+  const px = n => n / k; // Bildschirm-Pixel in Meter
+  const blinkOn = state.blink && Date.now() < state.blink.until;
+  let html = '';
+
+  // Grundflächen
+  for (const ad of D.areas) {
+    const sel = state.sel?.type === 'area' && state.sel.id === ad.id;
+    html += `<polygon class="area${sel ? ' sel' : ''}" data-kind="area" data-id="${ad.id}" points="${pts(ad.poly)}"/>`;
+  }
+  // Freiflächen
+  for (const ad of D.areas) for (const fs of ad.free) {
+    const blink = blinkOn && state.blink.key === fs.key;
+    html += `<polygon class="free${blink ? ' blink' : ''}" points="${pts(fs.polygon)}"/>`;
+    const lines = [`Frei ${fmt(fs.width)} × ${fmt(fs.depth)} m`];
+    const L = bestTextLayout(lines, fs.width, fs.depth, Geo.frameAngle(ad.frame), 1.3);
+    if (L.fs * k >= 6) html += `<text class="free-label" x="0" y="0" font-size="${L.fs}" text-anchor="middle" dominant-baseline="central" transform="translate(${fs.center.x} ${fs.center.y}) rotate(${L.ang})">${esc(lines[0])}</text>`;
+  }
+  // Vorderseiten + Beschriftung
+  for (const ad of D.areas) {
+    const f = ad.frame, a = ad.a;
+    const p0 = f.origin, p1 = Geo.fromFrame(f, f.length, 0);
+    html += `<line class="front" x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}"/>`;
+    const ang = Geo.uprightAngle(Geo.frameAngle(f));
+    const fl = Geo.fromFrame(f, f.length / 2, -px(13));
+    html += `<text class="front-label" font-size="${px(10)}" text-anchor="middle" dominant-baseline="central" transform="translate(${fl.x} ${fl.y}) rotate(${ang})">VORDERSEITE</text>`;
+    const nl = Geo.fromFrame(f, f.length / 2, f.depth + px(13));
+    html += `<text class="area-label" font-size="${px(12)}" text-anchor="middle" dominant-baseline="central" transform="translate(${nl.x} ${nl.y}) rotate(${ang})">${esc(a.name || 'Grundfläche ' + areaIndex(a))} · ${fmt(a.w)} × ${fmt(a.d)} m</text>`;
+  }
+  // Geschäfte
+  for (const sd of D.stands) {
+    const s = sd.s;
+    const sel = state.sel?.type === 'stand' && state.sel.id === s.id;
+    const err = sd.overlaps.length > 0;
+    const warn = !err && state.warnOutside && !sd.inside;
+    html += `<polygon class="stand${err ? ' err' : warn ? ' warn' : ''}${sel ? ' sel' : ''}" data-kind="stand" data-id="${s.id}" points="${pts(sd.poly)}"/>`;
+  }
+  for (const sd of D.stands) {
+    const s = sd.s;
+    const lines = [s.nr || '–', s.name || 'Ohne Namen', `${fmt(s.w)} × ${fmt(s.d)} m`];
+    // Größe nach Nummer und Maßen bestimmen; der Name wird bei Bedarf gekürzt
+    const L = bestTextLayout([lines[0], lines[2], 'xxxxxxxxx'], s.w, s.d, s.rot, 1.1);
+    const along = Math.abs(Geo.uprightAngle(L.ang - s.rot)) < 45 ? s.w : s.d;
+    const maxChars = Math.max(3, Math.floor(along * 0.9 / (L.fs * 0.58)));
+    if (lines[1].length > maxChars) lines[1] = lines[1].slice(0, maxChars - 1).trimEnd() + '…';
+    const fsPx = L.fs * k;
+    if (fsPx >= 4.5) {
+      let t = `<text class="stand-text" text-anchor="middle" dominant-baseline="central" transform="translate(${s.cx} ${s.cy}) rotate(${L.ang})" font-size="${L.fs}">`;
+      if (fsPx < 5.5) t += `<tspan class="nr" x="0" y="0" font-size="${L.fs * 1.4}">${esc(lines[0])}</tspan>`;
+      else {
+        t += `<tspan class="nr" x="0" y="${-1.25 * L.fs}" font-size="${L.fs * 1.1}">${esc(lines[0])}</tspan>`;
+        t += `<tspan x="0" y="0" font-weight="500">${esc(lines[1])}</tspan>`;
+        t += `<tspan class="dim" x="0" y="${1.25 * L.fs}">${esc(lines[2])}</tspan>`;
+      }
+      html += t + '</text>';
+    }
+    if (state.warnOutside && !sd.inside && !sd.overlaps.length) {
+      const c = Geo.add({ x: s.cx, y: s.cy }, Geo.rotate({ x: s.w / 2, y: -s.d / 2 }, s.rot));
+      const r = px(9);
+      html += `<g transform="translate(${c.x} ${c.y})"><path class="warn-icon" d="M0 ${-r} L${r * 1.05} ${r * 0.8} L${-r * 1.05} ${r * 0.8} Z"/><text class="warn-mark" font-size="${px(11)}" text-anchor="middle" dominant-baseline="central" y="${px(2)}">!</text></g>`;
+    }
+  }
+  // Auswahl: Drehgriff
+  const obj = selected();
+  if (obj) {
+    const top = Geo.add({ x: obj.cx, y: obj.cy }, Geo.rotate({ x: 0, y: -obj.d / 2 }, obj.rot));
+    const h = Geo.add({ x: obj.cx, y: obj.cy }, Geo.rotate({ x: 0, y: -obj.d / 2 - px(24) }, obj.rot));
+    if (state.sel.type === 'stand') html += `<polygon class="sel-ring" points="${pts(Geo.rectCorners({ ...obj, w: obj.w + px(8), d: obj.d + px(8) }))}"/>`;
+    html += `<line class="rot-line" x1="${top.x}" y1="${top.y}" x2="${h.x}" y2="${h.y}"/>`;
+    html += `<circle class="rot-handle" data-kind="rot" data-id="${obj.id}" cx="${h.x}" cy="${h.y}" r="${px(6.5)}"><title>Drehen (Shift: 15°-Schritte)</title></circle>`;
+  }
+  gWorld.innerHTML = html;
+
+  $('#zoom').textContent = fmt(k);
+  syncInspector(D);
+  drawStats(D);
+}
+
+function drawGrid() {
+  const { scale: k, tx, ty } = state.view;
+  const W = svg.clientWidth, H = svg.clientHeight;
+  const minorOn = k >= 5;
+  let minor = '', major = '';
+  const x0 = Math.floor(-tx / k), x1 = Math.ceil((W - tx) / k);
+  const y0 = Math.floor(-ty / k), y1 = Math.ceil((H - ty) / k);
+  for (let X = x0; X <= x1; X++) {
+    const sx = Math.round(tx + X * k) + 0.5;
+    if (X % 10 === 0) major += `M${sx} 0V${H}`; else if (minorOn) minor += `M${sx} 0V${H}`;
+  }
+  for (let Y = y0; Y <= y1; Y++) {
+    const sy = Math.round(ty + Y * k) + 0.5;
+    if (Y % 10 === 0) major += `M0 ${sy}H${W}`; else if (minorOn) minor += `M0 ${sy}H${W}`;
+  }
+  gGrid.innerHTML = `<path class="grid-minor" d="${minor}"/><path class="grid-major" d="${major}"/>`;
+}
+
+// ---------- Statistik ----------
+function drawStats(D) {
+  const n = state.stands.length;
+  const front = state.stands.reduce((m, s) => m + s.w, 0);
+  const power = state.stands.reduce((m, s) => m + (s.kw || 0), 0);
+  const free = D.areas.flatMap(ad => ad.free);
+  $('#st-count').textContent = n;
+  $('#st-front').innerHTML = `${fmt(front)}<small>m</small>`;
+  $('#st-free').innerHTML = `${fmt(free.reduce((m, f) => m + f.width, 0))}<small>m</small>`;
+  $('#st-power').textContent = fmt(power);
+
+  const lim = state.powerLimit;
+  const ratio = lim > 0 ? power / lim : (power > 0 ? Infinity : 0);
+  const bar = $('#power-bar');
+  bar.style.width = `${Math.min(100, ratio * 100)}%`;
+  bar.style.background = ratio > 1 ? 'var(--err)' : ratio >= 0.9 ? 'var(--caution)' : 'var(--ok)';
+  $('#power-note').textContent = !(lim > 0) ? 'Kein Limit gesetzt'
+    : ratio > 1 ? `${fmt(power - lim)} kW über dem Limit (${Math.round(ratio * 100)} %)`
+    : `${Math.round(ratio * 100)} % ausgelastet · ${fmt(lim - power)} kW frei`;
+
+  $('#free-count').textContent = `${free.length} ${free.length === 1 ? 'Fläche' : 'Flächen'}`;
+  const list = $('#free-list');
+  let html = '';
+  for (const ad of D.areas) {
+    if (!ad.free.length) continue;
+    html += `<li class="free-group">${esc(ad.a.name || 'Grundfläche ' + areaIndex(ad.a))}</li>`;
+    for (const fs of ad.free)
+      html += `<li><button type="button" data-free="${fs.key}"><span class="fdim">Frei ${fmt(fs.width)} × ${fmt(fs.depth)} m</span><span class="fpos">${fmt(fs.start)}–${fmt(fs.end)} m</span></button></li>`;
+  }
+  list.innerHTML = html || '<li class="free-none">Keine Freiflächen ab 0,5 m Breite.</li>';
+}
+
+$('#free-list').addEventListener('click', e => {
+  const b = e.target.closest('[data-free]'); if (!b) return;
+  const fs = derive().areas.flatMap(ad => ad.free).find(f => f.key === b.dataset.free);
+  if (!fs) return;
+  const v = state.view;
+  v.tx = svg.clientWidth / 2 - fs.center.x * v.scale;
+  v.ty = svg.clientHeight / 2 - fs.center.y * v.scale;
+  state.blink = { key: fs.key, until: Date.now() + 2000 };
+  render();
+  setTimeout(render, 2050);
+});
+$('#power-limit').addEventListener('input', e => {
+  const n = parseNum(e.target.value);
+  e.target.classList.toggle('bad', !(n >= 0));
+  if (n >= 0) { state.powerLimit = n; render(); }
+});
+
+// ---------- Seitenleiste ----------
+const STAND_FIELDS = [
+  { key: 'nr', label: 'Platznummer' },
+  { key: 'kw', label: 'Strom', unit: 'kW', num: true, min: 0, step: 0.5 },
+  { key: 'name', label: 'Geschäftsname', wide: true },
+  { key: 'owner', label: 'Eigentümer', wide: true },
+  { key: 'ware', label: 'Ware', wide: true },
+  { key: 'w', label: 'Breite', unit: 'm', num: true, min: 0.1, step: 0.1 },
+  { key: 'd', label: 'Tiefe', unit: 'm', num: true, min: 0.1, step: 0.1 },
+  { key: 'rot', label: 'Drehung', unit: '°', num: true, step: 1, angle: true },
+  { key: 'spacer' },
+  { key: 'cx', label: 'Mitte X', unit: 'm', num: true, step: 0.1 },
+  { key: 'cy', label: 'Mitte Y', unit: 'm', num: true, step: 0.1 },
+];
+const AREA_FIELDS = [
+  { key: 'name', label: 'Bezeichnung', wide: true },
+  { key: 'w', label: 'Breite', unit: 'm', num: true, min: 0.5, step: 0.5 },
+  { key: 'd', label: 'Tiefe', unit: 'm', num: true, min: 0.5, step: 0.5 },
+  { key: 'rot', label: 'Drehung', unit: '°', num: true, step: 1, angle: true },
+  { key: 'spacer' },
+  { key: 'cx', label: 'Mitte X', unit: 'm', num: true, step: 0.5 },
+  { key: 'cy', label: 'Mitte Y', unit: 'm', num: true, step: 0.5 },
+];
+const EDGE_LABELS = [[2, 'Unten'], [1, 'Rechts'], [0, 'Oben'], [3, 'Links']];
+let inspectorFor = null;
+
+function buildInspector() {
+  const box = $('#inspector');
+  const obj = selected();
+  inspectorFor = obj ? `${state.sel.type}:${obj.id}` : null;
+  if (!obj) {
+    box.innerHTML = `<div class="empty">
+      <p class="eyebrow">Auswahl</p><h2>Nichts ausgewählt</h2>
+      <p>Klicke auf eine Grundfläche oder ein Geschäft. Ziehe einen Stand nah an eine blaue Vorderseite, dann rastet er ein.</p>
+      <ul class="keys">
+        <li><span>Verschieben</span><span><kbd>←↑→↓</kbd> 0,1 m · <kbd>Shift</kbd> 1 m</span></li>
+        <li><span>Um 90° drehen</span><kbd>R</kbd></li>
+        <li><span>Duplizieren</span><kbd>Strg+D</kbd></li>
+        <li><span>Löschen</span><kbd>Entf</kbd></li>
+        <li><span>Fang aus beim Ziehen</span><kbd>Alt</kbd></li>
+        <li><span>Ansicht verschieben</span><span><kbd>Leertaste</kbd> + Ziehen</span></li>
+        <li><span>Zoomen</span><kbd>Mausrad</kbd></li>
+      </ul></div>`;
+    return;
+  }
+  const isStand = state.sel.type === 'stand';
+  const fields = isStand ? STAND_FIELDS : AREA_FIELDS;
+  let html = `<p class="eyebrow">${isStand ? 'Geschäft' : 'Grundfläche'}</p><h2 id="insp-title"></h2><div class="chips" id="insp-chips"></div><div class="fields">`;
+  for (const f of fields) {
+    if (f.key === 'spacer') {
+      html += `<div class="field" style="justify-content:flex-end"><button type="button" class="btn small" data-act="rot90">↻ 90° drehen</button></div>`;
+      continue;
+    }
+    const id = `f-${f.key}`;
+    html += `<div class="field${f.wide ? ' wide' : ''}"><label for="${id}">${f.label}</label><div class="inp">
+      <input id="${id}" data-key="${f.key}" type="text" ${f.num ? 'inputmode="decimal" class="num"' : ''} autocomplete="off" spellcheck="false">
+      ${f.unit ? `<span class="unit">${f.unit}</span>` : ''}</div></div>`;
+  }
+  if (!isStand) {
+    html += `<div class="field wide"><label>Vorderseite</label><div class="front-pick"><svg id="front-svg" viewBox="-56 -40 112 80" aria-hidden="true"></svg>
+      <div class="seg" role="group" aria-label="Vorderseite wählen">${EDGE_LABELS.map(([e, l]) => `<button type="button" data-edge="${e}">${l}</button>`).join('')}</div></div></div>
+      <p class="axis-info" id="axis-info"></p>`;
+  }
+  html += `</div><div class="actions">
+    <button type="button" class="btn small" data-act="dup">Duplizieren <kbd>Strg+D</kbd></button>
+    <button type="button" class="btn small danger" data-act="del">Löschen <kbd>Entf</kbd></button></div>`;
+  box.innerHTML = html;
+
+  box.querySelectorAll('input[data-key]').forEach(inp => {
+    const f = fields.find(x => x.key === inp.dataset.key);
+    inp.addEventListener('input', () => applyField(f, inp));
+    inp.addEventListener('blur', () => { inp.classList.remove('bad'); render(); });
+    if (f.num) inp.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      const o = selected(); if (!o) return;
+      const step = (f.step || 1) * (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+      let val = Math.round((o[f.key] + step) * 1000) / 1000;
+      if (f.min !== undefined) val = Math.max(f.min, val);
+      o[f.key] = f.angle ? norm360(val) : val;
+      inp.value = fmt(o[f.key]);
+      render();
+    });
+  });
+  box.querySelectorAll('[data-edge]').forEach(b => b.addEventListener('click', () => setFront(+b.dataset.edge)));
+  box.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+    const act = b.dataset.act;
+    if (act === 'dup') duplicate(); else if (act === 'del') removeSelected(); else if (act === 'rot90') rotate90();
+  }));
+}
+
+function applyField(f, inp) {
+  const o = selected(); if (!o) return;
+  if (!f.num) { o[f.key] = inp.value; render(); return; }
+  const n = parseNum(inp.value);
+  const ok = Number.isFinite(n) && (f.min === undefined || n >= f.min);
+  inp.classList.toggle('bad', !ok);
+  if (!ok) return;
+  o[f.key] = f.angle ? norm360(n) : n;
+  render();
+}
+
+function setFront(edge) { const a = selected(); if (a && state.sel.type === 'area') { a.front = edge; render(); } }
+
+function syncInspector(D) {
+  const obj = selected();
+  const key = obj ? `${state.sel.type}:${obj.id}` : null;
+  if (key !== inspectorFor) buildInspector();
+  if (!obj) return;
+  const box = $('#inspector');
+  box.querySelectorAll('input[data-key]').forEach(inp => {
+    if (document.activeElement === inp) return;
+    const v = obj[inp.dataset.key];
+    inp.value = typeof v === 'number' ? fmt(v) : (v ?? '');
+  });
+  const isStand = state.sel.type === 'stand';
+  const title = isStand ? `${obj.nr ? 'Platz ' + obj.nr : 'Ohne Nummer'}${obj.name ? ' · ' + obj.name : ''}` : (obj.name || 'Grundfläche ' + areaIndex(obj));
+  $('#insp-title').textContent = title;
+
+  let chips = '';
+  if (isStand) {
+    const sd = D.stands.find(x => x.id === obj.id);
+    if (sd.inside) chips += `<span class="chip ok">auf ${esc(sd.host.name || 'Grundfläche ' + areaIndex(sd.host))}</span>`;
+    else if (sd.touches) chips += `<span class="chip warn">ragt über die Grundfläche hinaus</span>`;
+    else chips += `<span class="chip warn">außerhalb jeder Grundfläche</span>`;
+    for (const o of sd.overlaps) chips += `<span class="chip err">überlappt ${esc(o.nr ? 'Platz ' + o.nr : o.name || 'Stand')}</span>`;
+  } else {
+    const ad = D.areas.find(x => x.id === obj.id);
+    const used = ad.occupied.length;
+    chips += `<span class="chip">${used} ${used === 1 ? 'Stand' : 'Stände'}</span><span class="chip ok">${ad.free.length} ${ad.free.length === 1 ? 'Freifläche' : 'Freiflächen'}</span>`;
+    // Vorderseiten-Auswahl
+    const kf = 70 / Math.hypot(obj.w, obj.d);
+    const c = Geo.rectCorners({ cx: 0, cy: 0, w: obj.w * kf, d: obj.d * kf, rot: obj.rot });
+    let s = `<polygon class="body" points="${pts(c)}"/>`;
+    for (let e = 0; e < 4; e++) {
+      const a = c[e], b = c[(e + 1) % 4];
+      s += `<line class="edge${obj.front === e ? ' on' : ''}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+      s += `<line class="edge-hit" data-edge="${e}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"><title>Als Vorderseite wählen</title></line>`;
+    }
+    const fsvg = $('#front-svg');
+    fsvg.innerHTML = s;
+    fsvg.querySelectorAll('[data-edge]').forEach(l => l.addEventListener('click', () => setFront(+l.dataset.edge)));
+    box.querySelectorAll('.seg [data-edge]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.edge === obj.front)));
+    $('#axis-info').innerHTML = `Achse entlang der Vorderseite: <b>0–${fmt(ad.frame.length)} m</b>, Tiefe <b>${fmt(ad.frame.depth)} m</b>. Kanten beziehen sich auf die ungedrehte Fläche.`;
+  }
+  $('#insp-chips').innerHTML = chips;
+}
+
+// ---------- Aktionen ----------
+function select(sel) { state.sel = sel; render(); }
+function viewCenter() {
+  const v = state.view;
+  return { x: (svg.clientWidth / 2 - v.tx) / v.scale, y: (svg.clientHeight / 2 - v.ty) / v.scale };
+}
+function removeSelected() {
+  if (!state.sel) return;
+  if (state.sel.type === 'area') state.areas = state.areas.filter(a => a.id !== state.sel.id);
+  else state.stands = state.stands.filter(s => s.id !== state.sel.id);
+  select(null);
+}
+function duplicate() {
+  const o = selected(); if (!o) return;
+  if (state.sel.type === 'stand') {
+    const off = Geo.rotate({ x: o.w, y: 0 }, o.rot);
+    const c = newStand({ ...o, id: undefined, nr: nextNr(), cx: o.cx + off.x, cy: o.cy + off.y });
+    c.id = uid++;
+    select({ type: 'stand', id: c.id });
+  } else {
+    const off = Geo.rotate({ x: 0, y: -(o.d + 4) }, o.rot);
+    const c = newArea({ ...o, name: '', cx: o.cx + off.x, cy: o.cy + off.y });
+    c.id = uid++;
+    select({ type: 'area', id: c.id });
+  }
+}
+function rotate90() { const o = selected(); if (o) { o.rot = norm360(Math.round(o.rot) + 90); render(); } }
+
+/**
+ * Nummeriert alle Stände entlang der Vorderseiten: Grundflächen in Erstellungsreihenfolge,
+ * innerhalb einer Fläche nach Achsenposition (links → rechts). Ein Stand gehört zu der Fläche,
+ * mit der er die größte Überlappung hat. Stände ohne Überlappung kommen ans Ende.
+ */
+function renumber() {
+  const areas = state.areas.map((a, idx) => ({ idx, poly: Geo.rectCorners(a), frame: Geo.frontFrame(a) }));
+  const keyed = state.stands.map(s => {
+    const poly = Geo.rectCorners(s);
+    let best = null;
+    for (const ar of areas) {
+      const inside = Geo.clipPolygon(poly, ar.poly);
+      const area = inside.length >= 3 ? Math.abs(Geo.polygonArea(inside)) : 0;
+      if (area > 1e-4 && (!best || area > best.area)) {
+        const [lo, hi] = Geo.projectInterval(inside, ar.frame);
+        best = { area, idx: ar.idx, pos: (lo + hi) / 2 };
+      }
+    }
+    return best ? { s, group: best.idx, pos: best.pos, y: 0 } : { s, group: Infinity, pos: s.cx, y: s.cy };
+  });
+  keyed.sort((p, q) => p.group - q.group || p.pos - q.pos || p.y - q.y);
+  keyed.forEach((k, i) => { k.s.nr = String(i + 1); });
+  render();
+}
+
+function addArea() {
+  const c = viewCenter();
+  const a = newArea({ cx: c.x, cy: c.y, w: 20, d: 8 });
+  select({ type: 'area', id: a.id });
+}
+function addStand() {
+  const c = viewCenter();
+  const s = newStand({ nr: nextNr(), name: 'Neues Geschäft', cx: c.x, cy: c.y, w: 3, d: 3, kw: 0 });
+  select({ type: 'stand', id: s.id });
+}
+
+function fitView() {
+  const polys = [...state.areas, ...state.stands].map(Geo.rectCorners).flat();
+  if (!polys.length) return;
+  const xs = polys.map(p => p.x), ys = polys.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const W = svg.clientWidth, H = svg.clientHeight, pad = 70;
+  const k = Math.max(1, Math.min(80, Math.min((W - 2 * pad) / (maxX - minX || 1), (H - 2 * pad - 40) / (maxY - minY || 1))));
+  state.view = { scale: k, tx: W / 2 - (minX + maxX) / 2 * k, ty: (H - 40) / 2 - (minY + maxY) / 2 * k };
+  render();
+}
+
+// ---------- Zeiger ----------
+function toWorld(e) {
+  const r = svg.getBoundingClientRect(), v = state.view;
+  return { x: (e.clientX - r.left - v.tx) / v.scale, y: (e.clientY - r.top - v.ty) / v.scale };
+}
+function setSnapMsg(t) { const m = $('#snap-msg'); m.hidden = !t; if (t) m.textContent = t; }
+
+svg.addEventListener('pointerdown', e => {
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+  const p = toWorld(e);
+  const el = e.target.closest('[data-kind]');
+  const base = { x0: e.clientX, y0: e.clientY, started: false };
+  if (spaceDown || e.button === 1) {
+    drag = { ...base, mode: 'pan', tx: state.view.tx, ty: state.view.ty, started: true };
+    svg.classList.add('panning', 'dragging');
+  } else if (e.button !== 0) return;
+  else if (el && el.dataset.kind === 'rot') {
+    drag = { ...base, mode: 'rotate', started: true };
+  } else if (el && (el.dataset.kind === 'stand' || el.dataset.kind === 'area')) {
+    const type = el.dataset.kind, id = +el.dataset.id;
+    if (!(state.sel && state.sel.type === type && state.sel.id === id)) select({ type, id });
+    const o = selected();
+    drag = { ...base, mode: 'move', off: { x: p.x - o.cx, y: p.y - o.cy } };
+  } else {
+    if (state.sel) select(null);
+    drag = { ...base, mode: 'pan', tx: state.view.tx, ty: state.view.ty };
+  }
+  svg.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+
+svg.addEventListener('pointermove', e => {
+  const p = toWorld(e);
+  $('#cur-x').textContent = fmt(p.x); $('#cur-y').textContent = fmt(p.y);
+  if (!drag) return;
+  if (!drag.started) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 3) return;
+    drag.started = true;
+  }
+  const o = selected();
+  if (drag.mode === 'pan') {
+    state.view.tx = drag.tx + e.clientX - drag.x0;
+    state.view.ty = drag.ty + e.clientY - drag.y0;
+    if (!spaceDown) svg.classList.add('panning', 'dragging');
+  } else if (drag.mode === 'rotate' && o) {
+    const ang = Math.atan2(p.y - o.cy, p.x - o.cx) * 180 / Math.PI + 90;
+    o.rot = norm360(e.shiftKey ? Math.round(ang / 15) * 15 : Math.round(ang));
+  } else if (drag.mode === 'move' && o) {
+    o.cx = p.x - drag.off.x; o.cy = p.y - drag.off.y;
+    if (state.sel.type === 'stand') {
+      if (e.altKey) setSnapMsg('Fang aus (Alt)');
+      else {
+        const D = derive();
+        const areas = D.areas.map(ad => ({ id: ad.id, frame: ad.frame, others: ad.occupied.filter(x => x.id !== o.id).map(x => x.iv) }));
+        const snap = Geo.snapToFront(o, areas, Math.max(0.5, 14 / state.view.scale));
+        if (snap) {
+          o.cx = snap.cx; o.cy = snap.cy; o.rot = norm360(snap.rot);
+          const a = findArea(snap.areaId);
+          setSnapMsg(`Eingerastet an ${a.name || 'Grundfläche ' + areaIndex(a)}`);
+        } else setSnapMsg('');
+      }
+    }
+  }
+  render();
+});
+
+function endDrag() {
+  drag = null; setSnapMsg('');
+  svg.classList.remove('dragging');
+  if (!spaceDown) svg.classList.remove('panning');
+}
+svg.addEventListener('pointerup', endDrag);
+svg.addEventListener('pointercancel', endDrag);
+svg.addEventListener('pointerleave', () => { if (!drag) { $('#cur-x').textContent = '–'; $('#cur-y').textContent = '–'; } });
+
+svg.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect(), v = state.view;
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const k = Math.min(150, Math.max(1, v.scale * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015))));
+  v.tx = mx - (mx - v.tx) * k / v.scale;
+  v.ty = my - (my - v.ty) * k / v.scale;
+  v.scale = k;
+  render();
+}, { passive: false });
+
+// ---------- Tastatur ----------
+window.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t.matches && t.matches('input, textarea, select')) { if (e.key === 'Escape') t.blur(); return; }
+  if (e.code === 'Space') { e.preventDefault(); if (!spaceDown) { spaceDown = true; svg.classList.add('panning'); } return; }
+  if (e.key === 'Alt') { e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(); return; }
+  if (e.ctrlKey || e.metaKey) return;
+  const o = selected();
+  if (e.key === 'Escape') { select(null); return; }
+  if (!o) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeSelected(); return; }
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); rotate90(); return; }
+  const step = e.shiftKey ? 1 : 0.1;
+  const mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+  if (mv) {
+    e.preventDefault();
+    o.cx = Math.round((o.cx + mv[0]) * 1000) / 1000;
+    o.cy = Math.round((o.cy + mv[1]) * 1000) / 1000;
+    render();
+  }
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space') { spaceDown = false; if (!drag || drag.mode !== 'pan') svg.classList.remove('panning', 'dragging'); }
+});
+window.addEventListener('blur', () => { spaceDown = false; svg.classList.remove('panning', 'dragging'); });
+
+// ---------- Werkzeugleiste ----------
+const onBtn = (id, fn) => $(id).addEventListener('click', e => { fn(); e.currentTarget.blur(); });
+onBtn('#add-area', addArea);
+onBtn('#add-stand', addStand);
+onBtn('#renumber', renumber);
+onBtn('#fit', fitView);
+$('#warn-outside').addEventListener('change', e => { state.warnOutside = e.target.checked; e.target.blur(); render(); });
+
+// ---------- Beispieldaten ----------
+(function seed() {
+  const g1 = newArea({ name: 'Grundfläche 1', cx: 25, cy: 10, w: 50, d: 10, rot: 0, front: 2 });
+  const g2 = newArea({ name: 'Grundfläche 2', cx: 30, cy: 38, w: 30, d: 8, rot: 30, front: 2 });
+  // Beispiel aus der Vorgabe: Stand 8 m breit bei x = 20 m → Frei 20 × 10 links, 22 × 10 rechts
+  newStand({ nr: '1', name: 'Obst & Gemüse Hofmann', owner: 'Petra Hofmann', ware: 'Obst, Gemüse', kw: 3.5, ...placeOnFront(g1, 20, 8, 4) });
+  newStand({ nr: '2', name: 'Bäckerei Wenz', owner: 'Jonas Wenz', ware: 'Brot, Brezeln', kw: 6, ...placeOnFront(g2, 2, 6, 3) });
+  newStand({ nr: '3', name: 'Käse Brunner', owner: 'Anna Brunner', ware: 'Bergkäse', kw: 2, ...placeOnFront(g2, 12, 5, 4) });
+  newStand({ nr: '4', name: 'Grillstand Kaya', owner: 'Deniz Kaya', ware: 'Bratwurst, Grill', kw: 11, cx: 6, cy: 31, w: 4, d: 3, rot: 0 });
+})();
+
+new ResizeObserver(() => render()).observe(svg);
+requestAnimationFrame(() => {
+  // Start mit 1 m = 10 px, Inhalt mittig
+  const W = svg.clientWidth, H = svg.clientHeight;
+  state.view = { scale: 10, tx: W / 2 - 27 * 10, ty: (H - 40) / 2 - 29 * 10 };
+  if (W < 560) { fitView(); return; }
+  render();
+});
+</script>
+
+</body></html>

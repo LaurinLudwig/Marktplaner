@@ -1,0 +1,366 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "react",
+    "react-hooks",
+    "import",
+    "unicorn"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "rules": {
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    "react/react-in-jsx-scope": "off",
+    "no-unused-vars": "error",
+    "eqeqeq": "error",
+    "no-console": [
+      "warn",
+      {
+        "allow": [
+          "warn",
+          "error"
+        ]
+      }
+    ],
+    "unicorn/consistent-function-scoping": "off",
+    "import/no-unassigned-import": [
+      "warn",
+      {
+        "allow": [
+          "**/*.css"
+        ]
+      }
+    ],
+    "import/default": "off",
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": [
+          "__marktplanerStore",
+          "__APP_VERSION__",
+          "__TAURI_INTERNALS__"
+        ]
+      }
+    ]
+  },
+  "ignorePatterns": [
+    "dist",
+    "src-tauri",
+    "node_modules",
+    "test-results",
+    "playwright-report"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "src/core/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "react",
+                  "react-dom",
+                  "react/*",
+                  "react-dom/*"
+                ],
+                "message": "src/core/ ist UI-unabhängig: kein React (siehe CONTRIBUTING.md)."
+              },
+              {
+                "group": [
+                  "@tauri-apps/**"
+                ],
+                "message": "src/core/ ist plattformunabhängig: kein Tauri; Betriebssystem-Zugriffe gehören nach src/platform/."
+              },
+              {
+                "regex": "^(zustand(/.*)?|(\\.\\./)+(state|ui|app|platform)(/.*)?)$",
+                "message": "src/core/ darf nicht von state/, ui/, app/, platform/ oder zustand abhängen."
+              }
+            ]
+          }
+        ],
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "window",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "document",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "navigator",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "localStorage",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "sessionStorage",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "HTMLElement",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "Element",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "Blob",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "URL",
+            "message": "Kein DOM in src/core/ (URL.createObjectURL gehört nach src/platform/)."
+          },
+          {
+            "name": "requestAnimationFrame",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "getComputedStyle",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "name": "DOMParser",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "Image",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "self",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "fetch",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "Worker",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "indexedDB",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "location",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "history",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "alert",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "confirm",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "prompt",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "createImageBitmap",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "OffscreenCanvas",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "ImageBitmap",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "HTMLCanvasElement",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "HTMLImageElement",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "FileReader",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "matchMedia",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "devicePixelRatio",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          },
+          {
+            "name": "cancelAnimationFrame",
+            "message": "Kein DOM in src/core/ (Browser-APIs gehören nach src/ui/ oder src/platform/)."
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "globalThis",
+            "property": "window",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "document",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "navigator",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "localStorage",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "sessionStorage",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "location",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "indexedDB",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "fetch",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "DOMParser",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "globalThis",
+            "property": "Image",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "window",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "document",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "navigator",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "localStorage",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "sessionStorage",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "location",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "indexedDB",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "fetch",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "DOMParser",
+            "message": "Kein DOM in src/core/."
+          },
+          {
+            "object": "self",
+            "property": "Image",
+            "message": "Kein DOM in src/core/."
+          }
+        ],
+        "typescript/no-restricted-types": [
+          "error",
+          {
+            "types": {
+              "HTMLElement": "Kein DOM-Typ in src/core/.",
+              "HTMLDivElement": "Kein DOM-Typ in src/core/.",
+              "HTMLCanvasElement": "Kein DOM-Typ in src/core/.",
+              "HTMLInputElement": "Kein DOM-Typ in src/core/.",
+              "HTMLImageElement": "Kein DOM-Typ in src/core/.",
+              "HTMLButtonElement": "Kein DOM-Typ in src/core/.",
+              "Element": "Kein DOM-Typ in src/core/.",
+              "Document": "Kein DOM-Typ in src/core/.",
+              "Window": "Kein DOM-Typ in src/core/.",
+              "Node": "Kein DOM-Typ in src/core/.",
+              "Event": "Kein DOM-Typ in src/core/.",
+              "MouseEvent": "Kein DOM-Typ in src/core/.",
+              "KeyboardEvent": "Kein DOM-Typ in src/core/.",
+              "PointerEvent": "Kein DOM-Typ in src/core/.",
+              "WheelEvent": "Kein DOM-Typ in src/core/.",
+              "CanvasRenderingContext2D": "Kein DOM-Typ in src/core/.",
+              "SVGElement": "Kein DOM-Typ in src/core/.",
+              "SVGSVGElement": "Kein DOM-Typ in src/core/.",
+              "DOMRect": "Kein DOM-Typ in src/core/.",
+              "Blob": "Kein DOM-Typ in src/core/.",
+              "File": "Kein DOM-Typ in src/core/."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "scripts/**"
+      ],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# Veröffentlicht die Browser-Version des Marktplaners auf GitHub Pages (https://laurinludwig.github.io/Marktplaner/).
+# Dieselbe App wie auf dem Desktop, Dateien per Upload/Download (src/platform/browser.ts). Läuft bei jedem Push auf main.
+# Einmalig nötig: Settings → Pages → Source „GitHub Actions“.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      # Relative Pfade, damit die App unter jedem Unterpfad läuft (Groß-/Kleinschreibung des Repo-Namens egal).
+      - run: npm run build -- --base=./
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
