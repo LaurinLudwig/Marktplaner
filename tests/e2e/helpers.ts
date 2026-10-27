@@ -106,6 +106,14 @@ export async function openSettings(page: Page) {
   await page.getByRole('tab', { name: 'Einstellungen' }).click();
 }
 
+/** #1: „Neues Projekt“ fragt nach der Kategorieliste; „leer“ entspricht dem Verhalten vor #1. */
+export async function confirmNewProject(page: Page, listId = 'leer') {
+  const dlg = page.getByRole('dialog', { name: 'Neues Projekt' });
+  await dlg.getByLabel('Kategorieliste').selectOption(listId);
+  await dlg.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(dlg).toHaveCount(0);
+}
+
 /** Zurück auf die Festplatz-Page Nummer `n` (1 = erster Festplatz). */
 export async function backToPage(page: Page, n = 1) {
   await pageTabs(page).nth(n).click();

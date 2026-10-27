@@ -1,3 +1,4 @@
+import { categoriesFromList, type CategoryList } from '../categoryLists';
 import { newId } from '../id';
 import { DEFAULT_STAND_COLOR } from '../objects';
 import {
@@ -79,13 +80,14 @@ export function createPage(name: string): FestplatzPage {
   };
 }
 
-export function createProject(name = 'Neues Projekt'): Project {
+/** Neues Projekt; mit `list` starten die Kategorien aus dieser Kategorieliste (#1), sonst leer. */
+export function createProject(name = 'Neues Projekt', list: CategoryList | null = null): Project {
   return {
     id: newId(),
     name,
     settings: structuredClone(DEFAULT_SETTINGS),
     pages: [createPage('Festplatz 1')],
-    categories: [],
+    categories: list ? categoriesFromList(list) : [],
     infraTypes: structuredClone(DEFAULT_INFRA_TYPES),
     shapeTemplates: [],
     titleBlock: { dateText: '', version: '' },

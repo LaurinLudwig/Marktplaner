@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import { activeTabName, artifact, collectErrors, MOD, openApp, pageTabs, tabNames } from './helpers';
+import { activeTabName, artifact, collectErrors, MOD, openApp, pageTabs, tabNames, confirmNewProject } from './helpers';
 
 /** M1-02, M1-18, M1-19, M1-20: Datenmodell, Speichern/Laden (Browser: Download/Upload), Autosave, Undo. */
 
@@ -62,6 +62,7 @@ test.describe('M1 Datei: Speichern, Laden, Autosave', () => {
     await page.locator('.menu-btn').click();
     await page.getByRole('menuitem', { name: /^Neues Projekt/ }).click();
     await page.getByRole('button', { name: 'Nicht speichern' }).click();
+    await confirmNewProject(page); // seit #1: Wahl der Kategorieliste
     expect(await tabNames(page)).toEqual(['Start-Page', 'Festplatz 1']);
 
     await openFile(page, 'markt.schelme', bytes);
@@ -129,6 +130,7 @@ test.describe('M1 Datei: Speichern, Laden, Autosave', () => {
     const download = page.waitForEvent('download');
     await page.getByRole('alertdialog').getByRole('button', { name: 'Speichern', exact: true }).click();
     await download;
+    await confirmNewProject(page); // seit #1: Wahl der Kategorieliste
     expect(await tabNames(page)).toEqual(['Start-Page', 'Festplatz 1']);
   });
 

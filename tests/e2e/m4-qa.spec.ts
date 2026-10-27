@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { canvasBox, collectErrors, MOD, openApp, origin, scale, openSettings, backToPage } from './helpers';
+import { canvasBox, collectErrors, MOD, openApp, origin, scale, openSettings, backToPage, confirmNewProject } from './helpers';
 
 /**
  * QA M4: Freiflächen, Fang, Warnungen, Dateiformat (spec.md §3, §4, §10, Allgemein).
@@ -869,6 +869,7 @@ test.describe('QA M4-09/10/13/18: Warnungen und Zähler', () => {
     await page.keyboard.press(`${MOD}+s`);
     const file = await (await download).path();
     await page.keyboard.press(`${MOD}+n`);
+    await confirmNewProject(page); // seit #1: Wahl der Kategorieliste
     await expect.poll(() => badge(page)).toBe('');
     const chooser = page.waitForEvent('filechooser');
     await page.keyboard.press(`${MOD}+o`);

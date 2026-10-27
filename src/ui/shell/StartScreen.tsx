@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { availableLists, lastNewProjectList, useCategoryListDialog } from '../../app/categoryLists';
 import { useDialogs } from '../../app/dialogs';
-import { openRecent } from '../../app/fileActions';
+import { newProject, openRecent } from '../../app/fileActions';
 import { runCommand } from '../../app/commands';
 import { APP_NAME, APP_VERSION } from '../../core/appInfo';
+import { EMPTY_LIST_ID } from '../../core/categoryLists';
 import { folderOf } from '../../core/recentFiles';
 import { useRecent } from '../../state/recent';
 import { useStore } from '../../state/store';
@@ -28,6 +30,7 @@ function StartScreenBody() {
   const files = useRecent((s) => s.files);
   const missing = useRecent((s) => s.missing);
   const [sel, setSelState] = useState(0);
+  const [listId, setListId] = useState(lastNewProjectList);
   const selRef = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
   const setSel = (i: number) => {
@@ -40,7 +43,7 @@ function StartScreenBody() {
   useEffect(() => {
     // Vor dem globalen Handler: Pfeile, Enter und Esc gehören dem Startbildschirm, außer eine Meldung liegt darüber
     const onKey = (e: KeyboardEvent) => {
-      if (useDialogs.getState().queue.length) return;
+      if (useDialogs.getState().queue.length || useCategoryListDialog.getState().request) return;
       const n = useRecent.getState().files.length;
       const move = (i: number) => {
         selRef.current = i;
@@ -49,7 +52,7 @@ function StartScreenBody() {
       if (e.key === 'Escape') setUi({ startScreen: false });
       else if (e.key === 'ArrowDown' && n) move(Math.min(n - 1, selRef.current + 1));
       else if (e.key === 'ArrowUp' && n) move(Math.max(0, selRef.current - 1));
-      else if (e.key === 'Enter' && n && !(e.target instanceof HTMLButtonElement)) {
+      else if (e.key === 'Enter' && n && !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLSelectElement)) {
         const f = useRecent.getState().files[selRef.current];
         if (f) void openRecent(f.path);
       } else return;
@@ -68,9 +71,20 @@ function StartScreenBody() {
           <h1>{APP_NAME}</h1>
           <p className="start-version">Version {APP_VERSION}</p>
           <div className="start-actions">
-            <button type="button" className="btn primary wide" onClick={() => runCommand('file.new')}>
+            <button type="button" className="btn primary wide" onClick={() => void newProject(listId)}>
               Neues Projekt {keyLabel('file.new') && <kbd>{keyLabel('file.new')}</kbd>}
             </button>
+            <label className="start-list-choice">
+              <span>Kategorien</span>
+              <select value={listId} onChange={(e) => setListId(e.target.value)} aria-label="Kategorieliste für das neue Projekt">
+                {availableLists().map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+                <option value={EMPTY_LIST_ID}>leer</option>
+              </select>
+            </label>
             <button type="button" className="btn wide" onClick={() => runCommand('file.open')}>
               Öffnen … {keyLabel('file.open') && <kbd>{keyLabel('file.open')}</kbd>}
             </button>

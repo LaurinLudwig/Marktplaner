@@ -838,6 +838,18 @@ kbd {
 .clockwise-marker .ray { stroke-dasharray: 6 4; }
 .clockwise-marker .arc { stroke-width: 1.5; }
 .dialog.renumber { width: min(560px, calc(100vw - 32px)); }
+
+/* Kategorieliste wählen (#1) */
+.cat-list-dialog .cl-body { display: grid; gap: 10px; padding: 10px 16px 14px; }
+.cat-list-dialog .cl-modes { display: grid; gap: 4px; color: var(--text); }
+.cat-list-dialog .cl-modes .check { align-items: flex-start; }
+.cat-list-dialog .cl-modes .check input { margin-top: 2px; }
+.cat-list-dialog .cl-preview { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 3px 12px; max-height: min(40vh, 300px); overflow: auto; margin: 0; padding: 8px; list-style: none; border: 1px solid var(--border-soft); border-radius: 3px; background: var(--panel-sunken); font-size: 12px; color: var(--text); }
+.cat-list-dialog .cl-preview li { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cat-list-dialog .cl-preview li.hint { grid-column: 1 / -1; }
+.cl-swatch { flex: none; width: 12px; height: 12px; border: 1px solid rgba(0, 0, 0, 0.5); border-radius: 2px; }
+.start-list-choice { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.start-list-choice select { flex: 1; height: 26px; padding: 0 4px; border: 1px solid var(--border-soft); border-radius: 3px; background: var(--panel-sunken); }
 .renumber-table { max-height: min(50vh, 420px); overflow: auto; margin: 0 16px; border: 1px solid var(--border-soft); border-radius: 3px; }
 .renumber-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .renumber-table th { position: sticky; top: 0; background: var(--panel-raised); text-align: left; font-weight: 600; color: var(--muted); padding: 4px 8px; }
