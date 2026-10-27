@@ -166,6 +166,14 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   Seitenleiste bleibt die Auswahl der Kategorie eines Stands. Beim Löschen einer verwendeten
   Kategorie fragt die App nach; die Stände verlieren die Kategorie (Farbe fällt auf die eigene Farbe
   bzw. die Standardfarbe zurück), alles rückgängig machbar.
+- Kategorielisten (#1): Die App bringt die flachen Listen „Jahrmarkt klein“ (11 grobe Kategorien) und „Jahrmarkt
+  groß“ (30 feine im Schema „Gruppe – Art“, z. B. „Süßwaren – Waffeln“; nur ein Name, keine Unterkategorie) mit,
+  Farben nach Gruppen und im Druck unterscheidbar. „Neues Projekt“ (Menü, Cmd/Strg+N) fragt nach der Liste
+  (Vorauswahl die zuletzt gewählte, anfangs „Jahrmarkt klein“; auch „leer“), der Startbildschirm hat die Auswahl
+  direkt neben dem Knopf. In den Projekteinstellungen lädt „Kategorieliste laden …“ eine Liste: **ergänzen** fügt
+  nur fehlende Namen hinzu (Vergleich ohne Groß-/Kleinschreibung), **ersetzen** lässt danach genau die Liste gelten;
+  gleichnamige Kategorien behalten dabei ihre Stände und übernehmen die Farbe der Liste, für entfallende verwendete
+  Kategorien fragt die App wie beim Löschen nach. Ein Undo-Schritt.
 - Beschriftung mittig auf dem Stand aus konfigurierbarer Vorlage, z. B.
   `{nr}` / `{name}` / `{breite}×{tiefe} m`. Platzhalter: `{nr}`, `{name}`, `{eigentuemer}`, `{ware}`,
   `{breite}`, `{tiefe}`, `{strom}`, `{anschluss}`, `{kategorie}`. Zeilen, die nach dem Einsetzen leer
@@ -741,7 +749,7 @@ Löschen eines verwendeten Typs: Die App fragt nach und löscht seine Objekte mi
 ### Allgemein
 - **Startbildschirm** (#11, Entscheidung Laurin 2026-10-23): Startet die Desktop-App ohne Projekt (keine Datei per
   Doppelklick, keine wiederhergestellte Sicherung; die Abfrage der Sicherung kommt zuerst), erscheint ein
-  Startbildschirm mit „Neues Projekt“, „Öffnen …“ und „Zuletzt geöffnet“ (Name, Ordner, Datum; fehlende Dateien
+  Startbildschirm mit „Neues Projekt“ (mit Wahl der Kategorieliste, §3), „Öffnen …“ und „Zuletzt geöffnet“ (Name, Ordner, Datum; fehlende Dateien
   ausgegraut mit „Datei nicht gefunden“). Pfeiltasten wählen, Enter öffnet, Esc bzw. „Neues Projekt“ schließt ihn
   (das leere Projekt bleibt). Auf dem Startbildschirm greifen von den Kurzbefehlen nur Neu und Öffnen. Im
   Browser-Modus erscheint er nicht.

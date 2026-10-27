@@ -1,5 +1,6 @@
 import { SHORTCUTS } from '../ui/shortcuts/definitions';
 import { IS_MAC, matches, parseCombo } from '../ui/shortcuts/keys';
+import { useCategoryListDialog } from './categoryLists';
 import { useDialogs } from './dialogs';
 import { usePagePicker } from './pagePicker';
 import { useRenumber } from './renumber';
@@ -40,7 +41,7 @@ export function setInteractionKeyHandler(handler: InteractionKeyHandler): () => 
  */
 export function handleKeyDown(e: KeyboardEvent) {
   if (e.defaultPrevented || e.isComposing) return;
-  if (useDialogs.getState().queue.length || usePagePicker.getState().request || useRenumber.getState().plans) return;
+  if (useDialogs.getState().queue.length || usePagePicker.getState().request || useRenumber.getState().plans || useCategoryListDialog.getState().request) return;
   // Startbildschirm (#11): nur Neu und Öffnen; Pfeile, Enter und Esc behandelt er selbst
   const startScreen = useStore.getState().ui.startScreen;
   const inText = isTextField(e.target);

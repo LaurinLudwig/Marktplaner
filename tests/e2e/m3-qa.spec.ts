@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
-import { artifact, canvasBox, collectErrors, MOD, openApp, origin, scale, openSettings, backToPage } from './helpers';
+import { artifact, canvasBox, collectErrors, MOD, openApp, origin, scale, openSettings, backToPage, confirmNewProject } from './helpers';
 
 /**
  * QA M3: unabhängige Prüfung von Grundflächen, Geschäften, Seiten-/Steuerungsleiste, Beschriftung,
@@ -868,8 +868,9 @@ test.describe('QA M3-01/M3-18: Speichern und Neuladen', () => {
     const file = await dl.path();
     const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(file)))['project.json']!)).project;
     expect(json.categories).toEqual(before.categories);
-    // Neues Projekt, dann die Datei öffnen
+    // Neues Projekt (seit #1 mit Wahl der Kategorieliste: leer), dann die Datei öffnen
     await page.keyboard.press(`${MOD}+n`);
+    await confirmNewProject(page);
     await expect.poll(async () => (await st(page)).project.categories.length).toBe(0);
     const chooser = page.waitForEvent('filechooser');
     await page.keyboard.press(`${MOD}+o`);

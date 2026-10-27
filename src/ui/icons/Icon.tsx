@@ -49,6 +49,7 @@ import i_search from '@material-symbols/svg-400/outlined/search.svg?raw';
 import i_sortUp from '@material-symbols/svg-400/outlined/arrow_upward.svg?raw';
 import i_sortDown from '@material-symbols/svg-400/outlined/arrow_downward.svg?raw';
 import i_refresh from '@material-symbols/svg-400/outlined/refresh.svg?raw';
+import i_loadList from '@material-symbols/svg-400/outlined/playlist_add.svg?raw';
 
 const RAW = {
   select: i_select,
@@ -101,6 +102,7 @@ const RAW = {
   sortUp: i_sortUp,
   sortDown: i_sortDown,
   refresh: i_refresh,
+  loadList: i_loadList,
 };
 
 export type IconName = keyof typeof RAW;

@@ -3,6 +3,7 @@ import { showError } from '../app/dialogs';
 import { notify } from '../app/notify';
 import { fmt } from '../core/format';
 import { MIN_FREE_WIDTH } from '../core/freeSpace';
+import { applyCategoryList, type ApplyMode, type CategoryList } from '../core/categoryLists';
 import { checkPowerChange } from '../core/power';
 import { normAngle, roundRect, setFront } from '../core/geometry/rect';
 import { allSelectable } from '../core/hit';
@@ -391,6 +392,16 @@ export function deleteCategory(id: Id) {
   st().change('Kategorie löschen', (p) => {
     p.categories = p.categories.filter((c) => c.id !== id);
     for (const pg of p.pages) for (const s of pg.stands) if (s.categoryId === id) s.categoryId = null;
+  });
+}
+
+/** Kategorieliste laden (#1): ergänzen oder ersetzen, ein Undo-Schritt. Stände entfallener Kategorien verlieren sie. */
+export function loadCategoryList(list: CategoryList, mode: ApplyMode) {
+  const { categories, removed } = applyCategoryList(st().project.categories, list, mode);
+  const gone = new Set(removed);
+  st().change(mode === 'merge' ? 'Kategorien ergänzen' : 'Kategorien ersetzen', (p) => {
+    p.categories = categories;
+    for (const pg of p.pages) for (const s of pg.stands) if (s.categoryId && gone.has(s.categoryId)) s.categoryId = null;
   });
 }
 

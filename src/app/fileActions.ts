@@ -6,6 +6,7 @@ import { platform, type PickedFile } from '../platform';
 import { notify } from './notify';
 import { checkRecent, forgetRecent, rememberRecent } from '../state/recent';
 import { projectForSave, selectDirty, useStore } from '../state/store';
+import { chooseCategoryList, findList, rememberNewProjectList } from './categoryLists';
 import { ask, showError } from './dialogs';
 
 /** Deutsche Meldung; technische Details nur in der Konsole (QA-M2-02). */
@@ -50,10 +51,20 @@ export async function confirmDiscard(): Promise<boolean> {
   return r === 'discard';
 }
 
-export async function newProject() {
+/**
+ * Neues Projekt (#1): Ohne `listId` fragt die App nach der Kategorieliste (vorgewählt die zuletzt gewählte); der
+ * Startbildschirm übergibt seine Auswahl direkt.
+ */
+export async function newProject(listId?: string) {
   if (!(await confirmDiscard())) return;
+  if (listId === undefined) {
+    const choice = await chooseCategoryList('new');
+    if (!choice) return;
+    listId = choice.listId;
+  }
+  rememberNewProjectList(listId);
   await platform.removeAutosave(useStore.getState().filePath);
-  useStore.getState().loadBundle({ project: createProject(), assets: {} }, { path: null, name: null });
+  useStore.getState().loadBundle({ project: createProject(undefined, findList(listId)), assets: {} }, { path: null, name: null });
   useStore.getState().setUi({ startScreen: false });
 }
 

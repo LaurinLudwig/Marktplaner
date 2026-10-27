@@ -9,6 +9,7 @@ import { Canvas } from './ui/canvas/Canvas';
 import { ControlBar } from './ui/shell/ControlBar';
 import { DialogHost } from './ui/shell/DialogHost';
 import { PdfPagePicker } from './ui/shell/PdfPagePicker';
+import { CategoryListDialog } from './ui/shell/CategoryListDialog';
 import { RenumberDialog } from './ui/shell/RenumberDialog';
 import { StartScreen } from './ui/shell/StartScreen';
 import { ExportDialog } from './ui/export/ExportDialog';
@@ -59,6 +60,7 @@ export function App() {
       <Toasts />
       <PdfPagePicker />
       <RenumberDialog />
+      <CategoryListDialog />
       <ExportDialog />
       <ExportProgress />
       <DialogHost />

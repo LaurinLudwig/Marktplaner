@@ -1,3 +1,4 @@
+import { loadListInteractive } from '../../app/categoryLists';
 import { confirm } from '../../app/dialogs';
 import { LABEL_PLACEHOLDERS } from '../../core/label';
 import { MIN_FREE_WIDTH } from '../../core/freeSpace';
@@ -109,6 +110,9 @@ export function CategoryPanel() {
         <span>Kategorien</span>
         <span className="panel-badge muted">projektweit</span>
         <div className="spacer" />
+        <button type="button" className="icon-btn" onClick={() => void loadListInteractive()} {...tip({ label: 'Kategorieliste laden …', side: 'bottom' })}>
+          <Icon name="loadList" size={16} />
+        </button>
         <button type="button" className="icon-btn" onClick={() => addCategory()} {...tip({ label: 'Kategorie anlegen', side: 'bottom' })}>
           <Icon name="add" size={16} />
         </button>
@@ -123,7 +127,7 @@ export function CategoryPanel() {
           resetLabel="Standardfarbe zurücksetzen (Grau)"
           canReset={defaultColor.toLowerCase() !== DEFAULT_STAND_COLOR}
         />
-        {!categories.length && <p>Noch keine Kategorien. Mit „+“ anlegen; Geschäfte übernehmen die Farbe ihrer Kategorie.</p>}
+        {!categories.length && <p>Noch keine Kategorien. Mit „+“ anlegen oder eine fertige Liste laden; Geschäfte übernehmen die Farbe ihrer Kategorie.</p>}
         {categories.map((c) => (
           <CategoryRow key={c.id} cat={c} />
         ))}
