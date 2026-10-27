@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { applyCategoryList, BUILTIN_CATEGORY_LISTS, builtinList, DEFAULT_LIST_ID, type CategoryList } from './categoryLists';
+import {
+  applyCategoryList,
+  BUILTIN_CATEGORY_LISTS,
+  builtinList,
+  categoryListFileName,
+  DEFAULT_LIST_ID,
+  encodeCategoryListFile,
+  listFromCategories,
+  loadOwnLists,
+  parseCategoryListFile,
+  uniqueListName,
+  type CategoryList,
+} from './categoryLists';
+import { UserError } from './errors';
 import { createProject } from './model/defaults';
 import { parseProjectFile, toProjectFile } from './model/schema';
 import type { Category } from './model/types';
@@ -55,5 +68,61 @@ describe('#1 Mitgelieferte Kategorielisten', () => {
     expect(r.categories.map((c) => c.name)).toEqual(['Ausschank', 'IMBISS']);
     expect(r.categories[1]).toEqual({ id: 'b', name: 'IMBISS', color: '#222222' });
     expect(r.categories[0]!.id).not.toBe('a');
+  });
+});
+
+describe('#2 Eigene Kategorielisten', () => {
+  it('aus dem Projekt speichern, als Datei exportieren und wieder importieren (neue ID, gleicher Inhalt)', () => {
+    const own = listFromCategories('Schelmenmarkt', [cat('a', 'Imbiss', '#F0A35E'), cat('b', 'Ausschank', '#f2d15c')]);
+    expect(own.builtin).toBe(false);
+    const text = encodeCategoryListFile(own);
+    expect(JSON.parse(text)).toMatchObject({ format: 'marktplaner-kategorien', version: 1, name: 'Schelmenmarkt' });
+    const back = parseCategoryListFile(text);
+    expect(back.id).not.toBe(own.id);
+    expect(back.name).toBe('Schelmenmarkt');
+    expect(back.entries).toEqual([
+      { name: 'Imbiss', color: '#f0a35e' },
+      { name: 'Ausschank', color: '#f2d15c' },
+    ]);
+    expect(parseCategoryListFile(`\uFEFF${text}`).entries).toHaveLength(2);
+    expect(categoryListFileName({ ...own, name: 'Markt: 2027/neu' })).toBe('Kategorien Markt- 2027-neu.json');
+  });
+
+  it('ungültige Dateien und neuere Formatversionen werden mit deutscher Meldung abgewiesen', () => {
+    const file = (o: object) => JSON.stringify({ format: 'marktplaner-kategorien', version: 1, name: 'X', categories: [{ name: 'A', color: '#aabbcc' }], ...o });
+    const cases: [string, RegExp][] = [
+      ['kein json', /kein gültiges JSON/],
+      ['{"format":"schelmeplaner"}', /keine Kategorieliste/],
+      ['[]', /keine Kategorieliste/],
+      [file({ version: '1' }), /keine gültige Formatversion/],
+      [file({ version: 2 }), /neueren Version.*Format 2/],
+      [file({ categories: [{ name: '', color: '#aabbcc' }, { name: 'B', color: 'rot' }] }), /keine gültige Kategorie/],
+    ];
+    for (const [text, msg] of cases) {
+      expect(() => parseCategoryListFile(text)).toThrow(UserError);
+      expect(() => parseCategoryListFile(text)).toThrow(msg);
+    }
+    // Ungültige Einträge fallen weg, doppelte Namen zählen einmal, fehlender Name wird ersetzt
+    const ok = parseCategoryListFile(file({ name: ' ', categories: [{ name: 'A', color: '#aabbcc' }, { name: 'a', color: '#000000' }, { name: 'B' }] }));
+    expect(ok.name).toBe('Importierte Liste');
+    expect(ok.entries).toEqual([{ name: 'A', color: '#aabbcc' }]);
+  });
+
+  it('gespeicherte Listen: Beschädigtes fällt mit Hinweis weg, mitgelieferte IDs sind tabu', () => {
+    const good = { id: 'l1', name: 'Eigene', builtin: false, entries: [{ name: 'A', color: '#aabbcc' }] };
+    expect(loadOwnLists(undefined)).toEqual({ lists: [] });
+    expect(loadOwnLists([good])).toEqual({ lists: [good] });
+    expect(loadOwnLists('kaputt').error).toMatch(/beschädigt/);
+    const r = loadOwnLists([good, { ...good }, { ...good, id: DEFAULT_LIST_ID }, { id: 'l2', name: 'Leer', entries: [] }, 7]);
+    expect(r.lists).toEqual([good]);
+    expect(r.error).toMatch(/Einige/);
+  });
+
+  it('Namen werden eindeutig gemacht, auch gegenüber den mitgelieferten', () => {
+    const lists = [...BUILTIN_CATEGORY_LISTS, { ...BUILTIN_CATEGORY_LISTS[0]!, id: 'o', name: 'Markt', builtin: false }];
+    expect(uniqueListName('Neu', lists)).toBe('Neu');
+    expect(uniqueListName('jahrmarkt klein', lists)).toBe('jahrmarkt klein (2)');
+    expect(uniqueListName(' Markt ', lists)).toBe('Markt (2)');
+    expect(uniqueListName('  ', lists)).toBe('Eigene Liste');
   });
 });

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { availableLists, lastNewProjectList, useCategoryListDialog } from '../../app/categoryLists';
+import { lastNewProjectList, useCategoryListDialog } from '../../app/categoryLists';
 import { useDialogs } from '../../app/dialogs';
 import { newProject, openRecent } from '../../app/fileActions';
 import { runCommand } from '../../app/commands';
 import { APP_NAME, APP_VERSION } from '../../core/appInfo';
-import { EMPTY_LIST_ID } from '../../core/categoryLists';
+import { BUILTIN_CATEGORY_LISTS, EMPTY_LIST_ID } from '../../core/categoryLists';
+import { useCategoryLists } from '../../state/categoryLists';
 import { folderOf } from '../../core/recentFiles';
 import { useRecent } from '../../state/recent';
 import { useStore } from '../../state/store';
@@ -30,7 +31,10 @@ function StartScreenBody() {
   const files = useRecent((s) => s.files);
   const missing = useRecent((s) => s.missing);
   const [sel, setSelState] = useState(0);
-  const [listId, setListId] = useState(lastNewProjectList);
+  const own = useCategoryLists((s) => s.lists);
+  // Ohne eigene Wahl die zuletzt gewählte; eigene Listen kommen beim Start asynchron dazu (#2)
+  const [picked, setListId] = useState<string | null>(null);
+  const listId = picked ?? lastNewProjectList();
   const selRef = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
   const setSel = (i: number) => {
@@ -77,7 +81,7 @@ function StartScreenBody() {
             <label className="start-list-choice">
               <span>Kategorien</span>
               <select value={listId} onChange={(e) => setListId(e.target.value)} aria-label="Kategorieliste für das neue Projekt">
-                {availableLists().map((l) => (
+                {[...BUILTIN_CATEGORY_LISTS, ...own].map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
                   </option>
