@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { artifact, collectErrors, MOD, openApp, openSettings } from './helpers';
 
-/** #1: Mitgelieferte Kategorielisten beim neuen Projekt und „Liste laden …“ in den Projekteinstellungen. */
+/** #1: Mitgelieferte Kategorielisten beim neuen Projekt und „Liste laden …“ in den Projekteinstellungen; #2: eigene Listen. */
 
 const st = (page: Page) => page.evaluate(() => (window as any).__marktplanerStore.getState());
 const catNames = async (page: Page) => (await st(page)).project.categories.map((c: any) => c.name);
@@ -107,5 +108,77 @@ test.describe('#1 Kategorielisten', () => {
     expect(back.project.categories.map((c: any) => c.id)).toEqual(['c1', 'c2']);
     expect(back.project.pages[0].stands.map((x: any) => x.categoryId)).toEqual(['c1', 'c2']);
     expect(errors).toEqual([]);
+  });
+});
+
+test.describe('#2 Eigene Kategorielisten', () => {
+  test('Kategorien als Liste speichern; erscheint beim Laden und beim neuen Projekt; bleibt nach Neuladen; umbenennen und löschen', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page);
+    await openSettings(page);
+    await page.getByRole('button', { name: 'Kategorien als Liste speichern, Listen verwalten …' }).click();
+    const mgr = page.getByRole('dialog', { name: 'Kategorielisten' });
+    await mgr.getByLabel('Kategorien dieses Projekts als Liste speichern').fill('Schelmenmarkt');
+    await mgr.getByRole('button', { name: 'Speichern' }).click();
+    await expect(mgr.getByRole('listitem', { name: 'Schelmenmarkt' })).toContainText('2 Kategorien');
+    // Gleicher Name noch einmal → Nummer
+    await mgr.getByRole('button', { name: 'Speichern' }).click();
+    await expect(mgr.getByRole('listitem', { name: 'Schelmenmarkt (2)' })).toBeVisible();
+    await page.screenshot({ path: artifact('kategorielisten-verwalten.png') });
+    // Umbenennen, löschen mit Rückfrage
+    await mgr.getByRole('listitem', { name: 'Schelmenmarkt (2)' }).getByLabel('Name').fill('Herbstmarkt');
+    await page.keyboard.press('Enter');
+    await expect(mgr.getByRole('listitem', { name: 'Herbstmarkt' })).toBeVisible();
+    await mgr.getByRole('button', { name: '„Herbstmarkt“ löschen' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Löschen' }).click();
+    await expect(mgr.getByRole('listitem', { name: 'Herbstmarkt' })).toHaveCount(0);
+    // Mitgelieferte lassen sich nicht löschen
+    await expect(mgr.getByRole('button', { name: '„Jahrmarkt klein“ löschen' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(mgr).toHaveCount(0);
+
+    // Nach dem Neuladen (pro Rechner gespeichert) in „Liste laden …“ und beim neuen Projekt
+    await page.reload();
+    await openSettings(page);
+    await page.getByRole('button', { name: 'Kategorieliste laden …' }).click();
+    const dlg = listDialog(page, 'Kategorieliste laden');
+    const options = await dlg.getByLabel('Kategorieliste').locator('option').allInnerTexts();
+    expect(options).toEqual(['Jahrmarkt klein (11)', 'Jahrmarkt groß (30)', 'Schelmenmarkt (2)']);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press(`${MOD}+n`);
+    const neu = listDialog(page, 'Neues Projekt');
+    await neu.getByLabel('Kategorieliste').selectOption({ label: 'Schelmenmarkt (2)' });
+    await neu.getByRole('button', { name: 'Anlegen' }).click();
+    await expect.poll(() => catNames(page)).toEqual(['Imbiss', 'Eigene']);
+    expect((await st(page)).project.categories.map((c: any) => c.color)).toEqual(['#111111', '#222222']);
+    expect(errors).toEqual([]);
+  });
+
+  test('Export und Import als Datei; ungültige Datei mit Meldung abgewiesen', async ({ page }) => {
+    await openApp(page);
+    await openSettings(page);
+    await page.getByRole('button', { name: 'Kategorien als Liste speichern, Listen verwalten …' }).click();
+    const mgr = page.getByRole('dialog', { name: 'Kategorielisten' });
+    const download = page.waitForEvent('download');
+    await mgr.getByRole('button', { name: '„Jahrmarkt klein“ exportieren …' }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe('Kategorien Jahrmarkt klein.json');
+    const text = readFileSync((await file.path())!, 'utf8');
+    expect(JSON.parse(text)).toMatchObject({ format: 'marktplaner-kategorien', version: 1, name: 'Jahrmarkt klein' });
+
+    let chooser = page.waitForEvent('filechooser');
+    await mgr.getByRole('button', { name: 'Importieren …' }).click();
+    await (await chooser).setFiles({ name: 'liste.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+    await expect(mgr.getByRole('listitem', { name: 'Jahrmarkt klein (2)' })).toContainText('11 Kategorien');
+
+    chooser = page.waitForEvent('filechooser');
+    await mgr.getByRole('button', { name: 'Importieren …' }).click();
+    const newer = JSON.stringify({ ...JSON.parse(text), version: 99 });
+    await (await chooser).setFiles({ name: 'neu.json', mimeType: 'application/json', buffer: Buffer.from(newer) });
+    const alert = page.getByRole('alertdialog');
+    await expect(alert).toContainText('neueren Version');
+    await alert.getByRole('button', { name: 'OK' }).click();
+    await expect(page.getByTestId('category-list-row')).toHaveCount(3);
   });
 });
