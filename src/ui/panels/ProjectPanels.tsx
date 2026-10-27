@@ -1,4 +1,4 @@
-import { loadListInteractive } from '../../app/categoryLists';
+import { loadListInteractive, openCategoryListManager } from '../../app/categoryLists';
 import { confirm } from '../../app/dialogs';
 import { LABEL_PLACEHOLDERS } from '../../core/label';
 import { MIN_FREE_WIDTH } from '../../core/freeSpace';
@@ -112,6 +112,9 @@ export function CategoryPanel() {
         <div className="spacer" />
         <button type="button" className="icon-btn" onClick={() => void loadListInteractive()} {...tip({ label: 'Kategorieliste laden …', side: 'bottom' })}>
           <Icon name="loadList" size={16} />
+        </button>
+        <button type="button" className="icon-btn" onClick={() => void openCategoryListManager()} {...tip({ label: 'Kategorien als Liste speichern, Listen verwalten …', side: 'bottom' })}>
+          <Icon name="manageLists" size={16} />
         </button>
         <button type="button" className="icon-btn" onClick={() => addCategory()} {...tip({ label: 'Kategorie anlegen', side: 'bottom' })}>
           <Icon name="add" size={16} />

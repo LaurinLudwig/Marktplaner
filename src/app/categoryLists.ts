@@ -1,14 +1,29 @@
 import { create } from 'zustand';
-import { applyCategoryList, BUILTIN_CATEGORY_LISTS, DEFAULT_LIST_ID, EMPTY_LIST_ID, type ApplyMode, type CategoryList } from '../core/categoryLists';
+import {
+  applyCategoryList,
+  BUILTIN_CATEGORY_LISTS,
+  CATEGORY_LIST_EXTENSION,
+  categoryListFileName,
+  DEFAULT_LIST_ID,
+  EMPTY_LIST_ID,
+  encodeCategoryListFile,
+  parseCategoryListFile,
+  type ApplyMode,
+  type CategoryList,
+} from '../core/categoryLists';
+import { UserError, userMessage } from '../core/errors';
+import { platform } from '../platform';
 import { APP_KEY_PREFIX } from '../platform/legacyKeys';
+import { addOwnList, deleteOwnList, loadCategoryLists, useCategoryLists } from '../state/categoryLists';
 import { categoryUsage, loadCategoryList } from '../state/objects';
 import { useStore } from '../state/store';
-import { confirm } from './dialogs';
+import { confirm, showError } from './dialogs';
 import { notify } from './notify';
 
 /**
  * Auswahl einer Kategorieliste (#1; Dialog: ui/shell/CategoryListDialog.tsx): beim neuen Projekt und über „Liste
- * laden …“ in den Projekteinstellungen.
+ * laden …“ in den Projekteinstellungen. Eigene Listen (#2; Verwaltung: ui/shell/CategoryListManager.tsx) stehen
+ * hinter den mitgelieferten.
  */
 export type ListDialogMode = 'new' | 'load';
 export interface ListChoice {
@@ -20,8 +35,8 @@ interface ListDialogState {
 }
 export const useCategoryListDialog = create<ListDialogState>()(() => ({ request: null }));
 
-/** Alle wählbaren Listen. */
-export const availableLists = (): readonly CategoryList[] => BUILTIN_CATEGORY_LISTS;
+/** Alle wählbaren Listen: mitgelieferte, dann eigene. */
+export const availableLists = (): readonly CategoryList[] => [...BUILTIN_CATEGORY_LISTS, ...useCategoryLists.getState().lists];
 export const findList = (id: string) => availableLists().find((l) => l.id === id) ?? null;
 
 const NEW_LIST_KEY = `${APP_KEY_PREFIX}newProjectCategoryList`;
@@ -44,7 +59,8 @@ export function rememberNewProjectList(id: string) {
   }
 }
 
-export function chooseCategoryList(mode: ListDialogMode): Promise<ListChoice | null> {
+export async function chooseCategoryList(mode: ListDialogMode): Promise<ListChoice | null> {
+  await loadCategoryLists();
   return new Promise((resolve) => {
     useCategoryListDialog.setState({
       request: {
@@ -82,4 +98,46 @@ export async function loadListInteractive() {
     if (!ok) return;
   }
   loadCategoryList(list, choice.apply);
+}
+
+// ---------- Verwaltung eigener Listen (#2) ----------
+
+export const useCategoryListManager = create<{ open: boolean }>()(() => ({ open: false }));
+
+export async function openCategoryListManager() {
+  await loadCategoryLists();
+  useCategoryListManager.setState({ open: true });
+}
+export const closeCategoryListManager = () => useCategoryListManager.setState({ open: false });
+
+const FILTER = { name: 'Kategorieliste', extensions: [CATEGORY_LIST_EXTENSION] };
+
+export async function exportListInteractive(list: CategoryList) {
+  try {
+    const bytes = new TextEncoder().encode(encodeCategoryListFile(list));
+    const saved = await platform.saveFile(bytes, categoryListFileName(list), FILTER, 'application/json', useStore.getState().filePath);
+    if (saved) notify(`Kategorieliste „${list.name}“ exportiert.`, 'success');
+  } catch (e) {
+    if (!(e instanceof UserError)) console.warn(e);
+    await showError('Kategorieliste exportieren', userMessage(e, 'Die Datei konnte nicht geschrieben werden.'));
+  }
+}
+
+export async function importListInteractive() {
+  try {
+    const picked = await platform.pickFile(FILTER);
+    if (!picked) return;
+    const list = parseCategoryListFile(new TextDecoder().decode(picked.bytes));
+    const added = addOwnList(list);
+    notify(`Kategorieliste „${added.name}“ importiert (${added.entries.length} ${added.entries.length === 1 ? 'Kategorie' : 'Kategorien'}).`, 'success');
+  } catch (e) {
+    if (!(e instanceof UserError)) console.warn(e);
+    await showError('Kategorieliste importieren', userMessage(e, 'Die Datei konnte nicht gelesen werden.'));
+  }
+}
+
+export async function deleteListInteractive(list: CategoryList) {
+  if (list.builtin) return;
+  const ok = await confirm('Kategorieliste löschen', `„${list.name}“ von diesem Rechner löschen? Projekte, die die Liste verwenden, behalten ihre Kategorien.`, 'Löschen', true);
+  if (ok) deleteOwnList(list.id);
 }

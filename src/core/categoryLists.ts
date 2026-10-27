@@ -1,9 +1,12 @@
+import { UserError } from './errors';
 import { newId } from './id';
 import type { Category, Id } from './model/types';
 
 /**
- * Kategorielisten (#1): fertige Zusammenstellungen von Kategorien, aus denen ein neues Projekt startet oder die in den
- * Projekteinstellungen geladen werden. Flache Listen; „Süßwaren – Waffeln“ ist nur ein Name, keine Unterkategorie.
+ * Kategorielisten (#1, #2): fertige Zusammenstellungen von Kategorien, aus denen ein neues Projekt startet oder die in
+ * den Projekteinstellungen geladen werden. Flache Listen; „Süßwaren – Waffeln“ ist nur ein Name, keine Unterkategorie.
+ * Mitgelieferte Listen stehen hier, eigene liegen pro Rechner (state/categoryLists.ts) und lassen sich als Datei
+ * weitergeben.
  */
 export interface CategoryListEntry {
   name: string;
@@ -129,3 +132,91 @@ export function applyCategoryList(current: readonly Category[], list: CategoryLi
   }
   return { categories, removed: current.filter((c) => !kept.has(c.id)).map((c) => c.id) };
 }
+
+// ---------- Eigene Listen (#2) ----------
+
+/** Liste aus den Kategorien eines Projekts. */
+export const listFromCategories = (name: string, categories: readonly Category[]): CategoryList => ({
+  id: newId(),
+  name,
+  builtin: false,
+  entries: categories.map((c) => ({ name: c.name, color: c.color })),
+});
+
+/** Name, den es unter `existing` noch nicht gibt: „Markt“, „Markt (2)“, … */
+export function uniqueListName(name: string, existing: readonly CategoryList[]): string {
+  const taken = new Set(existing.map((l) => key(l.name)));
+  const base = name.trim() || 'Eigene Liste';
+  if (!taken.has(key(base))) return base;
+  let i = 2;
+  while (taken.has(key(`${base} (${i})`))) i++;
+  return `${base} (${i})`;
+}
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isColor = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+
+/** Einträge prüfen: ungültige fallen weg, doppelte Namen zählen einmal. */
+function normalizeEntries(raw: unknown): CategoryListEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: CategoryListEntry[] = [];
+  for (const e of raw) {
+    if (!isObj(e) || typeof e.name !== 'string' || !e.name.trim() || !isColor(e.color)) continue;
+    if (seen.has(key(e.name))) continue;
+    seen.add(key(e.name));
+    out.push({ name: e.name.trim(), color: e.color.toLowerCase() });
+  }
+  return out;
+}
+
+function normalizeOwnList(raw: unknown): CategoryList | null {
+  if (!isObj(raw) || typeof raw.id !== 'string' || typeof raw.name !== 'string' || !raw.name.trim()) return null;
+  if (builtinList(raw.id)) return null;
+  const entries = normalizeEntries(raw.entries);
+  return entries.length ? { id: raw.id, name: raw.name.trim(), builtin: false, entries } : null;
+}
+
+/** Gespeicherte eigene Listen dieses Rechners lesen; Beschädigtes fällt mit Hinweis weg. */
+export function loadOwnLists(raw: unknown): { lists: CategoryList[]; error?: string } {
+  if (raw === undefined || raw === null) return { lists: [] };
+  if (!Array.isArray(raw)) return { lists: [], error: 'Die gespeicherten Kategorielisten sind beschädigt und wurden verworfen.' };
+  const seen = new Set<string>();
+  const lists = raw.map(normalizeOwnList).filter((l): l is CategoryList => !!l && !seen.has(l.id) && !!seen.add(l.id));
+  return lists.length < raw.length ? { lists, error: 'Einige gespeicherte Kategorielisten waren beschädigt und wurden verworfen.' } : { lists };
+}
+
+/** Dateiformat zum Weitergeben einer Liste (JSON). */
+export const CATEGORY_LIST_FORMAT = 'marktplaner-kategorien';
+export const CATEGORY_LIST_VERSION = 1;
+export const CATEGORY_LIST_EXTENSION = 'json';
+
+export function encodeCategoryListFile(list: CategoryList): string {
+  const file = { format: CATEGORY_LIST_FORMAT, version: CATEGORY_LIST_VERSION, name: list.name, categories: list.entries };
+  return `${JSON.stringify(file, null, 2)}\n`;
+}
+
+/** Datei lesen; ungültige Dateien und solche aus einer neueren App-Version werden mit deutscher Meldung abgewiesen. */
+export function parseCategoryListFile(text: string): CategoryList {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text.replace(/^\uFEFF/, ''));
+  } catch {
+    throw new UserError('Die Datei ist keine Kategorieliste des Marktplaners (kein gültiges JSON).');
+  }
+  if (!isObj(raw) || raw.format !== CATEGORY_LIST_FORMAT) throw new UserError('Die Datei ist keine Kategorieliste des Marktplaners.');
+  const version = raw.version;
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) throw new UserError('Die Kategorieliste hat keine gültige Formatversion.');
+  if (version > CATEGORY_LIST_VERSION) {
+    throw new UserError(`Die Kategorieliste wurde mit einer neueren Version des Marktplaners erstellt (Format ${version}). Bitte die App aktualisieren.`);
+  }
+  const entries = normalizeEntries(raw.categories);
+  if (!entries.length) throw new UserError('Die Kategorieliste enthält keine gültige Kategorie.');
+  const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Importierte Liste';
+  return { id: newId(), name, builtin: false, entries };
+}
+
+/** Vorschlag für den Dateinamen beim Export. */
+export const categoryListFileName = (list: CategoryList) =>
+  `Kategorien ${list.name.replace(/[\\/:*?"<>|]+/g, '-').replace(/[^\P{Cc}]+/gu, '').trim() || 'Liste'}.${CATEGORY_LIST_EXTENSION}`;

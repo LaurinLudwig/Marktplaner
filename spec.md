@@ -174,6 +174,15 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   nur fehlende Namen hinzu (Vergleich ohne Groß-/Kleinschreibung), **ersetzen** lässt danach genau die Liste gelten;
   gleichnamige Kategorien behalten dabei ihre Stände und übernehmen die Farbe der Liste, für entfallende verwendete
   Kategorien fragt die App wie beim Löschen nach. Ein Undo-Schritt.
+- Eigene Kategorielisten (#2): „Kategorien als Liste speichern, Listen verwalten …“ (Projekteinstellungen,
+  Bereich „Kategorien“) speichert die Kategorien des Projekts (Name, Farbe) unter einem Namen als eigene Liste.
+  Eigene Listen gelten **pro Rechner** (wie die Export-Profile, nicht im Projekt, kein Undo) und erscheinen hinter den
+  mitgelieferten in „Kategorieliste laden …“, beim neuen Projekt und auf dem Startbildschirm. Verwalten: umbenennen
+  und löschen (mit Rückfrage; nur eigene Listen), jede Liste als Datei exportieren, Dateien importieren. Vergebene
+  Namen (auch die der mitgelieferten Listen) bekommen eine Nummer („Markt (2)“). Dateiformat: JSON
+  `{ "format": "marktplaner-kategorien", "version": 1, "name", "categories": [{ "name", "color" }] }`; Dateien ohne
+  diese Kennung, ohne gültige Kategorie oder mit neuerer Version weist die App mit deutscher Meldung ab, ungültige
+  Einträge fallen beim Import weg.
 - Beschriftung mittig auf dem Stand aus konfigurierbarer Vorlage, z. B.
   `{nr}` / `{name}` / `{breite}×{tiefe} m`. Platzhalter: `{nr}`, `{name}`, `{eigentuemer}`, `{ware}`,
   `{breite}`, `{tiefe}`, `{strom}`, `{anschluss}`, `{kategorie}`. Zeilen, die nach dem Einsetzen leer

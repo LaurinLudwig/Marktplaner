@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { startAutosave } from './app/autosave';
 import { offerRecovery, startOpenedFiles } from './app/fileActions';
+import { loadCategoryLists } from './state/categoryLists';
 import { loadRecent } from './state/recent';
 import { startKeyboard } from './app/keyboard';
 import { guardClose, startWindowTitle } from './app/window';
@@ -10,6 +11,7 @@ import { ControlBar } from './ui/shell/ControlBar';
 import { DialogHost } from './ui/shell/DialogHost';
 import { PdfPagePicker } from './ui/shell/PdfPagePicker';
 import { CategoryListDialog } from './ui/shell/CategoryListDialog';
+import { CategoryListManager } from './ui/shell/CategoryListManager';
 import { RenumberDialog } from './ui/shell/RenumberDialog';
 import { StartScreen } from './ui/shell/StartScreen';
 import { ExportDialog } from './ui/export/ExportDialog';
@@ -37,7 +39,7 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
-    recovery ??= Promise.all([offerRecovery(null), loadRecent()]);
+    recovery ??= Promise.all([offerRecovery(null), loadRecent(), loadCategoryLists()]);
     // Doppelklick-Dateien erst nach der Abfrage, damit eine Sicherung nicht ungefragt verworfen wird
     const stops = [startKeyboard(), startAutosave(), startWindowTitle(), guardClose(), startOpenedFiles(recovery)];
     return () => stops.forEach((stop) => stop());
@@ -61,6 +63,7 @@ export function App() {
       <PdfPagePicker />
       <RenumberDialog />
       <CategoryListDialog />
+      <CategoryListManager />
       <ExportDialog />
       <ExportProgress />
       <DialogHost />

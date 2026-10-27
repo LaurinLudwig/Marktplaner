@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { availableLists, lastNewProjectList, useCategoryListDialog, type ListDialogMode } from '../../app/categoryLists';
-import { EMPTY_LIST_ID, type ApplyMode } from '../../core/categoryLists';
+import { lastNewProjectList, useCategoryListDialog, type ListDialogMode } from '../../app/categoryLists';
+import { BUILTIN_CATEGORY_LISTS, EMPTY_LIST_ID, type ApplyMode } from '../../core/categoryLists';
+import { useCategoryLists } from '../../state/categoryLists';
 
 const APPLY_MODES: { id: ApplyMode; label: string; desc: string }[] = [
   { id: 'merge', label: 'Ergänzen', desc: 'nur fehlende Namen hinzufügen' },
   { id: 'replace', label: 'Ersetzen', desc: 'danach gilt genau diese Liste; gleichnamige Kategorien bleiben an ihren Geschäften' },
 ];
 
-/** Auswahl einer Kategorieliste (#1): beim neuen Projekt und über „Liste laden …“. Enter übernimmt, Esc bricht ab. */
+/** Auswahl einer Kategorieliste (#1, eigene Listen #2): beim neuen Projekt und über „Liste laden …“. Enter übernimmt, Esc bricht ab. */
 export function CategoryListDialog() {
   const req = useCategoryListDialog((s) => s.request);
   // Bei jedem Öffnen neu eingehängt: Vorauswahl gilt neu
@@ -15,7 +16,8 @@ export function CategoryListDialog() {
 }
 
 function ListDialogBody({ mode, resolve }: { mode: ListDialogMode; resolve: (c: { listId: string; apply: ApplyMode } | null) => void }) {
-  const lists = availableLists();
+  const own = useCategoryLists((s) => s.lists);
+  const lists = [...BUILTIN_CATEGORY_LISTS, ...own];
   const [listId, setListId] = useState(() => (mode === 'new' ? lastNewProjectList() : (lists[0]?.id ?? EMPTY_LIST_ID)));
   const [apply, setApply] = useState<ApplyMode>('merge');
   const okRef = useRef<HTMLButtonElement>(null);
@@ -51,11 +53,22 @@ function ListDialogBody({ mode, resolve }: { mode: ListDialogMode; resolve: (c: 
           <div className="field">
             <label htmlFor="cl-list">Kategorieliste</label>
             <select id="cl-list" value={listId} onChange={(e) => setListId(e.target.value)}>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.entries.length})
-                </option>
-              ))}
+              <optgroup label="Mitgeliefert">
+                {BUILTIN_CATEGORY_LISTS.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} ({l.entries.length})
+                  </option>
+                ))}
+              </optgroup>
+              {own.length > 0 && (
+                <optgroup label="Eigene Listen">
+                  {own.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} ({l.entries.length})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
               {mode === 'new' && <option value={EMPTY_LIST_ID}>leer (keine Kategorien)</option>}
             </select>
           </div>
