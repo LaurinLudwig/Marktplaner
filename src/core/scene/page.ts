@@ -12,7 +12,7 @@ import { pagePaper, type PaperKind } from '../paper';
 import { boundsOfRects } from '../geometry/rect';
 import { mmToM, shownOnPaper, type SheetFrame } from '../sheet';
 import type { Bounds } from '../viewport';
-import { activeNarrow, activeWarnings, cachedInfraWarnings, cachedPageWarnings } from '../warnings';
+import { activeNarrow, activeWarnings, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings } from '../warnings';
 import { areaLabelPrim, areaPrims, freeLabelPrim, freePrims, infraLabelPrim, infraPrims, overlapPrim, standLabelPrim, standPrims, warnIconPrims, warnKind, type WarnKind } from './objects';
 import { legendPrims, northArrowPrims, scaleBarPrims, titleBlockPrims } from './paper';
 import { PAPER_HATCH_MM } from './paperStyle';
@@ -73,10 +73,11 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
   const pw = cachedPageWarnings(page.areas, page.stands);
   const iw = cachedInfraWarnings(page, project.infraTypes, settings.minPassageWidth);
   const dups = mode === 'all' ? cachedDuplicates(project.pages, settings.numbering.scope) : null;
+  const dw = mode === 'all' ? cachedDistanceWarnings(page.stands, project.categories) : null;
   const kinds = new Map<string, WarnKind>(
     stands.map((s) => {
       if (mode === 'none') return [s.id, null];
-      const a = activeWarnings(pw.byStand.get(s.id), s, settings, !!dups?.has(s.id), iw.byStand.has(s.id));
+      const a = activeWarnings(pw.byStand.get(s.id), s, settings, !!dups?.has(s.id), iw.byStand.has(s.id), !!dw?.has(s.id));
       return [s.id, mode === 'all' ? warnKind(a) : a.infra ? 'overlap' : null];
     }),
   );

@@ -127,9 +127,9 @@ describe('Legende', () => {
   const toilet = T.find((t) => t.id === 'toilet')!;
   const ambulance = T.find((t) => t.id === 'ambulance')!;
   const cats = [
-    { id: 'c1', name: 'Imbiss', color: '#e57373' },
-    { id: 'c2', name: 'Getränke', color: '#4fc3f7' },
-    { id: 'c3', name: 'Kunsthandwerk', color: '#9ccc65' },
+    { id: 'c1', name: 'Imbiss', color: '#e57373', minDistance: null },
+    { id: 'c2', name: 'Getränke', color: '#4fc3f7', minDistance: null },
+    { id: 'c3', name: 'Kunsthandwerk', color: '#9ccc65', minDistance: null },
   ];
   const p = page({
     areas: [createArea({ cx: 0, cy: 0, w: 50, d: 10, rot: 0 })],

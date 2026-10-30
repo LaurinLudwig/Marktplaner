@@ -37,8 +37,9 @@ describe('Szene: Bausteine', () => {
   it('Stand: Warnvariante und Datenfarbe', () => {
     const s = createStand({ cx: 0, cy: 0, w: 3, d: 3, rot: 0 });
     expect(standPrim(s, '#123456', 'overlap')).toMatchObject({ s: 'stand', v: 'warn-overlap', color: '#123456' });
-    expect(warnKind({ outside: false, overlap: false, duplicate: false, infra: true })).toBe('overlap');
-    expect(warnKind({ outside: false, overlap: false, duplicate: true, infra: false })).toBe('outside');
+    expect(warnKind({ outside: false, overlap: false, duplicate: false, infra: true, distance: false })).toBe('overlap');
+    expect(warnKind({ outside: false, overlap: false, duplicate: true, infra: false, distance: false })).toBe('outside');
+    expect(warnKind({ outside: false, overlap: false, duplicate: false, infra: false, distance: true })).toBe('outside');
   });
 
   it('Beschriftung: gesperrte Platzhalter bleiben leer, ihre Zeilen entfallen', () => {
@@ -177,7 +178,7 @@ describe('Export-Profile (M8-07)', () => {
   it('Stände: eigene Farbe > Kategorie > Standardfarbe des Projekts (#3), auch in der Legende', () => {
     const p = createProject('P');
     p.settings.defaultStandColor = '#123abc';
-    p.categories.push({ id: 'c', name: 'Imbiss', color: '#f0a35e' });
+    p.categories.push({ id: 'c', name: 'Imbiss', color: '#f0a35e', minDistance: null });
     const pg = p.pages[0]!;
     pg.stands.push(
       createStand({ cx: 0, cy: 0, w: 3, d: 3, rot: 0 }),

@@ -22,8 +22,8 @@ export const BASELINE = 0.35;
 /** Art der Markierung am Stand: rot bei Überlappung oder Infrastruktur, sonst orange. */
 export type WarnKind = 'outside' | 'overlap' | null;
 
-/** Markierung aus den angezeigten Warnungen eines Stands (§3, §11). */
-export const warnKind = (a: ActiveWarnings): WarnKind => (a.overlap || a.infra ? 'overlap' : a.outside || a.duplicate ? 'outside' : null);
+/** Markierung aus den angezeigten Warnungen eines Stands (§3, §11); „Abstand“ (#3) ist orange. */
+export const warnKind = (a: ActiveWarnings): WarnKind => (a.overlap || a.infra ? 'overlap' : a.outside || a.duplicate || a.distance ? 'outside' : null);
 
 // ---------- Grundflächen ----------
 

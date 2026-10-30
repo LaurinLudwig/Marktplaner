@@ -3,8 +3,9 @@ import { exportCurrentList, STAND_COLUMN_ORDER } from '../../app/exportCsv';
 import { jumpToStand } from '../../app/jump';
 import { connectionText, displayedStandRows } from '../../app/startPageData';
 import { fmt, fmtInput, parseNum } from '../../core/format';
+import { fmtGap } from '../../core/warnings';
 import { CONNECTION_LABEL } from '../../core/label';
-import type { Connection, Stand } from '../../core/model/types';
+import type { Connection, FestplatzPage, Stand } from '../../core/model/types';
 import { LIMITS } from '../../core/objects';
 import { CONNECTION_KEYS, type ConnectionKey } from '../../core/power';
 import { isFilterActive, sumRows, toggleSort, EMPTY_STAND_FILTER, type StandRow, type StandSortColumn } from '../../core/standTable';
@@ -434,7 +435,7 @@ function CellView({ row, col }: { row: StandRow; col: Col }) {
 function WarnChips({ row }: { row: StandRow }) {
   const pages = useStore((s) => s.project.pages);
   const w = row.warnings;
-  if (!w.outside && !w.overlap && !w.duplicate) return null;
+  if (!w.outside && !w.overlap && !w.duplicate && !w.infra && !w.distance) return null;
   const dupNames = row.duplicates
     .map((d) => {
       const p = pages.find((x) => x.id === d.pageId);
@@ -453,8 +454,19 @@ function WarnChips({ row }: { row: StandRow }) {
           doppelte Nr
         </span>
       )}
+      {w.distance && (
+        <span className="chip" title={`Zu nah an: ${closeText(row, pages)}`}>
+          Abstand
+        </span>
+      )}
     </span>
   );
+}
+
+/** „Schokofrüchte Meier, 23,40 m“ je zu nahem Stand (#3). */
+function closeText(row: StandRow, pages: readonly FestplatzPage[]): string {
+  const stands = pages.find((p) => p.id === row.pageId)?.stands ?? [];
+  return row.tooClose.map((c) => `${stands.find((s) => s.id === c.id)?.name || 'Geschäft'}, ${fmtGap(c.dist)}`).join('; ');
 }
 
 const CONNECTIONS: (Connection | null)[] = [null, '230V', 'CEE16', 'CEE32'];

@@ -636,6 +636,8 @@ kbd {
 .world .area-body { fill: var(--area-fill); stroke: var(--area-stroke); stroke-width: 1; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
 .world .area-front { stroke: var(--front); stroke-width: 4; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
 .world .area.selected .area-body { stroke: var(--select); stroke-width: 1.5; stroke-dasharray: none; }
+.world .distance-zone polygon { fill: none; stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.world .distance-line { stroke: var(--warn); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
 .world .stand { stroke: var(--stand-stroke); stroke-width: 1; fill-opacity: 0.88; vector-effect: non-scaling-stroke; }
 .world .stand.selected { stroke: var(--select); stroke-width: 2.5; }
 .world .layer-labels text { font-family: var(--f-ui); font-weight: 500; stroke: none; text-rendering: optimizeSpeed; }
@@ -697,7 +699,13 @@ kbd {
 .color-input { width: 26px; height: 20px; padding: 0; border: 1px solid var(--border-soft); border-radius: 3px; background: none; }
 .cat-row { display: flex; align-items: end; gap: 6px; }
 .cat-row .grow { flex: 1; }
+.cat-row .cat-min { width: 96px; flex: none; }
 .cat-row .color-input { margin-bottom: 2px; }
+.cat-row .cat-grip { margin-bottom: 2px; color: var(--faint); cursor: grab; touch-action: none; }
+.cat-row .cat-grip:active { cursor: grabbing; }
+.cat-row.dragging { opacity: 0.4; }
+.cat-row.drop-before { box-shadow: 0 -2px 0 var(--accent); }
+.cat-row.drop-after { box-shadow: 0 2px 0 var(--accent); }
 .layers { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .layers li { display: flex; align-items: center; gap: 2px; color: var(--text); }
 .layers li.off .layer-name { color: var(--faint); }

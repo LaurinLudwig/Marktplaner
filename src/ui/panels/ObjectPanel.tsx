@@ -6,7 +6,7 @@ import { STAND_SHAPES, type Area, type Connection, type EdgeIndex, type Festplat
 import { cachedDuplicates } from '../../core/numbering';
 import { SHAPE_LABEL } from '../../core/shape';
 import { fmt } from '../../core/format';
-import { cachedInfraWarnings, cachedPageWarnings } from '../../core/warnings';
+import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, fmtGap } from '../../core/warnings';
 import { Icon } from '../icons/Icon';
 import { tip } from '../shortcuts/tip';
 import { setNrLocked } from '../../state/numbering';
@@ -119,11 +119,12 @@ function FrontPicker({ pageId, area }: { pageId: string; area: Area }) {
 /** Name eines Stands in Meldungen: „Nr. 12 · Name“, ohne beides „ohne Namen“. */
 const standName = (s: Stand) => [s.nr && `Nr. ${s.nr}`, s.name].filter(Boolean).join(' · ') || 'Stand ohne Namen';
 
-const SUPPRESS: Record<WarningKind, 'suppressOutsideWarning' | 'suppressOverlapWarning' | 'suppressDuplicateWarning' | 'suppressInfraWarning'> = {
+const SUPPRESS: Record<WarningKind, 'suppressOutsideWarning' | 'suppressOverlapWarning' | 'suppressDuplicateWarning' | 'suppressInfraWarning' | 'suppressDistanceWarning'> = {
   outside: 'suppressOutsideWarning',
   overlap: 'suppressOverlapWarning',
   duplicate: 'suppressDuplicateWarning',
   infra: 'suppressInfraWarning',
+  distance: 'suppressDistanceWarning',
 };
 
 /**
@@ -137,11 +138,20 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
   const infraTypes = useStore((s) => s.project.infraTypes);
   const iw = cachedInfraWarnings(page, infraTypes, settings.minPassageWidth);
   const dups = cachedDuplicates(pages, settings.numbering.scope);
+  const categories = useStore((s) => s.project.categories);
+  const dw = cachedDistanceWarnings(page.stands, categories);
   const byId = new Map(page.stands.map((s) => [s.id, s]));
   const outside = stands.filter((s) => w.byStand.get(s.id)?.outside);
   const overlap = stands.filter((s) => w.byStand.get(s.id)?.overlaps.length);
   const duplicate = stands.filter((s) => dups.has(s.id));
   const inInfra = stands.filter((s) => iw.byStand.has(s.id));
+  const tooClose = stands.filter((s) => dw.has(s.id));
+  /** „Schokofrüchte Meier, 23,40 m“ je zu nahem Stand (#3). */
+  const closeText = (s: Stand) =>
+    dw
+      .get(s.id)!
+      .map((c) => `${byId.get(c.id)?.name.trim() || 'Stand ohne Namen'}, ${fmtGap(c.dist)}`)
+      .join('; ');
   const ids = stands.map((s) => s.id);
   /** „RTW-Platz „Nord““ für die Objekte, in die der Stand eindringt. */
   const infraText = (s: Stand) =>
@@ -158,6 +168,7 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
     { kind: 'overlap', label: 'Überlappung ignorieren', hit: overlap, ignored: stands.every((s) => s.suppressOverlapWarning), enabled: settings.warnOverlap },
     { kind: 'outside', label: '„außerhalb“ ignorieren', hit: outside, ignored: stands.every((s) => s.suppressOutsideWarning), enabled: settings.warnOutside },
     { kind: 'duplicate', label: 'doppelte Nummer ignorieren', hit: duplicate, ignored: stands.every((s) => s.suppressDuplicateWarning), enabled: settings.warnDuplicateNr },
+    { kind: 'distance', label: 'Abstand ignorieren', hit: tooClose, ignored: stands.every((s) => s.suppressDistanceWarning), enabled: settings.warnDistance },
   ];
   const visible = rows.filter((r) => r.hit.length || stands.some((s) => s[SUPPRESS[r.kind]]));
   /** „Stand X (Festplatz 2)“ für die anderen Stände mit derselben Nummer. */
@@ -192,6 +203,10 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
                   ? single
                     ? `Nummer ${stands[0]!.nr.trim()} auch bei: ${dupText(stands[0]!)}`
                     : `${r.hit.length} mit doppelter Nummer`
+                  : r.kind === 'distance'
+                    ? single
+                      ? `Zu nah an gleicher Kategorie: ${closeText(stands[0]!)}`
+                      : `${r.hit.length} zu nah an gleicher Kategorie`
                   : single
                     ? 'Außerhalb jeder Grundfläche'
                     : `${r.hit.length} außerhalb`}
