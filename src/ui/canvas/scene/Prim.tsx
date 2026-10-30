@@ -23,7 +23,8 @@ export function PrimView({ p, unit = 1, sized = false, className, ...rest }: { p
     case 'rect':
       return <rect {...common} x={p.x} y={p.y} width={p.w} height={p.h} />;
     case 'line':
-      return <line {...common} x1={p.a.x} y1={p.a.y} x2={p.b.x} y2={p.b.y} strokeWidth={p.width} strokeDasharray={p.dash?.join(' ')} />;
+      // `unit` wie beim Text: Führungslinien der Standbeschriftung (#9) liegen in der Zentimeter-Gruppe der Beschriftung
+      return <line {...common} x1={p.a.x * unit} y1={p.a.y * unit} x2={p.b.x * unit} y2={p.b.y * unit} strokeWidth={p.width} strokeDasharray={p.dash?.join(' ')} />;
     case 'path': {
       const d = isIcon(p) ? iconPath(p.icon) : p.d;
       const at = p.at;

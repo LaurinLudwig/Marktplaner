@@ -13,7 +13,8 @@ import { boundsOfRects } from '../geometry/rect';
 import { mmToM, shownOnPaper, type SheetFrame } from '../sheet';
 import type { Bounds } from '../viewport';
 import { activeNarrow, activeWarnings, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings } from '../warnings';
-import { areaLabelPrim, areaPrims, freeLabelPrim, freePrims, infraLabelPrim, infraPrims, overlapPrim, standLabelPrim, standPrims, warnIconPrims, warnKind, type WarnKind } from './objects';
+import { cachedStandLabels } from '../labelLayout';
+import { areaLabelBounds, areaLabelPrim, areaPrims, freeLabelPrim, freePrims, infraLabelPrim, infraPrims, overlapPrim, standLabelPrims, standPrims, warnIconPrims, warnKind, type WarnKind } from './objects';
 import { legendPrims, northArrowPrims, scaleBarPrims, titleBlockPrims } from './paper';
 import { PAPER_HATCH_MM } from './paperStyle';
 import type { Prim } from './prims';
@@ -117,11 +118,15 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
     const labels: Prim[] = [];
     if (L.areas) labels.push(...areas.map((a) => areaLabelPrim(a, fontSize)));
     if (L.areas && L.free) for (const r of free) labels.push(...r.free.map((f) => freeLabelPrim(f, fontSize)));
-    if (L.stands)
+    if (L.stands) {
+      // Platziert wird auf der ganzen Page, damit Beschriftungen am Blattrand denselben Platz haben wie auf der Zeichenfläche
+      const blocked = L.areas ? page.areas.map((a) => areaLabelBounds(a, fontSize)) : [];
+      const placed = cachedStandLabels({ stands: page.stands, areas: page.areas, infra: page.infra, template: settings.labelTemplate, fontSize, categories: project.categories, blank, blocked });
       for (const s of stands) {
-        const p = standLabelPrim(s, settings.labelTemplate, fontSize, (s.categoryId && cats.get(s.categoryId)?.name) || '', blank);
-        if (p) labels.push(p);
+        const p = placed.get(s.id);
+        if (p) labels.push(...standLabelPrims(p, fontSize));
       }
+    }
     if (L.infra)
       for (const o of infra) {
         const t = types.get(o.typeId);

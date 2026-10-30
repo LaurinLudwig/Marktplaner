@@ -236,6 +236,14 @@ export function clampMinDistance(v: unknown): number | null {
   return Math.round(Math.min(MIN_DISTANCE_LIMITS.max, Math.max(MIN_DISTANCE_LIMITS.min, v)) * 100) / 100;
 }
 
+/** Versatz einer von Hand verschobenen Beschriftung (#9): je Achse höchstens 1000 m, auf 0,01 m gerundet. */
+export const LABEL_OFFSET_MAX = 1000;
+export function normalizeLabelOffset(v: unknown): Vec | null {
+  if (!isObj(v) || typeof v.x !== 'number' || typeof v.y !== 'number' || !Number.isFinite(v.x) || !Number.isFinite(v.y)) return null;
+  const c = (n: number) => Math.round(Math.max(-LABEL_OFFSET_MAX, Math.min(LABEL_OFFSET_MAX, n)) * 100) / 100;
+  return { x: c(v.x), y: c(v.y) };
+}
+
 /** Beträge fürs Standgeld (#5): 0–1.000.000 €, auf Cent gerundet; MwSt-Satz 0–100 %. */
 export const PRICE_LIMITS = { min: 0, max: 1_000_000 } as const;
 export const VAT_LIMITS = { min: 0, max: 100 } as const;
@@ -320,6 +328,7 @@ function normalizeStand(raw: unknown, ids: Set<string>, categoryIds: Set<string>
     suppressDistanceWarning: bool(raw.suppressDistanceWarning, false),
     shape: isShape(raw.shape) ? raw.shape : 'rect',
     shapeTemplateId: typeof raw.shapeTemplateId === 'string' && templateIds.has(raw.shapeTemplateId) ? raw.shapeTemplateId : null,
+    labelOffset: normalizeLabelOffset(raw.labelOffset),
     ...r,
   };
 }

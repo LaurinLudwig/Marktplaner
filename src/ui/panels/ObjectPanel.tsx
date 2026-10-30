@@ -12,7 +12,7 @@ import { Icon } from '../icons/Icon';
 import { tip } from '../shortcuts/tip';
 import { setNrLocked } from '../../state/numbering';
 import { setStandShape } from '../../state/shapes';
-import { setAreaFront, setInfraType, setRectField, setWarningIgnored, updateArea, updateInfra, updateStands, type WarningKind } from '../../state/objects';
+import { setAreaFront, setInfraType, setLabelOffset, setRectField, setWarningIgnored, updateArea, updateInfra, updateStands, type WarningKind } from '../../state/objects';
 import { useStore } from '../../state/store';
 import { ColorField } from './ColorField';
 import { NumberField } from './NumberField';
@@ -314,6 +314,16 @@ function StandFields({ pageId, stands }: { pageId: string; stands: Stand[] }) {
         )}
       </div>
       <FeeInfo stands={stands} />
+      {stands.some((s) => s.labelOffset) && (
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setLabelOffset(pageId, ids, null)}
+          {...tip({ label: 'Beschriftung zurücksetzen', desc: 'Die von Hand verschobene Beschriftung wieder automatisch platzieren', ariaLabel: false })}
+        >
+          Beschriftung zurücksetzen
+        </button>
+      )}
       <ColorField
         id="st-color"
         label={mixedColor ? 'Eigene Farbe (unterschiedlich)' : 'Eigene Farbe'}

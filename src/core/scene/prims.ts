@@ -22,6 +22,7 @@ export type StyleKey =
   | 'warn-icon'
   | 'warn-icon-mark'
   | 'stand-label'
+  | 'label-leader'
   | 'area-label'
   | 'free-label'
   | 'infra-label'

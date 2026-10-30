@@ -8,7 +8,8 @@ import { createPage, createProject } from '../model/defaults';
 import { createStand } from '../objects';
 import { pagePaper } from '../paper';
 import { fitIntoFreeArea, paperSize, sheetFrame, type PaperRect } from '../sheet';
-import { areaPrims, standLabelPrim, standPrim, standPrims, warnKind } from './objects';
+import { cachedStandLabels } from '../labelLayout';
+import { areaPrims, standLabelPrims, standPrim, standPrims, warnKind } from './objects';
 import { pageScene } from './page';
 import { NORTH_ARROW_SIZE, northArrowPrims, scaleBarLayout } from './paper';
 import { PAPER_STYLE } from './paperStyle';
@@ -45,7 +46,8 @@ describe('Szene: Bausteine', () => {
   it('Beschriftung: gesperrte Platzhalter bleiben leer, ihre Zeilen entfallen', () => {
     const s = { ...createStand({ cx: 0, cy: 0, w: 3, d: 2, rot: 0 }), nr: '7', name: 'Bäcker', owner: 'Müller' };
     expect(formatLabel('{nr}\n{eigentuemer}\n{breite}×{tiefe} m', s, '', new Set(['eigentuemer', 'breite', 'tiefe']))).toEqual(['7']);
-    expect(standLabelPrim(s, '{nr} {name}', 0.6, '')!.lines).toEqual(['7 Bäcker']);
+    const placed = cachedStandLabels({ stands: [s], areas: [], infra: [], template: '{nr} {name}', fontSize: 0.6, categories: [] }).get(s.id)!;
+    expect(standLabelPrims(placed, 0.6)).toMatchObject([{ t: 'text', s: 'stand-label', lines: ['7 Bäcker'] }]);
   });
 });
 

@@ -105,6 +105,7 @@ function fillPage(pg, rows, counter) {
         suppressDistanceWarning: false,
         shape: 'rect',
         shapeTemplateId: null,
+        labelOffset: null,
         cx: r2(area.cx + lx * c - ly * sn),
         cy: r2(area.cy + lx * sn + ly * c),
         w,
@@ -168,6 +169,6 @@ const project = {
 const total = project.pages.reduce((n, p) => n + p.stands.length, 0);
 if (total !== 500) throw new Error(`Erwartet 500 Stände, erzeugt ${total}`);
 
-const file = { format: 'schelmeplaner', schemaVersion: 10, project };
+const file = { format: 'schelmeplaner', schemaVersion: 11, project };
 writeFileSync(out, zipSync({ 'project.json': [strToU8(JSON.stringify(file, null, 2)), { level: 6 }] }, { mtime: new Date('2026-01-01T00:00:00Z') }));
 console.warn(`${out}: ${total} Stände auf ${project.pages.length} Festplätzen`);

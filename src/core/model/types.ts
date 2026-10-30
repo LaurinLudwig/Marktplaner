@@ -159,6 +159,8 @@ export interface Stand extends Rect {
   shape: StandShape;
   /** Formvorlage (M12); hat Vorrang vor `shape`. */
   shapeTemplateId: Id | null;
+  /** Von Hand verschobene Beschriftung (#9): Mitte relativ zur Standmitte in Metern; null = automatisch. */
+  labelOffset: Vec | null;
 }
 
 /**

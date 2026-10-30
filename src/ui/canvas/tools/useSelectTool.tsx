@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { moveBy as moveBackground, worldToBg, type BgTransform } from '../../../core/background';
 import { boundsOfRects, resizeRect, type Handle } from '../../../core/geometry/rect';
 import { objectsInBounds, pickObject } from '../../../core/hit';
+import { isOutside, labelBounds } from '../../../core/labelLayout';
 import type { Area, EdgeIndex, Id, InfraObject, Stand, Vec } from '../../../core/model/types';
 import { computeMoveSnap, type Guide, type SnapState } from '../../../core/moveSnap';
 import { lineFromEnds } from '../../../core/infra';
@@ -10,7 +11,7 @@ import { findObjects, LIMITS } from '../../../core/objects';
 import { paperElementBounds } from '../../../core/paper';
 import type { SnapResult } from '../../../core/snap';
 import { angleTo, rotateRects, snapAngle, type RectMap } from '../../../core/transform';
-import { cloneForDrag, commitDuplicateDrag, commitRects, select, setAreaFront } from '../../../state/objects';
+import { cloneForDrag, commitDuplicateDrag, commitRects, select, setAreaFront, setLabelOffset } from '../../../state/objects';
 import { updateBackground } from '../../../state/pageSettings';
 import { useStore, type PaperElement } from '../../../state/store';
 import { mmToM, mToMm, paperToAnchor, paperToWorld, snapToPaperCorners, worldToPaper } from '../../../core/sheet';
@@ -47,7 +48,9 @@ type Gesture =
   | { kind: 'marquee'; start: Vec; cur: Vec; base: Id[] }
   /** Blatt, Schriftfeld oder Legende ziehen (M7): Vorschau als Umriss, beim Loslassen ein Undo-Schritt. */
   | { kind: 'paper'; element: PaperElement; startWorld: Vec; box0: Bounds; start: Vec; moved: boolean; delta: Vec; target: Vec | null }
-  | { kind: 'background'; start: Vec; transform0: BgTransform };
+  | { kind: 'background'; start: Vec; transform0: BgTransform }
+  /** Ausgelagerte Standbeschriftung von Hand verschieben (#9). */
+  | { kind: 'label'; id: Id; startWorld: Vec; start: Vec; box0: Bounds; moved: boolean; delta: Vec };
 
 const LABEL = { move: 'Verschieben', rotate: 'Drehen', resize: 'Größe ändern', end: 'Länge ändern' } as const;
 /** Trefferabstand für Linien ohne Fläche in Bildschirmpixeln (M7). */
@@ -71,6 +74,7 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
   const [guides, setGuides] = useState<Guide[]>([]);
   const [endSnap, setEndSnap] = useState<SnapResult | null>(null);
   const [paperGhost, setPaperGhost] = useState<Bounds | null>(null);
+  const [labelGhost, setLabelGhost] = useState<Bounds | null>(null);
   const selection = useStore((s) => s.ui.selection);
   const ids = selection?.kind === 'objects' ? selection.ids : [];
   const geo = active ? selectionGeometry(ctx.page, ids, ctx.view, ctx.geometryOf) : null;
@@ -97,6 +101,22 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
     const pp = ctx.paper;
     return element === 'sheet' ? pp.frame.bounds : paperElementBounds(ctx.page, pp, element);
   };
+  /**
+   * Treffer auf eine ausgelagerte Standbeschriftung (#9; liegt über allen Objekten). Auf dem Stand stehende
+   * Beschriftungen gehören zum Stand und werden mit ihm gezogen.
+   */
+  const pickLabel = (w: Vec): Id | null => {
+    const L = ctx.page.layers;
+    if (!L.labels.visible || L.labels.locked || !L.stands.visible || L.stands.locked) return null;
+    let found: Id | null = null;
+    for (const [id, p] of ctx.labels) {
+      if (!isOutside(p)) continue;
+      const b = labelBounds(p);
+      if (w.x >= b.minX && w.x <= b.maxX && w.y >= b.minY && w.y <= b.maxY) found = id;
+    }
+    return found;
+  };
+
   /** Treffer auf Papier-Elemente (liegen über allen Objekten; das oberste zuerst), Rand oder Marke des Blatts. */
   const pickPaper = (w: Vec): PaperElement | null => {
     const L = ctx.page.layers.sheet;
@@ -211,6 +231,12 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       else st.abortTransaction();
       return;
     }
+    if (g.kind === 'label') {
+      setLabelGhost(null);
+      const s = commit && g.moved ? ctx.page.stands.find((x) => x.id === g.id) : null;
+      if (s) setLabelOffset(pageId, [g.id], { x: (g.box0.minX + g.box0.maxX) / 2 + g.delta.x - s.cx, y: (g.box0.minY + g.box0.maxY) / 2 + g.delta.y - s.cy });
+      return;
+    }
     if (g.kind === 'paper') {
       setPaperGhost(null);
       if (!commit || !g.moved) return;
@@ -288,6 +314,13 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
         st.setUi({ selection: { kind: 'paper', element: paperHit } });
         const box0 = paperBox(paperHit)!;
         startGesture({ kind: 'paper', element: paperHit, startWorld: p.world, box0, start: p.screen, moved: false, delta: { x: 0, y: 0 }, target: null });
+        return true;
+      }
+      const labelHit = !handle ? pickLabel(p.world) : null;
+      if (labelHit) {
+        // Klick wählt den Stand aus, Ziehen verschiebt nur seine Beschriftung
+        select([labelHit]);
+        startGesture({ kind: 'label', id: labelHit, startWorld: p.world, start: p.screen, box0: labelBounds(ctx.labels.get(labelHit)!), moved: false, delta: { x: 0, y: 0 } });
         return true;
       }
       const hit = pick(p.world);
@@ -431,6 +464,13 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
           setPaperGhost({ minX: min.x, minY: min.y, maxX: min.x + w, maxY: min.y + h });
           return;
         }
+        case 'label': {
+          if (!g.moved && Math.hypot(p.screen.x - g.start.x, p.screen.y - g.start.y) < DRAG_PX) return;
+          g.moved = true;
+          g.delta = { x: p.world.x - g.startWorld.x, y: p.world.y - g.startWorld.y };
+          setLabelGhost({ minX: g.box0.minX + g.delta.x, minY: g.box0.minY + g.delta.y, maxX: g.box0.maxX + g.delta.x, maxY: g.box0.maxY + g.delta.y });
+          return;
+        }
         case 'background':
           updateBackground(pageId, 'Hintergrund verschieben', { transform: moveBackground(g.transform0, p.world.x - g.start.x, p.world.y - g.start.y) });
           return;
@@ -544,6 +584,7 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
           </>
         )}
         {marquee && <MarqueeRect ctx={ctx} a={marquee.a} b={marquee.b} />}
+        {labelGhost && <MarqueeRect ctx={ctx} a={{ x: labelGhost.minX, y: labelGhost.minY }} b={{ x: labelGhost.maxX, y: labelGhost.maxY }} className="paper-ghost label-ghost" />}
         {paperGhost && <MarqueeRect ctx={ctx} a={{ x: paperGhost.minX, y: paperGhost.minY }} b={{ x: paperGhost.maxX, y: paperGhost.maxY }} className="paper-ghost" />}
         {guides.length > 0 && <SnapGuides guides={guides} toScreen={ctx.toScreen} />}
         <SnapMarker snap={endSnap} toScreen={ctx.toScreen} />

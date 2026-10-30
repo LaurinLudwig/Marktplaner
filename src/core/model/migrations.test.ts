@@ -50,6 +50,20 @@ function withoutV9(project: Project): Project {
   } as unknown as Project);
 }
 
+/** Feld aus Formatversion 11 (#9) prüfen und entfernen: Nach der Migration ist keine Beschriftung von Hand verschoben. */
+function withoutLabelOffset(project: Project): Project {
+  return {
+    ...project,
+    pages: project.pages.map((pg) => ({
+      ...pg,
+      stands: pg.stands.map(({ labelOffset, ...st }) => {
+        expect(labelOffset).toBeNull();
+        return st;
+      }),
+    })),
+  } as unknown as Project;
+}
+
 /**
  * Felder aus Formatversion 10 (#5) prüfen und entfernen, danach die aus Version 9: Nach der Migration ist kein Preis
  * festgelegt, MwSt-Satz 19 %, Meter exakt.
@@ -85,7 +99,7 @@ describe('Formatversionen', () => {
   });
 
   it('Speichern schreibt die aktuelle Version', () => {
-    const project = withoutV10(decodeProjectFile(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v1-m3.schelme'))).project);
+    const project = withoutV10(withoutLabelOffset(decodeProjectFile(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v1-m3.schelme'))).project));
     const json = JSON.parse(strFromU8(unzipSync(encodeProjectFile({ project, assets: {} }))['project.json']!));
     expect(json.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
@@ -118,7 +132,7 @@ describe('Migration 1 → 2 (M4: Warnungen)', () => {
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressOverlapWarning');
     expect(raw.project.settings).not.toHaveProperty('warnOverlap');
 
-    const project = withoutV10(decodeProjectFile(bytes).project);
+    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
     expect(project.settings.warnOverlap).toBe(true);
     expect(project.settings.warnOutside).toBe(raw.project.settings.warnOutside);
     expect(project.categories).toEqual(raw.project.categories);
@@ -159,7 +173,7 @@ describe('Migration 2 → 3 (M5: Nummerierung)', () => {
     expect(raw.project.settings).not.toHaveProperty('warnDuplicateNr');
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressDuplicateWarning');
 
-    const project = withoutV10(decodeProjectFile(bytes).project);
+    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
     expect(project.settings.numbering).toEqual({ ...raw.project.settings.numbering, digits: 1 });
     expect(project.settings.warnDuplicateNr).toBe(true);
     expect(project.settings.warnOverlap).toBe(raw.project.settings.warnOverlap ?? true);
@@ -225,7 +239,7 @@ describe('Migration 3 → 4 (M7: Infrastruktur, Blatt, Schriftfeld, Legende)', (
     expect(raw.project.pages[0]).toHaveProperty('titleBlockPos');
     expect(raw.project.infraTypes[0]).toHaveProperty('type');
 
-    const project = withoutV10(decodeProjectFile(bytes).project);
+    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
     // snapGap, defaultStandColor: spätere Migration 5 → 6
     const { warnInfra, warnPassageWidth, minPassageWidth, snapGap: _g, defaultStandColor: _c, ...settings } = project.settings;
     expect(settings).toEqual(raw.project.settings);
@@ -277,7 +291,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.project.exportProfiles).toEqual([]);
     expect(raw.project.pages[0]).not.toHaveProperty('scaleBar');
 
-    const project = withoutV10(decodeProjectFile(bytes).project);
+    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
     expect(project).not.toHaveProperty('exportProfiles');
     const { exportProfiles: _p, pages: _pages, ...rawRest } = raw.project;
     // snapGap, defaultStandColor: spätere Migration 5 → 6
@@ -315,7 +329,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.project.settings).not.toHaveProperty('snapGap');
     expect(raw.project.settings).not.toHaveProperty('defaultStandColor');
 
-    const project = withoutV10(decodeProjectFile(bytes).project);
+    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
     const { settings: rawSettings, pages: rawPages, ...rawRest } = raw.project;
     const { settings, pages, ...rest } = project;
     expect(rest).toEqual(rawRest);
@@ -341,7 +355,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.schemaVersion).toBe(6);
     expect(raw.project.pages[0]).not.toHaveProperty('hiddenFree');
 
-    const project = withoutV10(decodeProjectFile(bytes).project);
+    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
     const { pages: rawPages, ...rawRest } = raw.project;
     const { pages, ...rest } = project;
     expect(rest).toEqual(rawRest);
@@ -371,7 +385,7 @@ describe('Migration 7 → 8 (M12: Geschäftsformen)', () => {
     expect(raw.project).not.toHaveProperty('shapeTemplates');
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('shape');
 
-    const project = withoutV10(decodeProjectFile(bytes).project);
+    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
     expect(project).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren
     expect(project.name).toBe('Formatversion 7 (M11)');
@@ -425,7 +439,7 @@ describe('Migration 8 → 9 (#3: Abstandsprüfung)', () => {
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressDistanceWarning');
     expect(raw.project.settings).not.toHaveProperty('warnDistance');
 
-    const { settings: { pricing: _p, ...v9Settings }, categories: v10Categories, ...v10Rest } = decodeProjectFile(bytes).project;
+    const { settings: { pricing: _p, ...v9Settings }, categories: v10Categories, ...v10Rest } = withoutLabelOffset(decodeProjectFile(bytes).project);
     const project = { ...v10Rest, settings: v9Settings, categories: v10Categories.map(({ price: _price, ...c }) => c) };
     expect(project.settings.warnDistance).toBe(true);
     expect(project.categories.every((c) => c.minDistance === null)).toBe(true);
@@ -474,7 +488,7 @@ describe('Migration 9 → 10 (#5: Standgeld)', () => {
     expect(raw.project.settings).not.toHaveProperty('pricing');
     expect(raw.project.categories[0]).not.toHaveProperty('price');
 
-    const project = decodeProjectFile(bytes).project;
+    const project = withoutLabelOffset(decodeProjectFile(bytes).project);
     expect(project.settings.pricing).toEqual({ perMeter: null, roundUpMeters: false, vatRate: 19 });
     const { settings: { pricing: _p, ...settings }, categories, ...rest } = project;
     const { settings: rawSettings, categories: rawCategories, ...rawRest } = raw.project;
@@ -504,5 +518,39 @@ describe('Migration 9 → 10 (#5: Standgeld)', () => {
     expect(cp({ kind: 'flat', amount: 500 })).toEqual({ kind: 'flat', amount: 500 });
     expect(cp({ kind: 'perMeter', amount: 30.004 })).toEqual({ kind: 'perMeter', amount: 30 });
     expect([cp({ kind: 'flat' }), cp({ kind: 'sonst', amount: 5 }), cp({ kind: 'flat', amount: -5 }), cp(null), cp(undefined)]).toEqual([null, null, null, null, null]);
+  });
+});
+
+describe('Migration 10 → 11 (#9: Beschriftung)', () => {
+  it('ergänzt labelOffset = null; vorhandene Werte bleiben; Ungültiges wird null, Werte begrenzt und gerundet', () => {
+    const v11 = MIGRATIONS[10]!({ id: 'x', pages: [{ id: 'p', stands: [{ id: 's' }, { id: 't', labelOffset: { x: 1, y: 2 } }, 'kaputt'] }, 'kaputt'] }) as any;
+    expect(v11.pages[0].stands).toEqual([{ id: 's', labelOffset: null }, { id: 't', labelOffset: { x: 1, y: 2 } }, 'kaputt']);
+    const file = (labelOffset: unknown) => ({
+      format: 'schelmeplaner',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      project: { id: 'x', pages: [{ id: 'p', name: 'P', stands: [{ id: 's', cx: 0, cy: 0, w: 4, d: 3, rot: 0, labelOffset }] }] },
+    });
+    const lo = (v: unknown) => parseProjectFile(file(v)).pages[0]!.stands[0]!.labelOffset;
+    expect(lo({ x: 1.234, y: -5 })).toEqual({ x: 1.23, y: -5 });
+    expect(lo({ x: 5000, y: 0 })).toEqual({ x: 1000, y: 0 });
+    expect([lo(null), lo({ x: 1 }), lo({ x: 'a', y: 1 }), lo({ x: Number.NaN, y: 1 }), lo(undefined)]).toEqual([null, null, null, null, null]);
+  });
+
+  it('echte Datei aus #5 (Version 10, tests/fixtures/format-v10-standgeld.mplan) wird vollständig migriert', () => {
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v10-standgeld.mplan')));
+    const raw = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
+    expect(raw.schemaVersion).toBe(10);
+    expect(raw.project.pages[0].stands[0]).not.toHaveProperty('labelOffset');
+
+    const project = decodeProjectFile(bytes).project;
+    const { pages, ...rest } = withoutLabelOffset(project);
+    const { pages: rawPages, ...rawRest } = raw.project;
+    expect(rest).toEqual(rawRest);
+    expect(pages).toEqual(rawPages);
+    // Werte, die in der Datei gezielt gesetzt waren
+    expect(project.name).toBe('Formatversion 10 (#5)');
+    expect(project.settings.pricing).toEqual({ perMeter: 25, roundUpMeters: true, vatRate: 7 });
+    expect(project.categories[4]!.price).toEqual({ kind: 'flat', amount: 500 });
+    expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
   });
 });
