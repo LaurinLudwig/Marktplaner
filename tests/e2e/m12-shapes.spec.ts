@@ -13,7 +13,7 @@ async function seed(page: Page, extra: Record<string, unknown> = {}, templates: 
   await page.evaluate(
     ([fields, tpls]) => {
       const s = (window as any).__marktplanerStore.getState();
-      const base = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, rot: 0, shape: 'rect', shapeTemplateId: null };
+      const base = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, rot: 0, shape: 'rect', shapeTemplateId: null, labelOffset: null };
       s.change('Testdaten', (p: any) => {
         p.shapeTemplates.push(...(tpls as unknown[]));
         const nord = p.pages[0];
@@ -138,7 +138,7 @@ test.describe('M12 #9: Geschäftsformen', () => {
     await page.keyboard.press(`${MOD}+s`);
     const bytes = readFileSync((await (await download).path())!);
     const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(bytes))['project.json']!));
-    expect(json.schemaVersion).toBe(10); // seit #5 Version 10, angepasst vom Entwickler (vorher 9, davor 8)
+    expect(json.schemaVersion).toBe(11); // seit #9 Version 11, angepasst vom Entwickler (vorher 10, 9, 8)
     expect(json.project.shapeTemplates).toEqual([KARUSSELL]);
     expect(json.project.pages[0].stands[0]).toMatchObject({ shape: 'ellipse', shapeTemplateId: 'k' });
     // Neues Projekt laden, dann die Datei öffnen

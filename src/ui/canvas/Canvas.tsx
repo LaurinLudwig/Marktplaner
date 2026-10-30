@@ -5,6 +5,8 @@ import { effectivePage } from '../../core/derive';
 import { createFreeSpaceCache, pageFreeSpaces, type FreeSpace } from '../../core/freeSpace';
 import { applyHidden, pickFreeSpace } from '../../core/hiddenFree';
 import { pickObject } from '../../core/hit';
+import { cachedStandLabels } from '../../core/labelLayout';
+import { areaLabelBounds } from '../../core/scene/objects';
 import { markerSize, pageOccupants, typeMap } from '../../core/infra';
 import { fmt } from '../../core/format';
 import type { FestplatzPage, Id, Rect, Vec, View } from '../../core/model/types';
@@ -148,6 +150,15 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const labelTemplate = useStore((s) => s.project.settings.labelTemplate);
   const labelFontSize = useStore((s) => s.project.settings.labelFontSize);
   const minFreeWidth = useStore((s) => s.project.settings.minFreeWidth);
+  // Platz der Standbeschriftungen (#9) aus der gespeicherten Page: Während einer Geste bleibt er stehen, die bewegten
+  // Beschriftungen folgen ihrem Stand starr (ObjectsLayer); neu platziert wird nach dem Loslassen
+  const areasLabelled = storedPage.layers.areas.visible;
+  const areaLabelBoxes = useMemo(() => (areasLabelled ? storedPage.areas.map((a) => areaLabelBounds(a, labelFontSize)) : []), [areasLabelled, storedPage.areas, labelFontSize]);
+  const standLabels = useMemo(
+    () =>
+      cachedStandLabels({ stands: storedPage.stands, areas: storedPage.areas, infra: storedPage.infra, template: labelTemplate, fontSize: labelFontSize, categories, blocked: areaLabelBoxes }),
+    [storedPage.stands, storedPage.areas, storedPage.infra, labelTemplate, labelFontSize, categories, areaLabelBoxes],
+  );
   const warnOutside = useStore((s) => s.project.settings.warnOutside);
   const warnOverlap = useStore((s) => s.project.settings.warnOverlap);
   const warnDuplicateNr = useStore((s) => s.project.settings.warnDuplicateNr);
@@ -252,6 +263,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
     geometryOf: (typeId) => typesById.get(typeId)?.geometry,
     markerSize: markerSize(labelFontSize),
     paper,
+    labels: standLabels,
   };
   const measureTool = useMeasureTool(ctx, tool === 'measure');
   const calibrateTool = useCalibrateTool(ctx, tool === 'calibrate');
@@ -538,6 +550,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
             warnSettings={warnSettings}
             duplicates={duplicates}
             baseStands={storedPage.stands}
+            labels={standLabels}
             movingIds={movingIds}
             infraTypes={typesById}
             markerSize={markerSize(labelFontSize)}

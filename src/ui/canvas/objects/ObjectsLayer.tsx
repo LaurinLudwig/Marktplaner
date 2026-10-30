@@ -4,8 +4,10 @@ import type { Area, Category, FestplatzPage, Id, InfraTypeDef, ShapeTemplate, St
 import { resolveStandColor } from '../../../core/objects';
 import { isShaped, templateOf } from '../../../core/shape';
 import type { Bounds } from '../../../core/viewport';
-import { areaLabelPrim, areaPrims, freeLabelPrim, freePrims, overlapPrim, standHitboxPrim, standLabelPrim, standPrims, warnIconPrims, warnKind, type WarnKind } from '../../../core/scene/objects';
+import { areaLabelPrim, areaPrims, freeLabelPrim, freePrims, overlapPrim, standHitboxPrim, standLabelPrims, standPrims, warnIconPrims, warnKind, type WarnKind } from '../../../core/scene/objects';
 import { dilateRect } from '../../../core/geometry/polygon';
+import { formatLabel } from '../../../core/label';
+import { layoutStandLabels, movedPlacement, type LabelPlacement } from '../../../core/labelLayout';
 import { activeWarnings, type DistanceWarnings, type PageWarnings, type WarnSettings } from '../../../core/warnings';
 import { CM, PrimView, Prims } from '../scene/Prim';
 import { InfraLabelList, InfraList } from './InfraLayer';
@@ -71,6 +73,8 @@ interface Props {
   infraWarnObjects: ReadonlySet<Id>;
   /** Zu nahe Stände gleicher Kategorie (Rohdaten, #3). */
   distanceWarnings: DistanceWarnings;
+  /** Platz der Standbeschriftungen (#9) aus der gespeicherten Page (Canvas.tsx). */
+  labels: ReadonlyMap<Id, LabelPlacement>;
 }
 
 
@@ -99,6 +103,7 @@ export const ObjectsLayer = memo(function ObjectsLayer({
   infraWarnStands,
   infraWarnObjects,
   distanceWarnings,
+  labels,
 }: Props) {
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const tplById = useMemo(() => new Map(shapeTemplates.map((t) => [t.id, t])), [shapeTemplates]);
@@ -119,6 +124,18 @@ export const ObjectsLayer = memo(function ObjectsLayer({
   const movingKinds = new Map(movingStands.map((s) => [s.id, kindOf(s)]));
   const warnKinds = movingStands.length ? new Map([...staticKinds, ...movingKinds]) : staticKinds;
   const freeVisible = L.free.visible && L.areas.visible;
+  // Beschriftung bewegter Stände: starr mit dem Stand verschoben (#9); Kopien (Alt+Ziehen) ohne Nachbarn platziert
+  const baseById = useMemo(() => new Map(baseStands.map((s) => [s.id, s])), [baseStands]);
+  const movingLabels = new Map<Id, LabelPlacement>();
+  for (const s of movingStands) {
+    const base = baseById.get(s.id);
+    const p = base && labels.get(s.id);
+    if (p) movingLabels.set(s.id, movedPlacement(p, s.cx - base.cx, s.cy - base.cy));
+    else if (!base) {
+      const own = layoutStandLabels({ stands: [s], areas: page.areas, infra: [], fontSize, linesOf: (x) => formatLabel(template, x, (x.categoryId && catById.get(x.categoryId)?.name) || '') }).get(s.id);
+      if (own) movingLabels.set(s.id, own);
+    }
+  }
   // Leistung (QA-M4-03): Die Listen sind eigene memo-Komponenten. Ändert sich beim Zoomen nur eine
   // Schwelle (Schriftgröße, Schraffurabstand, Beschriftungsbereich), rendert nur die betroffene Liste
   // neu, nicht 500 Stände.
@@ -155,8 +172,8 @@ export const ObjectsLayer = memo(function ObjectsLayer({
         <g className={`layer-labels${labelsTiny ? ' tiny' : ''}${labelHalo ? ' halo' : ''}`} transform={`scale(${1 / CM})`} fontSize={fontSize * CM} strokeWidth={fontSize * CM * 0.22}>
           {L.areas.visible && <AreaLabelList areas={page.areas} fontSize={fontSize} />}
           {freeVisible && !freeLabelsTiny && <FreeLabelList free={free} fontSize={fontSize} window={freeLabelWindow} />}
-          {L.stands.visible && <StandLabelList stands={staticStands} template={template} fontSize={fontSize} catById={catById} />}
-          {L.stands.visible && movingStands.length > 0 && <StandLabelList stands={movingStands} template={template} fontSize={fontSize} catById={catById} />}
+          {L.stands.visible && <StandLabelList stands={staticStands} labels={labels} fontSize={fontSize} />}
+          {L.stands.visible && movingStands.length > 0 && <StandLabelList stands={movingStands} labels={movingLabels} fontSize={fontSize} />}
           {L.infra.visible && <InfraLabelList infra={page.infra} types={infraTypes} fontSize={fontSize} markerSize={markerSize} />}
         </g>
       )}
@@ -234,8 +251,11 @@ const FreeLabelList = memo(function FreeLabelList({ free, fontSize, window: win 
   return free.map((r) => <FreeLabels key={r.areaId} result={r} fontSize={fontSize} window={win} />);
 });
 
-const StandLabelList = memo(function StandLabelList({ stands, template, fontSize, catById }: { stands: Stand[]; template: string; fontSize: number; catById: Map<Id, Category> }) {
-  return stands.map((s) => <StandLabel key={s.id} stand={s} template={template} fontSize={fontSize} categoryName={(s.categoryId && catById.get(s.categoryId)?.name) || ''} />);
+const StandLabelList = memo(function StandLabelList({ stands, labels, fontSize }: { stands: Stand[]; labels: ReadonlyMap<Id, LabelPlacement>; fontSize: number }) {
+  return stands.map((s) => {
+    const p = labels.get(s.id);
+    return p ? <StandLabel key={s.id} id={s.id} placement={p} fontSize={fontSize} /> : null;
+  });
 });
 
 const AreaShape = memo(function AreaShape({ area, selected }: { area: Area; selected: boolean }) {
@@ -318,10 +338,16 @@ const WarnIcon = memo(function WarnIcon({ stand, kind, size }: { stand: Stand; k
   );
 });
 
-/** Standbeschriftung: horizontal, mittig, feste Schriftgröße; darf über den Stand hinausragen. */
-const StandLabel = memo(function StandLabel({ stand, template, fontSize, categoryName }: { stand: Stand; template: string; fontSize: number; categoryName: string }) {
-  const p = standLabelPrim(stand, template, fontSize, categoryName);
-  return p ? <PrimView p={p} unit={CM} data-id={stand.id} /> : null;
+/** Standbeschriftung an ihrem Platz (#9): auf dem Stand umbrochen oder daneben mit Führungslinie. */
+const StandLabel = memo(function StandLabel({ id, placement, fontSize }: { id: Id; placement: LabelPlacement; fontSize: number }) {
+  const prims = standLabelPrims(placement, fontSize);
+  const text = prims[prims.length - 1]!;
+  return (
+    <>
+      {prims.length > 1 && <PrimView p={prims[0]!} unit={CM} data-leader={id} />}
+      <PrimView p={text} unit={CM} data-id={id} data-mode={placement.mode} />
+    </>
+  );
 });
 
 /** Grundflächen-Beschriftung: horizontal, außerhalb der Fläche vor der Mitte der Vorderseite. */

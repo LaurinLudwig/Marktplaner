@@ -45,7 +45,7 @@ async function drag(page: Page, from: P, to: P, steps = 12) {
 // suppressOverlapWarning (M4, Formatversion 2), suppressDuplicateWarning (M5, Formatversion 3), suppressInfraWarning (M7, Version 4) sowie shape und
 // shapeTemplateId (M12, Version 8): Teil des Modells,
 // nachgetragen vom Entwickler, siehe qa/M3.md
-const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9)
+const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9), seit #9 mit labelOffset (11)
 async function seed(page: Page, objs: { areas?: any[]; stands?: any[]; categories?: any[] }) {
   await page.evaluate(
     ({ o, base }) => {
@@ -721,6 +721,9 @@ test.describe('QA M3-09: Beschriftungsvorlage – Grenzfälle', () => {
     await backToPage(page);
   };
   const lines = (page: Page, id: string) => page.locator(`.stand-label[data-id="${id}"] tspan`).allTextContents();
+  // Seit #9 bricht die Beschriftung auf die Standbreite um (Inhalt vollständig, nur auf mehr Zeilen): verglichen wird
+  // der Text unabhängig vom Umbruch (angepasst vom Entwickler, vorher Zeile für Zeile)
+  const text = async (page: Page, id: string) => (await lines(page, id)).join(' ');
 
   test('Leere Platzhalter, Zeilen mit Text, Sonderzeichen, unbekannte Platzhalter, lange Namen', async ({ page }) => {
     const errors = collectErrors(page);
@@ -747,8 +750,8 @@ test.describe('QA M3-09: Beschriftungsvorlage – Grenzfälle', () => {
       ],
     });
     await setTemplate(page, '{nr}\n{name}\nStrom: {strom} kW\n{anschluss} / {kategorie}\n\n{unbekannt}\n   \n{breite}×{tiefe} m\n{eigentuemer} – {ware}');
-    expect(await lines(page, 'leer')).toEqual(['{unbekannt}', '3×3 m']);
-    expect(await lines(page, 'voll')).toEqual([
+    expect(await text(page, 'leer')).toBe(['{unbekannt}', '3×3 m'].join(' '));
+    expect(await text(page, 'voll')).toBe([
       'A-12',
       '<b>Bäckerei</b> „Wenz“ & Söhne {nr} $& 😀',
       'Strom: 0,5 kW',
@@ -756,14 +759,14 @@ test.describe('QA M3-09: Beschriftungsvorlage – Grenzfälle', () => {
       '{unbekannt}',
       '3,5×2,25 m',
       "O'Neill – Brot/Brötchen",
-    ]);
+    ].join(' '));
     // Kein HTML wird interpretiert
     await expect(page.locator('.stand-label b')).toHaveCount(0);
     // Langer Name wird nicht gekürzt und ragt über den Stand hinaus
-    const long = await lines(page, 'lang');
-    expect(long).toContain('Allerlängster Geschäftsname der Welt mit Überlänge GmbH & Co. KG Gelnhausen');
+    expect(await text(page, 'lang')).toContain('Allerlängster Geschäftsname der Welt mit Überlänge GmbH & Co. KG Gelnhausen');
     const w = await page.locator('.stand-label[data-id="lang"]').evaluate((e) => e.getBoundingClientRect().width);
-    expect(w).toBeGreaterThan(2 * (await scale(page)) * 3);
+    // ragt über den 2-m-Stand hinaus (seit #9 umbrochen, deshalb nicht mehr dreimal so breit; angepasst vom Entwickler)
+    expect(w).toBeGreaterThan(2 * (await scale(page)));
     // Leere Vorlage: keine Beschriftung, keine Fehler
     await setTemplate(page, '');
     await expect(page.locator('.stand-label')).toHaveCount(0);
@@ -772,7 +775,7 @@ test.describe('QA M3-09: Beschriftungsvorlage – Grenzfälle', () => {
     await expect(page.locator('.stand-label')).toHaveCount(3);
     // Windows-Zeilenumbrüche
     await setTemplate(page, '{nr}\r\n{breite}');
-    expect(await lines(page, 'voll')).toEqual(['A-12', '3,5']);
+    expect(await text(page, 'voll')).toBe('A-12 3,5');
     await page.screenshot({ path: artifact('m3-qa-labels.png') });
     expect(errors).toEqual([]);
   });
@@ -885,7 +888,8 @@ test.describe('QA M3-01/M3-18: Speichern und Neuladen', () => {
     // Gezeichnet: Farben aus Kategorie bzw. eigener Farbe, Beschriftung nach Vorlage
     await expect(page.locator('.stand[data-id="s1"]')).toHaveAttribute('fill', '#e57373');
     await expect(page.locator('.stand[data-id="s2"]')).toHaveAttribute('fill', '#123456');
-    await expect(page.locator('.stand-label[data-id="s1"] tspan')).toHaveText(['A-1 Bäckerei', 'Imbiss']);
+    // seit #9 auf die Standbreite umbrochen: verglichen unabhängig vom Umbruch (angepasst vom Entwickler)
+    await expect.poll(async () => (await page.locator('.stand-label[data-id="s1"] tspan').allTextContents()).join(' ')).toBe('A-1 Bäckerei Imbiss');
     await expect(page.locator('.area-label[data-id="a1"]')).toHaveText('Nord · Ost · 50 × 10 m');
     // Geladen = unverändert, kein Undo-Schritt
     expect((await st(page)).history.past).toHaveLength(0);

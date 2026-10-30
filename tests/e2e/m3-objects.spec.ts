@@ -141,12 +141,13 @@ test.describe('M3: Verschieben, Drehen, Undo', () => {
     await openApp(page);
     await seed(page, { stands: [{ id: 's1', cx: 0, cy: 0, w: 2, d: 2, rot: 37, nr: '12', name: 'Sehr lange Bäckerei Wenz' }] });
     const label = page.locator('.stand-label[data-id="s1"]');
-    await expect(label).toHaveText(/12Sehr lange Bäckerei Wenz2×2 m/);
+    // Seit #9 umbrochen und neben dem Stand: Inhalt vollständig, verglichen unabhängig vom Umbruch (angepasst vom Entwickler)
+    expect((await label.locator('tspan').allTextContents()).join(' ')).toBe('12 Sehr lange Bäckerei Wenz 2×2 m');
     expect(await label.getAttribute('transform')).toBeNull();
     const ys = await label.locator('tspan').evaluateAll((els) => els.map((e) => e.getAttribute('y')));
     const xs = await label.locator('tspan').evaluateAll((els) => els.map((e) => e.getAttribute('x')));
     expect(new Set(xs).size).toBe(1); // alle Zeilen mittig übereinander
-    expect(ys).toHaveLength(3);
+    expect(ys.length).toBeGreaterThanOrEqual(3);
     // Text ragt über den 2-m-Stand hinaus (nicht gekürzt)
     const lb = (await label.boundingBox())!;
     expect(lb.width).toBeGreaterThan(2 * (await scale(page)));
@@ -294,7 +295,8 @@ test.describe('M3: Steuerungs- und Seitenleiste', () => {
     await page.locator('#st-note').blur();
     expect((await activePage(page)).stands[0]).toMatchObject({ name: 'Bäckerei Wenz', nr: '7', owner: 'Jonas Wenz', powerKw: 11, connection: 'CEE32', note: 'Zugang hinten' });
     expect(await pastLen(page)).toBe(n0 + 6);
-    await expect(page.locator('.stand-label[data-id="s1"]')).toHaveText('7Bäckerei Wenz4×3 m');
+    // Seit #9 auf die Standbreite umbrochen: verglichen unabhängig vom Umbruch (angepasst vom Entwickler)
+    await expect.poll(async () => (await page.locator('.stand-label[data-id="s1"] tspan').allTextContents()).join(' ')).toBe('7 Bäckerei Wenz 4×3 m');
     await page.locator('svg.canvas').click({ position: { x: 5, y: 5 } });
     for (let i = 0; i < 6; i++) await page.keyboard.press(`${MOD}+z`);
     expect((await activePage(page)).stands[0]).toMatchObject({ name: '', nr: '', powerKw: 0, connection: null });

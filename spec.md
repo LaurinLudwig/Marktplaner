@@ -226,8 +226,24 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 - Die Beschriftung ist IMMER horizontal, unabhängig von der Drehung des Stands, und wird über
   dem Stand gezeichnet (oberste Ebene).
 - Feste Schriftgröße in Planeinheiten (skaliert mit dem Zoom und erscheint im PDF in passender
-  Größe), einstellbar in den Projekteinstellungen. Der Text darf über den Stand hinausragen,
-  es wird nichts gekürzt oder verkleinert.
+  Größe), einstellbar in den Projekteinstellungen. Es wird nichts gekürzt, weggelassen oder verkleinert: Jeder Stand
+  zeigt die volle Vorlage, nur der Ort der Beschriftung ändert sich (#9, Entscheidungen 2026-10-30):
+  - **Auf dem Stand:** Jede Zeile bricht an Leerzeichen und nach Bindestrichen auf die Breite des Stands um. Passt der
+    Block (mittig, horizontal) in den Stand, steht er wie bisher darauf. Das ist der Normalfall; die folgenden Plätze
+    sind nur Ausweichplätze.
+  - **Ausgelagert:** Passt er nicht, steht die Beschriftung neben dem Stand, verbunden durch eine dünne
+    Führungslinie, umbrochen auf etwa 20 Zeichen (mindestens auf die Breite des Stands). Gesucht wird zuerst
+    **hinter dem Stand** (gegenüber der Vorderseite der Grundfläche, auf der seine Mitte steht, also weg von der
+    Gasse; ohne Grundfläche gegenüber der Vorderseite des Stands): direkt dahinter, seitlich versetzt und weiter weg.
+    Erst wenn hinter dem Stand nichts frei ist, **davor** (ebenso gestaffelt). Frei heißt: Text und Führungslinie
+    berühren keinen anderen Stand, kein Infrastruktur-Objekt, keine Grundflächen-Beschriftung und keine andere
+    Standbeschriftung; gibt es das nirgends, genügt freier Text, sonst steht sie direkt hinter dem Stand.
+  - **Beim Ziehen** eines Stands folgt seine Beschriftung starr; neu platziert wird nach dem Loslassen.
+  - **Von Hand verschieben:** Eine ausgelagerte Beschriftung lässt sich mit dem Auswahlwerkzeug ziehen (ein
+    Undo-Schritt; ein Klick darauf wählt den Stand). Die Position gilt relativ zum Stand und wandert mit ihm; die
+    Automatik lässt ihr den Platz. Seitenleiste: „Beschriftung zurücksetzen“ platziert wieder automatisch.
+  - Zeichenfläche und PDF zeigen dieselbe Platzierung. Formatversion 11 (Geschäft `labelOffset`: Mitte der
+    Beschriftung relativ zur Standmitte in m, oder null).
 
 ### 4. Freiflächen-Logik (Kern)
 - Jede Grundfläche hat eine Achse entlang ihrer Vorderseite, Bereich [0, Breite].

@@ -8,10 +8,12 @@ import { hatchPath } from '../geometry/polygon';
 import { fromLocal, rectCorners } from '../geometry/rect';
 import { fmt } from '../format';
 import { lineEnds, PASSAGE_TYPE_ID } from '../infra';
-import { approxTextWidth, areaLabel, formatLabel, freeSpaceLabel } from '../label';
+import { approxTextWidth, areaLabel, freeSpaceLabel } from '../label';
+import { firstBaseline, type LabelPlacement } from '../labelLayout';
 import type { Area, InfraObject, InfraTypeDef, ShapeTemplate, Stand, Vec } from '../model/types';
 import { shapePaths } from '../shape';
 import type { ActiveWarnings } from '../warnings';
+import type { Bounds } from '../viewport';
 import { iconPrim, type LinePrim, type PathPrim, type PolyPrim, type Prim, type StyleVariant, type TextPrim } from './prims';
 
 /** Zeilenabstand der Beschriftung in Schriftgrößen. */
@@ -46,6 +48,14 @@ export function areaLabelPrim(area: Area, fontSize: number): TextPrim {
   const hh = (LINE * fontSize) / 2;
   const reach = Math.abs(n.x) * hw + Math.abs(n.y) * hh + 0.35 * fontSize;
   return label('area-label', [text], mid.x + n.x * reach, mid.y + n.y * reach + BASELINE * fontSize, fontSize);
+}
+
+/** Umriss der Grundflächen-Beschriftung (Meter): Hindernis für ausgelagerte Standbeschriftungen (#9). */
+export function areaLabelBounds(area: Area, fontSize: number): Bounds {
+  const p = areaLabelPrim(area, fontSize);
+  const hw = approxTextWidth(p.lines[0]!, fontSize) / 2;
+  const cy = p.y - BASELINE * fontSize;
+  return { minX: p.x - hw, maxX: p.x + hw, minY: cy - (LINE * fontSize) / 2, maxY: cy + (LINE * fontSize) / 2 };
 }
 
 // ---------- Freiflächen ----------
@@ -97,12 +107,13 @@ export function standPrims(stand: Stand, color: string, warn: WarnKind, template
 /** Hitbox eines Stands mit Form: das Rechteck B × T gestrichelt, nur auf der Zeichenfläche bei Auswahl (§3). */
 export const standHitboxPrim = (stand: Stand): PolyPrim => ({ t: 'poly', s: 'stand-hitbox', pts: rectCorners(stand) });
 
-/** Standbeschriftung: horizontal, mittig, feste Schriftgröße; darf über den Stand hinausragen (§3). */
-export function standLabelPrim(stand: Stand, template: string, fontSize: number, categoryName: string, blank?: ReadonlySet<string>): TextPrim | null {
-  const lines = formatLabel(template, stand, categoryName, blank);
-  if (!lines.length) return null;
-  const top = stand.cy - ((lines.length - 1) * LINE * fontSize) / 2 + BASELINE * fontSize;
-  return label('stand-label', lines, stand.cx, top, fontSize);
+/**
+ * Standbeschriftung an ihrem Platz (#9, labelLayout.ts): horizontal, feste Schriftgröße; auf dem Stand umbrochen oder
+ * daneben mit Führungslinie (Linie zuerst, damit der Text darüber liegt).
+ */
+export function standLabelPrims(p: LabelPlacement, fontSize: number): Prim[] {
+  const text = label('stand-label', p.lines, p.cx, firstBaseline(p, fontSize, BASELINE), fontSize);
+  return p.leader ? [{ t: 'line', s: 'label-leader', a: p.leader.a, b: p.leader.b }, text] : [text];
 }
 
 /** Warndreieck an der Ecke oben rechts des Stands (Weltgröße `size`). */

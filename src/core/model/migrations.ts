@@ -24,10 +24,11 @@
  *   8  M12: Geschäft `shape` und `shapeTemplateId`, Projekt `shapeTemplates` (Geschäftsformen, #9).
  *   9  Konkurrenzschutz (#3): Kategorie `minDistance`, Geschäft `suppressDistanceWarning`, Einstellung `warnDistance`.
  *  10  Standgeld (#5): Einstellung `pricing` (Preis je Frontmeter, Rundung, MwSt-Satz), Kategorie `price`.
+ *  11  Beschriftung (#9): Geschäft `labelOffset` (von Hand verschobene Beschriftung).
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -133,6 +134,11 @@ export const MIGRATIONS: Record<number, Migration> = {
     ...p,
     settings: isObj(p.settings) ? { pricing: { perMeter: null, roundUpMeters: false, vatRate: 19 }, ...p.settings } : p.settings,
     categories: mapList(p.categories, (c) => (isObj(c) ? { price: null, ...c } : c)),
+  }),
+  /** 10 → 11 (#9): Noch keine Beschriftung von Hand verschoben. */
+  10: (p) => ({
+    ...p,
+    pages: mapList(p.pages, (pg) => (isObj(pg) ? { ...pg, stands: mapList(pg.stands, (s) => (isObj(s) ? { labelOffset: null, ...s } : s)) } : pg)),
   }),
 };
 

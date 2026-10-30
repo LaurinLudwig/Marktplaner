@@ -10,7 +10,7 @@ import { allSelectable } from '../core/hit';
 import { newId } from '../core/id';
 import { clampToLimits, createInfra, fitRect, INFRA_LIMITS } from '../core/infra';
 import { clampMinPassage, clampPrice, clampSnapGap, VAT_LIMITS } from '../core/model/schema';
-import type { Area, Category, EdgeIndex, FestplatzPage, Id, InfraObject, PricingSettings, Project, Rect, Stand } from '../core/model/types';
+import type { Area, Category, EdgeIndex, FestplatzPage, Id, InfraObject, PricingSettings, Project, Rect, Stand, Vec } from '../core/model/types';
 import { cloneObjects, createArea, createStand, findObjects, LIMITS, MIN_DRAW_SIZE, PALETTE, STAND_DEFAULT, type Clipboard, type ObjectKind } from '../core/objects';
 import { groupCenter, moveRects, type RectMap } from '../core/transform';
 import type { Bounds } from '../core/viewport';
@@ -393,6 +393,15 @@ export function moveCategory(id: Id, to: number) {
     const [cat] = p.categories.splice(from, 1);
     p.categories.splice(target, 0, cat!);
   });
+}
+
+/**
+ * Beschriftung von Hand verschieben (#9): Mitte relativ zur Standmitte in Metern (auf 0,01 m gerundet); null = wieder
+ * automatisch platzieren. Ein Undo-Schritt.
+ */
+export function setLabelOffset(pageId: Id, ids: Id[], offset: Vec | null) {
+  const v = offset && { x: Math.round(offset.x * 100) / 100, y: Math.round(offset.y * 100) / 100 };
+  updateStands(pageId, ids, { labelOffset: v }, v ? 'Beschriftung verschieben' : 'Beschriftung zurücksetzen');
 }
 
 /** Anzahl der Stände (alle Pages) mit dieser Kategorie. */
