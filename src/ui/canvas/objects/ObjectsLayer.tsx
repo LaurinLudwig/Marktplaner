@@ -5,7 +5,8 @@ import { resolveStandColor } from '../../../core/objects';
 import { isShaped, templateOf } from '../../../core/shape';
 import type { Bounds } from '../../../core/viewport';
 import { areaLabelPrim, areaPrims, freeLabelPrim, freePrims, overlapPrim, standHitboxPrim, standLabelPrim, standPrims, warnIconPrims, warnKind, type WarnKind } from '../../../core/scene/objects';
-import { activeWarnings, type PageWarnings, type WarnSettings } from '../../../core/warnings';
+import { dilateRect } from '../../../core/geometry/polygon';
+import { activeWarnings, type DistanceWarnings, type PageWarnings, type WarnSettings } from '../../../core/warnings';
 import { CM, PrimView, Prims } from '../scene/Prim';
 import { InfraLabelList, InfraList } from './InfraLayer';
 
@@ -68,6 +69,8 @@ interface Props {
   /** Stände in Objekten mit „freihalten“ (Rohdaten) und Objekte mit angezeigter Warnung „Durchfahrt zu eng“ (M7). */
   infraWarnStands: ReadonlySet<Id>;
   infraWarnObjects: ReadonlySet<Id>;
+  /** Zu nahe Stände gleicher Kategorie (Rohdaten, #3). */
+  distanceWarnings: DistanceWarnings;
 }
 
 
@@ -95,6 +98,7 @@ export const ObjectsLayer = memo(function ObjectsLayer({
   markerSize,
   infraWarnStands,
   infraWarnObjects,
+  distanceWarnings,
 }: Props) {
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const tplById = useMemo(() => new Map(shapeTemplates.map((t) => [t.id, t])), [shapeTemplates]);
@@ -104,7 +108,8 @@ export const ObjectsLayer = memo(function ObjectsLayer({
   const unmoved = useMemo(() => baseStands.filter((s) => !movingIds.has(s.id)), [movingIds, baseStands]);
   const staticStands = movingIds.size ? unmoved : page.stands;
   const movingStands = movingIds.size ? page.stands.filter((s) => movingIds.has(s.id)) : NO_STANDS;
-  const kindOf = (s: Stand): WarnKind => warnKind(activeWarnings(warnings.byStand.get(s.id), s, warnSettings, duplicates.has(s.id), infraWarnStands.has(s.id)));
+  const kindOf = (s: Stand): WarnKind =>
+    warnKind(activeWarnings(warnings.byStand.get(s.id), s, warnSettings, duplicates.has(s.id), infraWarnStands.has(s.id), distanceWarnings.has(s.id)));
   // Warnungen der unbewegten Stände: nur eine neue Map, wenn sich eine Warnung wirklich ändert
   const kindsKey = staticStands.map((s) => kindOf(s) ?? '').join(',');
   const staticKinds = useMemo(() => {
@@ -142,6 +147,7 @@ export const ObjectsLayer = memo(function ObjectsLayer({
       )}
       <g className={`layer-warnings${labelsTiny ? ' tiny' : ''}`}>
         {L.stands.visible && <OverlapRegions regions={warnings.regions} warnKinds={warnKinds} />}
+        {L.stands.visible && warnSettings.warnDistance && <DistanceZones stands={page.stands} selected={selected} catById={catById} conflicts={distanceWarnings} />}
         {L.stands.visible && <WarnIcons stands={staticStands} warnKinds={staticKinds} size={fontSize * 1.3} />}
         {L.stands.visible && movingStands.length > 0 && <WarnIcons stands={movingStands} warnKinds={movingKinds} size={fontSize * 1.3} />}
       </g>
@@ -159,6 +165,25 @@ export const ObjectsLayer = memo(function ObjectsLayer({
 });
 
 const NO_STANDS: Stand[] = [];
+
+/**
+ * Konkurrenzschutz (#3): Um jeden ausgewählten Stand einer Kategorie mit Mindestabstand dessen Umriss (Rechteck um den
+ * Mindestabstand aufgeweitet, Ecken gerundet) und eine Linie zu jedem zu nahen Stand derselben Kategorie.
+ */
+function DistanceZones({ stands, selected, catById, conflicts }: { stands: Stand[]; selected: ReadonlySet<Id>; catById: Map<Id, Category>; conflicts: DistanceWarnings }) {
+  if (!selected.size) return null;
+  return stands.map((s) => {
+    const min = selected.has(s.id) && s.categoryId ? catById.get(s.categoryId)?.minDistance : null;
+    if (!min) return null;
+    const zone = dilateRect(s, min);
+    return (
+      <g key={s.id} className="distance-zone" data-testid="distance-zone">
+        <polygon points={zone.map((p) => `${p.x},${p.y}`).join(' ')} />
+        {conflicts.get(s.id)?.map((c) => <line key={c.id} className="distance-line" data-testid="distance-line" x1={c.from.x} y1={c.from.y} x2={c.to.x} y2={c.to.y} />)}
+      </g>
+    );
+  });
+}
 
 const AreaList = memo(function AreaList({ areas, selected }: { areas: Area[]; selected: ReadonlySet<Id> }) {
   return areas.map((a) => <AreaShape key={a.id} area={a} selected={selected.has(a.id)} />);

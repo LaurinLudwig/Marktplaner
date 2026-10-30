@@ -27,6 +27,30 @@ function withoutV8(project: Project): Project {
 }
 
 /**
+ * Felder aus Formatversion 9 (#3) prüfen und entfernen, danach die aus Version 8: Nach der Migration hat keine Kategorie
+ * einen Mindestabstand, kein Stand ignoriert die Warnung „Abstand“, und die Warnung ist eingeschaltet.
+ */
+function withoutV9(project: Project): Project {
+  const { warnDistance, ...settings } = project.settings;
+  expect(warnDistance).toBe(true);
+  return withoutV8({
+    ...project,
+    settings,
+    categories: project.categories.map(({ minDistance, ...c }) => {
+      expect(minDistance).toBeNull();
+      return c;
+    }),
+    pages: project.pages.map((pg) => ({
+      ...pg,
+      stands: pg.stands.map(({ suppressDistanceWarning, ...st }) => {
+        expect(suppressDistanceWarning).toBe(false);
+        return st;
+      }),
+    })),
+  } as unknown as Project);
+}
+
+/**
  * Versionierung des Dateiformats. Regel (CONTRIBUTING.md): Jede Änderung am Dateiformat erhöht die Version
  * und bringt eine Migration mit Test mit.
  */
@@ -44,7 +68,7 @@ describe('Formatversionen', () => {
   });
 
   it('Speichern schreibt die aktuelle Version', () => {
-    const project = withoutV8(decodeProjectFile(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v1-m3.schelme'))).project);
+    const project = withoutV9(decodeProjectFile(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v1-m3.schelme'))).project);
     const json = JSON.parse(strFromU8(unzipSync(encodeProjectFile({ project, assets: {} }))['project.json']!));
     expect(json.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
@@ -77,7 +101,7 @@ describe('Migration 1 → 2 (M4: Warnungen)', () => {
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressOverlapWarning');
     expect(raw.project.settings).not.toHaveProperty('warnOverlap');
 
-    const project = withoutV8(decodeProjectFile(bytes).project);
+    const project = withoutV9(decodeProjectFile(bytes).project);
     expect(project.settings.warnOverlap).toBe(true);
     expect(project.settings.warnOutside).toBe(raw.project.settings.warnOutside);
     expect(project.categories).toEqual(raw.project.categories);
@@ -118,7 +142,7 @@ describe('Migration 2 → 3 (M5: Nummerierung)', () => {
     expect(raw.project.settings).not.toHaveProperty('warnDuplicateNr');
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressDuplicateWarning');
 
-    const project = withoutV8(decodeProjectFile(bytes).project);
+    const project = withoutV9(decodeProjectFile(bytes).project);
     expect(project.settings.numbering).toEqual({ ...raw.project.settings.numbering, digits: 1 });
     expect(project.settings.warnDuplicateNr).toBe(true);
     expect(project.settings.warnOverlap).toBe(raw.project.settings.warnOverlap ?? true);
@@ -184,7 +208,7 @@ describe('Migration 3 → 4 (M7: Infrastruktur, Blatt, Schriftfeld, Legende)', (
     expect(raw.project.pages[0]).toHaveProperty('titleBlockPos');
     expect(raw.project.infraTypes[0]).toHaveProperty('type');
 
-    const project = withoutV8(decodeProjectFile(bytes).project);
+    const project = withoutV9(decodeProjectFile(bytes).project);
     // snapGap, defaultStandColor: spätere Migration 5 → 6
     const { warnInfra, warnPassageWidth, minPassageWidth, snapGap: _g, defaultStandColor: _c, ...settings } = project.settings;
     expect(settings).toEqual(raw.project.settings);
@@ -236,7 +260,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.project.exportProfiles).toEqual([]);
     expect(raw.project.pages[0]).not.toHaveProperty('scaleBar');
 
-    const project = withoutV8(decodeProjectFile(bytes).project);
+    const project = withoutV9(decodeProjectFile(bytes).project);
     expect(project).not.toHaveProperty('exportProfiles');
     const { exportProfiles: _p, pages: _pages, ...rawRest } = raw.project;
     // snapGap, defaultStandColor: spätere Migration 5 → 6
@@ -274,7 +298,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.project.settings).not.toHaveProperty('snapGap');
     expect(raw.project.settings).not.toHaveProperty('defaultStandColor');
 
-    const project = withoutV8(decodeProjectFile(bytes).project);
+    const project = withoutV9(decodeProjectFile(bytes).project);
     const { settings: rawSettings, pages: rawPages, ...rawRest } = raw.project;
     const { settings, pages, ...rest } = project;
     expect(rest).toEqual(rawRest);
@@ -300,7 +324,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.schemaVersion).toBe(6);
     expect(raw.project.pages[0]).not.toHaveProperty('hiddenFree');
 
-    const project = withoutV8(decodeProjectFile(bytes).project);
+    const project = withoutV9(decodeProjectFile(bytes).project);
     const { pages: rawPages, ...rawRest } = raw.project;
     const { pages, ...rest } = project;
     expect(rest).toEqual(rawRest);
@@ -330,7 +354,7 @@ describe('Migration 7 → 8 (M12: Geschäftsformen)', () => {
     expect(raw.project).not.toHaveProperty('shapeTemplates');
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('shape');
 
-    const project = withoutV8(decodeProjectFile(bytes).project);
+    const project = withoutV9(decodeProjectFile(bytes).project);
     expect(project).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren
     expect(project.name).toBe('Formatversion 7 (M11)');
@@ -359,5 +383,58 @@ describe('Migration 7 → 8 (M12: Geschäftsformen)', () => {
     const p = parseProjectFile(file);
     expect(p.shapeTemplates).toEqual([{ id: 't1', name: 'Karussell', w: 8, d: 6, parts: [{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 1 }] }]);
     expect(p.pages[0]!.stands.map((s) => [s.shape, s.shapeTemplateId])).toEqual([['ellipse', 't1'], ['rect', null]]);
+  });
+});
+
+describe('Migration 8 → 9 (#3: Abstandsprüfung)', () => {
+  it('8 → 9: Kategorien ohne Mindestabstand, Warnung eingeschaltet, kein Stand ignoriert sie; vorhandene Werte bleiben', () => {
+    const v8 = { id: 'x', settings: { warnOutside: false }, categories: [{ id: 'c' }, 'kaputt'], pages: [{ id: 'p', stands: [{ id: 's' }, 'kaputt'] }, 'kaputt'] };
+    const before = structuredClone(v8);
+    const v9 = MIGRATIONS[8]!(v8) as any;
+    expect(v8).toEqual(before);
+    expect(v9.settings).toEqual({ warnOutside: false, warnDistance: true });
+    expect(v9.categories).toEqual([{ id: 'c', minDistance: null }, 'kaputt']);
+    expect(v9.pages).toEqual([{ id: 'p', stands: [{ id: 's', suppressDistanceWarning: false }, 'kaputt'] }, 'kaputt']);
+    const kept = MIGRATIONS[8]!({ id: 'x', settings: { warnDistance: false }, categories: [{ id: 'c', minDistance: 5 }], pages: [] }) as any;
+    expect(kept.settings.warnDistance).toBe(false);
+    expect(kept.categories[0].minDistance).toBe(5);
+  });
+
+  it('echte Datei aus M12 (Version 8, tests/fixtures/format-v8-m12.mplan) wird vollständig migriert', () => {
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v8-m12.mplan')));
+    const raw = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
+    expect(raw.schemaVersion).toBe(8);
+    expect(raw.project.categories[0]).not.toHaveProperty('minDistance');
+    expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressDistanceWarning');
+    expect(raw.project.settings).not.toHaveProperty('warnDistance');
+
+    const project = decodeProjectFile(bytes).project;
+    expect(project.settings.warnDistance).toBe(true);
+    expect(project.categories.every((c) => c.minDistance === null)).toBe(true);
+    const { settings: { warnDistance: _w, ...settings }, categories, pages, ...rest } = project;
+    const { settings: rawSettings, categories: rawCategories, pages: rawPages, ...rawRest } = raw.project;
+    expect(rest).toEqual(rawRest);
+    expect(settings).toEqual(rawSettings);
+    expect(categories).toEqual(rawCategories.map((c: object) => ({ ...c, minDistance: null })));
+    expect(pages).toEqual(rawPages.map((pg: any) => ({ ...pg, stands: pg.stands.map((s: object) => ({ ...s, suppressDistanceWarning: false })) })));
+    // Werte, die in der Datei gezielt gesetzt waren
+    expect(project.name).toBe('Formatversion 8 (M12)');
+    expect(pages[0]!.stands[0]!.shape).toBe('ellipse');
+    expect(pages[0]!.stands[1]!.shapeTemplateId).toBe('tpl-karussell');
+    expect(pages.flatMap((p) => p.stands)).toHaveLength(500);
+  });
+
+  it('Mindestabstand: auf 0,1–1000 m begrenzt und auf 0,01 m gerundet; 0, negativ oder kein Wert = keine Prüfung', () => {
+    const file = (minDistance: unknown) => ({
+      format: 'schelmeplaner',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      project: { id: 'x', pages: [], categories: [{ id: 'c', name: 'A', color: '#aabbcc', minDistance }] },
+    });
+    const md = (v: unknown) => parseProjectFile(file(v)).categories[0]!.minDistance;
+    expect(md(50)).toBe(50);
+    expect(md(12.345)).toBe(12.35);
+    expect(md(0.01)).toBe(0.1);
+    expect(md(5000)).toBe(1000);
+    expect([md(0), md(-3), md(null), md('50'), md(undefined), md(Number.NaN)]).toEqual([null, null, null, null, null, null]);
   });
 });

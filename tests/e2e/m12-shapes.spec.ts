@@ -138,7 +138,7 @@ test.describe('M12 #9: Geschäftsformen', () => {
     await page.keyboard.press(`${MOD}+s`);
     const bytes = readFileSync((await (await download).path())!);
     const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(bytes))['project.json']!));
-    expect(json.schemaVersion).toBe(8);
+    expect(json.schemaVersion).toBe(9); // seit #3 Version 9, angepasst vom Entwickler (vorher 8)
     expect(json.project.shapeTemplates).toEqual([KARUSSELL]);
     expect(json.project.pages[0].stands[0]).toMatchObject({ shape: 'ellipse', shapeTemplateId: 'k' });
     // Neues Projekt laden, dann die Datei öffnen

@@ -14,12 +14,13 @@ const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'fixtur
 const r2 = (n) => Math.round(n * 100) / 100;
 const rad = (d) => (d * Math.PI) / 180;
 
+// Süßwaren mit Mindestabstand (#3): Die Abstandsprüfung läuft im Lasttest mit (viele Paare in Reichweite)
 const CATEGORIES = [
-  { id: 'cat-imbiss', name: 'Imbiss', color: '#f0a35e' },
-  { id: 'cat-getraenke', name: 'Getränke', color: '#4fc3f7' },
-  { id: 'cat-suess', name: 'Süßwaren', color: '#f06292' },
-  { id: 'cat-handwerk', name: 'Kunsthandwerk', color: '#9ccc65' },
-  { id: 'cat-fahrgeschaeft', name: 'Fahrgeschäft', color: '#7986cb' },
+  { id: 'cat-imbiss', name: 'Imbiss', color: '#f0a35e', minDistance: null },
+  { id: 'cat-getraenke', name: 'Getränke', color: '#4fc3f7', minDistance: null },
+  { id: 'cat-suess', name: 'Süßwaren', color: '#f06292', minDistance: 30 },
+  { id: 'cat-handwerk', name: 'Kunsthandwerk', color: '#9ccc65', minDistance: null },
+  { id: 'cat-fahrgeschaeft', name: 'Fahrgeschäft', color: '#7986cb', minDistance: null },
 ];
 const WARE = ['Bratwurst', 'Crêpes', 'Bier', 'Wein', 'Gebrannte Mandeln', 'Lebkuchen', 'Keramik', 'Holzspielzeug', 'Kinderkarussell', 'Schmuck'];
 const NAMES = ['Wenz', 'Kaya', 'Müller', 'Schäfer', 'Becker', 'Hofmann', 'Wagner', 'Schmitt', 'Krämer', 'Weber', 'Fischer', 'Lang'];
@@ -101,6 +102,7 @@ function fillPage(pg, rows, counter) {
         suppressOverlapWarning: false,
         suppressDuplicateWarning: false,
         suppressInfraWarning: false,
+        suppressDistanceWarning: false,
         shape: 'rect',
         shapeTemplateId: null,
         cx: r2(area.cx + lx * c - ly * sn),
@@ -139,6 +141,7 @@ const project = {
     warnInfra: true,
     warnPassageWidth: true,
     minPassageWidth: 3.5,
+    warnDistance: true,
     snap: { front: true, grid: false, neighbors: true },
     snapGap: 0.3,
     defaultStandColor: '#a7adb3',
@@ -164,6 +167,6 @@ const project = {
 const total = project.pages.reduce((n, p) => n + p.stands.length, 0);
 if (total !== 500) throw new Error(`Erwartet 500 Stände, erzeugt ${total}`);
 
-const file = { format: 'schelmeplaner', schemaVersion: 8, project };
+const file = { format: 'schelmeplaner', schemaVersion: 9, project };
 writeFileSync(out, zipSync({ 'project.json': [strToU8(JSON.stringify(file, null, 2)), { level: 6 }] }, { mtime: new Date('2026-01-01T00:00:00Z') }));
 console.warn(`${out}: ${total} Stände auf ${project.pages.length} Festplätzen`);
