@@ -28,7 +28,7 @@ npx playwright install chromium webkit   # einmalig, für die E2E-Tests
 | `npm run lint` | Linter (oxlint, Warnungen gelten als Fehler) |
 | `npm test` | Unit-Tests (Vitest, `src/**/*.test.ts`) |
 | `npm run test:e2e` | E2E-Tests (Playwright, Chromium und WebKit; startet den Dev-Server selbst) |
-| `npm run test:perf` | Lasttests (500 Stände, großer Hintergrund; ≥ 50 Bilder/s), seriell und getrennt von `test:e2e` |
+| `npm run test:perf` | Lasttests (500 Stände, großer Hintergrund; ≥ 50 Bilder/s; `src/**/*.perf.test.ts`), seriell und getrennt von `test` und `test:e2e` |
 | `npm run build` | Typecheck und Produktions-Build nach `dist/` |
 | `npm run check` | typecheck, lint, test und build nacheinander – muss vor jedem Pull Request grün sein |
 | `node scripts/make-fixtures.mjs` | Testpläne in `tests/fixtures/` neu erzeugen |
