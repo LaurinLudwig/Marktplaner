@@ -5,7 +5,7 @@
 import { sumWidths } from './stats';
 import { cachedDuplicates, nrKey, type NrRef } from './numbering';
 import { CONNECTION_KEYS, sumPower, type ConnectionKey } from './power';
-import { activeWarnings, cachedInfraWarnings, cachedPageWarnings, NO_INFRA_WARNINGS, type ActiveWarnings } from './warnings';
+import { activeWarnings, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, NO_INFRA_WARNINGS, type ActiveWarnings, type DistanceConflict } from './warnings';
 import type { Id, Project, Stand } from './model/types';
 
 export interface StandRow {
@@ -18,6 +18,8 @@ export interface StandRow {
   warnings: ActiveWarnings;
   /** Andere Stände mit derselben Nummer (nur wenn die Warnung „doppelte Nummer“ angezeigt wird). */
   duplicates: readonly NrRef[];
+  /** Zu nahe Stände derselben Kategorie (nur wenn die Warnung „Abstand“ angezeigt wird, #3). */
+  tooClose: readonly DistanceConflict[];
 }
 
 export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categories'> & Partial<Pick<Project, 'infraTypes'>>): StandRow[] {
@@ -27,9 +29,11 @@ export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categor
   project.pages.forEach((page, pageIndex) => {
     const w = cachedPageWarnings(page.areas, page.stands);
     const iw = project.infraTypes ? cachedInfraWarnings(page, project.infraTypes, project.settings.minPassageWidth) : NO_INFRA_WARNINGS;
+    const dw = cachedDistanceWarnings(page.stands, project.categories);
     for (const s of page.stands) {
       const d = dups.get(s.id);
-      const warnings = activeWarnings(w.byStand.get(s.id), s, project.settings, !!d, iw.byStand.has(s.id));
+      const close = dw.get(s.id);
+      const warnings = activeWarnings(w.byStand.get(s.id), s, project.settings, !!d, iw.byStand.has(s.id), !!close);
       rows.push({
         pageId: page.id,
         pageIndex,
@@ -38,13 +42,14 @@ export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categor
         categoryName: s.categoryId ? (cats.get(s.categoryId) ?? null) : null,
         warnings,
         duplicates: warnings.duplicate && d ? d : [],
+        tooClose: warnings.distance && close ? close : [],
       });
     }
   });
   return rows;
 }
 
-export const hasWarning = (r: StandRow) => r.warnings.outside || r.warnings.overlap || r.warnings.duplicate || r.warnings.infra;
+export const hasWarning = (r: StandRow) => r.warnings.outside || r.warnings.overlap || r.warnings.duplicate || r.warnings.infra || r.warnings.distance;
 
 // ---------- Suche und Filter ----------
 

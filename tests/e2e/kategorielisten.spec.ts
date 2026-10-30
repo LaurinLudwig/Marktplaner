@@ -14,7 +14,7 @@ async function seed(page: Page) {
     const s = (window as any).__marktplanerStore.getState();
     const base = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', color: null, rot: 0, d: 3, w: 4, cy: 0 };
     s.change('Testdaten', (p: any) => {
-      p.categories.push({ id: 'c1', name: 'Imbiss', color: '#111111' }, { id: 'c2', name: 'Eigene', color: '#222222' });
+      p.categories.push({ id: 'c1', name: 'Imbiss', color: '#111111', minDistance: null }, { id: 'c2', name: 'Eigene', color: '#222222', minDistance: null });
       p.pages[0].stands.push({ ...base, id: 's1', cx: 0, categoryId: 'c1' }, { ...base, id: 's2', cx: 10, categoryId: 'c2' });
     });
   });
@@ -77,8 +77,8 @@ test.describe('#1 Kategorielisten', () => {
     const merged = (await st(page)).project.categories;
     expect(merged).toHaveLength(12);
     expect(merged.slice(0, 2)).toEqual([
-      { id: 'c1', name: 'Imbiss', color: '#111111' },
-      { id: 'c2', name: 'Eigene', color: '#222222' },
+      { id: 'c1', name: 'Imbiss', color: '#111111', minDistance: null },
+      { id: 'c2', name: 'Eigene', color: '#222222', minDistance: null },
     ]);
     await expect(page.getByTestId('category-row')).toHaveCount(12);
     expect(await pastLen(page)).toBe(n0 + 1);
@@ -101,7 +101,7 @@ test.describe('#1 Kategorielisten', () => {
     await confirm.getByRole('button', { name: 'Ersetzen' }).click();
     const s = await st(page);
     expect(s.project.categories).toHaveLength(11);
-    expect(s.project.categories.find((c: any) => c.name === 'Imbiss')).toEqual({ id: 'c1', name: 'Imbiss', color: '#f0a35e' });
+    expect(s.project.categories.find((c: any) => c.name === 'Imbiss')).toEqual({ id: 'c1', name: 'Imbiss', color: '#f0a35e', minDistance: null });
     expect(s.project.pages[0].stands.map((x: any) => x.categoryId)).toEqual(['c1', null]);
     await page.keyboard.press(`${MOD}+z`);
     const back = await st(page);
@@ -180,5 +180,47 @@ test.describe('#2 Eigene Kategorielisten', () => {
     await expect(alert).toContainText('neueren Version');
     await alert.getByRole('button', { name: 'OK' }).click();
     await expect(page.getByTestId('category-list-row')).toHaveCount(3);
+  });
+});
+
+test.describe('Kategorien umsortieren', () => {
+  test('Am Griff ziehen und Pfeil ↑/↓ auf dem Griff; je ein Undo-Schritt', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page);
+    await page.evaluate(() => {
+      (window as any).__marktplanerStore.getState().change('Testdaten', (p: any) => {
+        p.categories = p.categories.filter((c: any) => c.id === 'c1' || c.id === 'c2');
+        p.categories.push({ id: 'c3', name: 'Dritte', color: '#333333', minDistance: null });
+      });
+    });
+    await openSettings(page);
+    expect(await catNames(page)).toEqual(['Imbiss', 'Eigene', 'Dritte']);
+
+    // „Imbiss“ ans Ende ziehen
+    const grips = page.getByTestId('category-grip');
+    await page.getByTestId('category-row').nth(2).scrollIntoViewIfNeeded();
+    const from = (await grips.nth(0).boundingBox())!;
+    const last = (await page.getByTestId('category-row').nth(2).boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 + 10, { steps: 3 });
+    await page.mouse.move(from.x + from.width / 2, last.y + last.height - 2, { steps: 10 });
+    await page.mouse.up();
+    expect(await catNames(page)).toEqual(['Eigene', 'Dritte', 'Imbiss']);
+    const n = await pastLen(page);
+
+    // Tastatur: „Dritte“ eins nach oben
+    await page.getByRole('button', { name: '„Dritte“ verschieben' }).focus();
+    await page.keyboard.press('ArrowUp');
+    expect(await catNames(page)).toEqual(['Dritte', 'Eigene', 'Imbiss']);
+    await page.keyboard.press('ArrowUp'); // schon oben: nichts passiert
+    expect(await pastLen(page)).toBe(n + 1);
+
+    await page.keyboard.press(`${MOD}+z`);
+    expect(await catNames(page)).toEqual(['Eigene', 'Dritte', 'Imbiss']);
+    await page.keyboard.press(`${MOD}+z`);
+    expect(await catNames(page)).toEqual(['Imbiss', 'Eigene', 'Dritte']);
+    expect(errors).toEqual([]);
   });
 });

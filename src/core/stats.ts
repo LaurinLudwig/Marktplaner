@@ -9,7 +9,7 @@
 import type { AreaFreeSpaces } from './freeSpace';
 import { cachedDuplicates, type NrRef } from './numbering';
 import { CONNECTION_KEYS, pagePower, type ConnectionKey, type PowerSummary } from './power';
-import { cachedInfraWarnings, cachedPageWarnings, countWarnings, NO_WARNINGS, type WarningCount, type WarnSettings } from './warnings';
+import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, countWarnings, NO_WARNINGS, type WarningCount, type WarnSettings } from './warnings';
 import type { FestplatzPage, Id, Project, ProjectSettings, Stand } from './model/types';
 
 /** Summe auf 0,01 m gerundet (Speichergenauigkeit), ohne Gleitkomma-Reste. */
@@ -94,7 +94,7 @@ export function pageStats(page: FestplatzPage, project: Omit<StatsProject, 'page
     warnings: countWarnings(cachedPageWarnings(page.areas, page.stands), page.stands, settings, duplicates, {
       warnings: cachedInfraWarnings(page, project.infraTypes, settings.minPassageWidth),
       objects: page.infra,
-    }),
+    }, cachedDistanceWarnings(page.stands, project.categories)),
     infraByType,
     byCategory: categoryFigures(page.stands, categoryIds),
   };
@@ -122,7 +122,7 @@ export function projectStats(project: StatsProject, freeOf: FreeOf): ProjectStat
       byConnection[k].count += p.power.byConnection[k].count;
       byConnection[k].kw += p.power.byConnection[k].kw;
     }
-    for (const k of ['stands', 'outside', 'overlap', 'duplicate', 'infra', 'narrow'] as const) warnings[k] += p.warnings[k];
+    for (const k of ['stands', 'outside', 'overlap', 'duplicate', 'infra', 'narrow', 'distance'] as const) warnings[k] += p.warnings[k];
     for (const [id, n] of Object.entries(p.infraByType)) infraByType[id] = (infraByType[id] ?? 0) + n;
     infraKw += p.power.infraKw;
     for (const [id, c] of Object.entries(p.byCategory)) {

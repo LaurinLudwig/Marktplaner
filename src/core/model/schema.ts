@@ -100,6 +100,7 @@ function normalizeProject(p: Obj): Project {
       warnInfra: bool(s.warnInfra, DEFAULT_SETTINGS.warnInfra),
       warnPassageWidth: bool(s.warnPassageWidth, DEFAULT_SETTINGS.warnPassageWidth),
       minPassageWidth: clampMinPassage(num(s.minPassageWidth, DEFAULT_SETTINGS.minPassageWidth)),
+      warnDistance: bool(s.warnDistance, DEFAULT_SETTINGS.warnDistance),
       snap: {
         front: bool(snap.front, DEFAULT_SETTINGS.snap.front),
         grid: bool(snap.grid, DEFAULT_SETTINGS.snap.grid),
@@ -225,13 +226,20 @@ function normalizeBackground(raw: unknown): Background | null {
 
 const isColor = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
 
+/** Mindestabstand zur gleichen Kategorie (#3): 0,1–1000 m, auf 0,01 m gerundet; sonst null (keine Prüfung). */
+export const MIN_DISTANCE_LIMITS = { min: 0.1, max: 1000 } as const;
+export function clampMinDistance(v: unknown): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return null;
+  return Math.round(Math.min(MIN_DISTANCE_LIMITS.max, Math.max(MIN_DISTANCE_LIMITS.min, v)) * 100) / 100;
+}
+
 function normalizeCategories(raw: unknown): Category[] {
   const seen = new Set<string>();
   const out: Category[] = [];
   for (const c of arr(raw)) {
     if (!isObj(c) || typeof c.id !== 'string' || !c.id || seen.has(c.id)) continue;
     seen.add(c.id);
-    out.push({ id: c.id, name: str(c.name, 'Kategorie'), color: isColor(c.color) ? c.color : '#a7adb3' });
+    out.push({ id: c.id, name: str(c.name, 'Kategorie'), color: isColor(c.color) ? c.color : '#a7adb3', minDistance: clampMinDistance(c.minDistance) });
   }
   return out;
 }
@@ -284,6 +292,7 @@ function normalizeStand(raw: unknown, ids: Set<string>, categoryIds: Set<string>
     suppressOverlapWarning: bool(raw.suppressOverlapWarning, false),
     suppressDuplicateWarning: bool(raw.suppressDuplicateWarning, false),
     suppressInfraWarning: bool(raw.suppressInfraWarning, false),
+    suppressDistanceWarning: bool(raw.suppressDistanceWarning, false),
     shape: isShape(raw.shape) ? raw.shape : 'rect',
     shapeTemplateId: typeof raw.shapeTemplateId === 'string' && templateIds.has(raw.shapeTemplateId) ? raw.shapeTemplateId : null,
     ...r,

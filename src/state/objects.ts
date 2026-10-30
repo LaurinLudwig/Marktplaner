@@ -369,16 +369,28 @@ export function addCategory(): Id {
   let i = cats.length + 1;
   while (names.has(`Kategorie ${i}`)) i++;
   const used = new Set(cats.map((c) => c.color));
-  const cat: Category = { id: newId(), name: `Kategorie ${i}`, color: PALETTE.find((c) => !used.has(c)) ?? PALETTE[cats.length % PALETTE.length]! };
+  const cat: Category = { id: newId(), name: `Kategorie ${i}`, color: PALETTE.find((c) => !used.has(c)) ?? PALETTE[cats.length % PALETTE.length]!, minDistance: null };
   st().change('Kategorie anlegen', (p) => void p.categories.push(cat));
   return cat.id;
 }
 
 export function updateCategory(id: Id, patch: Partial<Omit<Category, 'id'>>) {
-  const label = patch.color !== undefined ? 'Kategorie umfärben' : 'Kategorie umbenennen';
+  const label = patch.minDistance !== undefined ? 'Mindestabstand ändern' : patch.color !== undefined ? 'Kategorie umfärben' : 'Kategorie umbenennen';
   st().change(label, (p) => {
     const c = p.categories.find((x) => x.id === id);
     if (c) Object.assign(c, patch);
+  });
+}
+
+/** Verschiebt die Kategorie an Position `to` (Reihenfolge in Statistik, Legende und Auswahllisten). */
+export function moveCategory(id: Id, to: number) {
+  st().change('Kategorien umsortieren', (p) => {
+    const from = p.categories.findIndex((c) => c.id === id);
+    if (from < 0) return;
+    const target = Math.max(0, Math.min(p.categories.length - 1, to));
+    if (target === from) return;
+    const [cat] = p.categories.splice(from, 1);
+    p.categories.splice(target, 0, cat!);
   });
 }
 
@@ -439,16 +451,21 @@ export function setDefaultStandColor(color: string) {
   st().change('Standardfarbe ändern', (p) => void (p.settings.defaultStandColor = color.toLowerCase()));
 }
 
-export type WarningKind = 'outside' | 'overlap' | 'duplicate' | 'infra';
+export type WarningKind = 'outside' | 'overlap' | 'duplicate' | 'infra' | 'distance';
 
 const WARNING: Record<
   WarningKind,
-  { name: string; setting: 'warnOutside' | 'warnOverlap' | 'warnDuplicateNr' | 'warnInfra'; suppress: 'suppressOutsideWarning' | 'suppressOverlapWarning' | 'suppressDuplicateWarning' | 'suppressInfraWarning' }
+  {
+    name: string;
+    setting: 'warnOutside' | 'warnOverlap' | 'warnDuplicateNr' | 'warnInfra' | 'warnDistance';
+    suppress: 'suppressOutsideWarning' | 'suppressOverlapWarning' | 'suppressDuplicateWarning' | 'suppressInfraWarning' | 'suppressDistanceWarning';
+  }
 > = {
   outside: { name: 'Warnung „außerhalb“', setting: 'warnOutside', suppress: 'suppressOutsideWarning' },
   overlap: { name: 'Warnung „Überlappung“', setting: 'warnOverlap', suppress: 'suppressOverlapWarning' },
   duplicate: { name: 'Warnung „doppelte Nummer“', setting: 'warnDuplicateNr', suppress: 'suppressDuplicateWarning' },
   infra: { name: 'Warnung „Infrastruktur“', setting: 'warnInfra', suppress: 'suppressInfraWarning' },
+  distance: { name: 'Warnung „Abstand“', setting: 'warnDistance', suppress: 'suppressDistanceWarning' },
 };
 
 /** Warnung „Durchfahrt zu eng“ projektweit ein- oder ausschalten (Undo-Schritt, M7). */

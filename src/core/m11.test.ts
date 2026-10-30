@@ -19,8 +19,8 @@ const ctx = (p: Project) => ({ minFreeWidth: p.settings.minFreeWidth, infraTypes
 
 describe('#7 Kennzahlen je Kategorie', () => {
   const cats = [
-    { id: 'imbiss', name: 'Imbiss', color: '#f00' },
-    { id: 'ware', name: 'Ware', color: '#0f0' },
+    { id: 'imbiss', name: 'Imbiss', color: '#f00', minDistance: null },
+    { id: 'ware', name: 'Ware', color: '#0f0', minDistance: null },
   ];
 
   it('Anzahl, Frontmeter und Strom je Kategorie ohne Gleitkomma-Reste; unbekannte Kategorie zählt als „ohne“', () => {

@@ -1,14 +1,16 @@
+import { useRef, useState, type HTMLAttributes, type PointerEvent as ReactPointerEvent } from 'react';
 import { loadListInteractive, openCategoryListManager } from '../../app/categoryLists';
 import { confirm } from '../../app/dialogs';
 import { LABEL_PLACEHOLDERS } from '../../core/label';
 import { MIN_FREE_WIDTH } from '../../core/freeSpace';
-import type { Category, FestplatzPage, LayerId } from '../../core/model/types';
-import { SNAP_GAP_LIMITS } from '../../core/model/schema';
+import type { Category, FestplatzPage, Id, LayerId } from '../../core/model/types';
+import { MIN_DISTANCE_LIMITS, SNAP_GAP_LIMITS } from '../../core/model/schema';
 import { DEFAULT_STAND_COLOR } from '../../core/objects';
 import {
   addCategory,
   categoryUsage,
   deleteCategory,
+  moveCategory,
   setDefaultStandColor,
   setLabelFontSize,
   setLabelTemplate,
@@ -53,6 +55,7 @@ export function FreeSpacePanel() {
   const warnOutside = useStore((s) => s.project.settings.warnOutside);
   const warnOverlap = useStore((s) => s.project.settings.warnOverlap);
   const warnDuplicateNr = useStore((s) => s.project.settings.warnDuplicateNr);
+  const warnDistance = useStore((s) => s.project.settings.warnDistance);
   return (
     <section className="panel" aria-label="Freiflächen und Warnungen">
       <div className="panel-head">
@@ -75,6 +78,10 @@ export function FreeSpacePanel() {
         <label className="check">
           <input type="checkbox" checked={warnDuplicateNr} onChange={(e) => setWarningsEnabled('duplicate', e.target.checked)} />
           Warnung bei doppelten Platznummern
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={warnDistance} onChange={(e) => setWarningsEnabled('distance', e.target.checked)} />
+          Warnung, wenn Geschäfte gleicher Kategorie den Mindestabstand unterschreiten
         </label>
       </div>
     </section>
@@ -101,9 +108,55 @@ export function SnapPanel() {
   );
 }
 
+interface CatDragState {
+  id: Id;
+  startY: number;
+  active: boolean;
+  /** Zielindex in der Liste nach dem Entfernen der gezogenen Kategorie. */
+  target: number;
+}
+
 export function CategoryPanel() {
   const categories = useStore((s) => s.project.categories);
   const defaultColor = useStore((s) => s.project.settings.defaultStandColor);
+  const [drag, setDrag] = useState<CatDragState | null>(null);
+  const rowRefs = useRef(new Map<Id, HTMLElement>());
+
+  // Umsortieren per Ziehen am Griff (Zeigerereignisse wie in der Tab-Leiste)
+  const onGripPointerDown = (e: ReactPointerEvent, id: Id) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setDrag({ id, startY: e.clientY, active: false, target: categories.findIndex((c) => c.id === id) });
+  };
+  const onGripPointerMove = (e: ReactPointerEvent) => {
+    if (!drag) return;
+    if (!drag.active && Math.abs(e.clientY - drag.startY) < 4) return;
+    const others = categories.filter((c) => c.id !== drag.id);
+    let target = others.length;
+    for (let i = 0; i < others.length; i++) {
+      const r = rowRefs.current.get(others[i]!.id)?.getBoundingClientRect();
+      if (r && e.clientY < r.top + r.height / 2) {
+        target = i;
+        break;
+      }
+    }
+    setDrag({ ...drag, active: true, target });
+  };
+  const onGripPointerUp = () => {
+    if (drag?.active) moveCategory(drag.id, drag.target);
+    setDrag(null);
+  };
+  // Markierung, wo die gezogene Kategorie landet
+  const dropClass = (id: Id): string => {
+    if (!drag?.active || id === drag.id) return '';
+    const others = categories.filter((c) => c.id !== drag.id);
+    const i = others.findIndex((c) => c.id === id);
+    if (i === drag.target) return ' drop-before';
+    if (i === others.length - 1 && drag.target === others.length) return ' drop-after';
+    return '';
+  };
+
   return (
     <section className="panel" aria-label="Kategorien">
       <div className="panel-head">
@@ -131,9 +184,27 @@ export function CategoryPanel() {
           canReset={defaultColor.toLowerCase() !== DEFAULT_STAND_COLOR}
         />
         {!categories.length && <p>Noch keine Kategorien. Mit „+“ anlegen oder eine fertige Liste laden; Geschäfte übernehmen die Farbe ihrer Kategorie.</p>}
-        {categories.map((c) => (
-          <CategoryRow key={c.id} cat={c} />
+        {categories.map((c, i) => (
+          <CategoryRow
+            key={c.id}
+            cat={c}
+            index={i}
+            className={`${drag?.active && drag.id === c.id ? ' dragging' : ''}${dropClass(c.id)}`}
+            rowRef={(el) => {
+              if (el) rowRefs.current.set(c.id, el);
+              else rowRefs.current.delete(c.id);
+            }}
+            gripProps={{
+              onPointerDown: (e) => onGripPointerDown(e, c.id),
+              onPointerMove: onGripPointerMove,
+              onPointerUp: onGripPointerUp,
+              onPointerCancel: () => setDrag(null),
+            }}
+          />
         ))}
+        {categories.length > 0 && (
+          <p className="hint">Mindestabstand (Konkurrenzschutz): Stehen zwei Geschäfte dieser Kategorie näher (Kante zu Kante), bekommen sie die Warnung „Abstand“. Leer = keine Prüfung.</p>
+        )}
       </div>
     </section>
   );
@@ -153,12 +224,47 @@ async function confirmDeleteCategory(cat: Category) {
   deleteCategory(cat.id);
 }
 
-function CategoryRow({ cat }: { cat: Category }) {
+interface CategoryRowProps {
+  cat: Category;
+  index: number;
+  className: string;
+  rowRef: (el: HTMLDivElement | null) => void;
+  gripProps: Pick<HTMLAttributes<HTMLElement>, 'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'>;
+}
+
+function CategoryRow({ cat, index, className, rowRef, gripProps }: CategoryRowProps) {
   const used = useStore((s) => categoryUsage(s.project, cat.id));
   return (
-    <div className="cat-row" data-testid="category-row">
+    <div className={`cat-row${className}`} data-testid="category-row" ref={rowRef}>
+      <button
+        type="button"
+        className="icon-btn cat-grip"
+        data-testid="category-grip"
+        {...gripProps}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+          e.preventDefault();
+          moveCategory(cat.id, index + (e.key === 'ArrowUp' ? -1 : 1));
+        }}
+        {...tip({ label: 'Ziehen: umsortieren', desc: 'oder Pfeil ↑/↓, wenn der Griff markiert ist', side: 'top', ariaLabel: `„${cat.name}“ verschieben` })}
+      >
+        <Icon name="drag" size={16} />
+      </button>
       <NativeColor id={`cat-color-${cat.id}`} value={cat.color} label={`Farbe von „${cat.name}“`} onCommit={(color) => updateCategory(cat.id, { color })} />
       <TextField id={`cat-name-${cat.id}`} className="grow" label="Name" value={cat.name} onCommit={(name) => name.trim() && updateCategory(cat.id, { name: name.trim() })} />
+      <NumberField
+        id={`cat-min-${cat.id}`}
+        className="cat-min"
+        label="Mindestabstand"
+        unit="m"
+        value={cat.minDistance}
+        min={MIN_DISTANCE_LIMITS.min}
+        max={MIN_DISTANCE_LIMITS.max}
+        step={1}
+        placeholder="–"
+        onCommit={(minDistance) => updateCategory(cat.id, { minDistance: Math.round(minDistance * 100) / 100 })}
+        onClear={() => updateCategory(cat.id, { minDistance: null })}
+      />
       <span className="cat-usage" data-testid="category-usage" {...tip({ label: `${used} ${used === 1 ? 'Geschäft' : 'Geschäfte'} mit dieser Kategorie`, side: 'top' })}>
         {used}
       </span>

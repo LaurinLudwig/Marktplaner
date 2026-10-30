@@ -168,6 +168,7 @@ function Warn({ count, pageId }: { count: WarningCount; pageId: string | null })
     count.overlap ? `${count.overlap} Überlappung${count.overlap === 1 ? '' : 'en'}` : '',
     count.outside ? `${count.outside} außerhalb` : '',
     count.duplicate ? `${count.duplicate} mit doppelter Nummer` : '',
+    count.distance ? `${count.distance} zu nah an gleicher Kategorie` : '',
   ].filter(Boolean);
   const severe = count.overlap > 0 || count.infra > 0;
   return (

@@ -32,7 +32,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   Positionen und Maße werden auf 0,01 m gerundet, Drehungen auf 0,1° (beim Übernehmen, nicht während
   des Ziehens). Intern ist die Vorderseite immer die lokale Unterkante; so ist die Breite immer die
   Länge der Vorderseite (Entscheidung 2026-10-10).
-- **Kategorie**: Name und Farbe, projektweit. Ein Geschäft hat höchstens eine Kategorie.
+- **Kategorie**: Name, Farbe und optional ein Mindestabstand zur gleichen Kategorie (#3), projektweit. Ein Geschäft hat
+  höchstens eine Kategorie.
 - **Freifläche**: wird immer automatisch berechnet, nie manuell gezeichnet und nie gespeichert.
 - **Toleranz** für geometrische Vergleiche: 0,01 m (= Speichergenauigkeit). Überlappung erst bei
   mehr als 0,01 m Eindringtiefe; ein Abstand bis 0,01 m gilt als bündig (Entscheidung 2026-10-11).
@@ -130,9 +131,20 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
     Die Seitenleiste nennt die anderen Stände mit dieser Nummer (auch auf anderen Pages).
   - Infrastruktur (rot, Entscheidung 2026-10-12): Der Stand dringt mehr als 0,01 m in ein Infrastruktur-Objekt ein,
     dessen Typ „freihalten“ hat (§11). Die Seitenleiste nennt das Objekt.
+  - Abstand (orange, Konkurrenzschutz, #3): Zwei Stände derselben Kategorie stehen näher als deren Mindestabstand
+    (Projekteinstellungen, Bereich „Kategorien“, Feld „Mindestabstand“ in m; leer = keine Prüfung). Gemessen wird
+    Kante zu Kante: der kürzeste Abstand zwischen den beiden Standrechtecken (Hitbox B × T, auch bei Formen), als
+    Luftlinie, auf 0,01 m gerundet; genau der Mindestabstand ist erlaubt, Überschneidung zählt als 0 m. Geprüft wird
+    nur innerhalb einer Festplatz-Page, live auch beim Ziehen. Die Seitenleiste nennt die zu nahen Stände mit Abstand
+    („Zu nah an gleicher Kategorie: Schokofrüchte Meier, 23,40 m“); bei ausgewähltem Stand zeigt die Zeichenfläche
+    den Mindestabstand als gestrichelten Umriss um den Stand (Ecken gerundet) und eine Linie zu jedem zu nahen Stand
+    (zwischen den nächsten Punkten). Zählt am Page-Tab, in den Kennzahlen und im Filter „mit Warnung“; Chip „Abstand“
+    in der Geschäftstabelle, „Abstand“ in der CSV-Spalte „Warnungen“. Im PDF wie die anderen Warnungen nach
+    Export-Profil (Markierung am Stand bei „alle“). Formatversion 9 (Kategorie `minDistance`, Geschäft
+    `suppressDistanceWarning`, Einstellung `warnDistance`).
   - Jede Art ist projektweit abschaltbar und pro Stand ignorierbar („außerhalb ignorieren“,
-    „Überlappung ignorieren“, „doppelte Nummer ignorieren“, „Infrastruktur ignorieren“, wirkt nur auf den eigenen
-    Stand); alles rückgängig machbar.
+    „Überlappung ignorieren“, „doppelte Nummer ignorieren“, „Infrastruktur ignorieren“, „Abstand ignorieren“, wirkt
+    nur auf den eigenen Stand); alles rückgängig machbar.
   - Der Page-Tab zeigt die Zahl der Objekte mit aktiver Warnung: Stände und Infrastruktur-Objekte (Durchfahrt zu eng,
     §11) zusammen. Er ist rot, sobald eine Überlappung, eine Infrastruktur-Warnung oder eine zu enge Durchfahrt dabei
     ist. So sind Probleme auf anderen Pages sichtbar.
@@ -161,14 +173,17 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 - Farbe: aus der Kategorie; optional eine eigene Farbe pro Stand, die die Kategoriefarbe überschreibt.
   Ohne beides die Standardfarbe des Projekts (Projekteinstellungen, Bereich „Kategorien“; Standard und nach der
   Migration alter Projekte neutrales Grau #a7adb3; M10, #3). Sie gilt auf Zeichenfläche, im PDF und in der Legende.
-- Kategorien werden in den Projekteinstellungen der Start-Page (§7) angelegt, umbenannt, umgefärbt und
-  gelöscht (bis M5 in der Seitenleiste; seit M6 nur noch auf der Start-Page, Entscheidung 2026-10-12). In der
+- Kategorien werden in den Projekteinstellungen der Start-Page (§7) angelegt, umbenannt, umgefärbt,
+  umsortiert und gelöscht (bis M5 in der Seitenleiste; seit M6 nur noch auf der Start-Page, Entscheidung 2026-10-12).
+  Umsortieren: am Griff links in der Zeile ziehen oder Pfeil ↑/↓ auf dem markierten Griff; ein Undo-Schritt. Die
+  Reihenfolge gilt in Statistik, Legende und den Auswahllisten der Kategorie. In der
   Seitenleiste bleibt die Auswahl der Kategorie eines Stands. Beim Löschen einer verwendeten
   Kategorie fragt die App nach; die Stände verlieren die Kategorie (Farbe fällt auf die eigene Farbe
   bzw. die Standardfarbe zurück), alles rückgängig machbar.
 - Kategorielisten (#1): Die App bringt die flachen Listen „Jahrmarkt klein“ (11 grobe Kategorien) und „Jahrmarkt
   groß“ (30 feine im Schema „Gruppe – Art“, z. B. „Süßwaren – Waffeln“; nur ein Name, keine Unterkategorie) mit,
-  Farben nach Gruppen und im Druck unterscheidbar. „Neues Projekt“ (Menü, Cmd/Strg+N) fragt nach der Liste
+  Farben nach Gruppen und im Druck unterscheidbar. Ein Listeneintrag kann einen Mindestabstand mitbringen (#3); er
+  kommt beim neuen Projekt und beim Ersetzen mit, beim Ergänzen nur für neue Kategorien. „Neues Projekt“ (Menü, Cmd/Strg+N) fragt nach der Liste
   (Vorauswahl die zuletzt gewählte, anfangs „Jahrmarkt klein“; auch „leer“), der Startbildschirm hat die Auswahl
   direkt neben dem Knopf. In den Projekteinstellungen lädt „Kategorieliste laden …“ eine Liste: **ergänzen** fügt
   nur fehlende Namen hinzu (Vergleich ohne Groß-/Kleinschreibung), **ersetzen** lässt danach genau die Liste gelten;
@@ -180,7 +195,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   mitgelieferten in „Kategorieliste laden …“, beim neuen Projekt und auf dem Startbildschirm. Verwalten: umbenennen
   und löschen (mit Rückfrage; nur eigene Listen), jede Liste als Datei exportieren, Dateien importieren. Vergebene
   Namen (auch die der mitgelieferten Listen) bekommen eine Nummer („Markt (2)“). Dateiformat: JSON
-  `{ "format": "marktplaner-kategorien", "version": 1, "name", "categories": [{ "name", "color" }] }`; Dateien ohne
+  `{ "format": "marktplaner-kategorien", "version": 1, "name", "categories": [{ "name", "color", "minDistance" }] }`
+  (`minDistance` in m oder null, #3); Dateien ohne
   diese Kennung, ohne gültige Kategorie oder mit neuerer Version weist die App mit deutscher Meldung ab, ungültige
   Einträge fallen beim Import weg.
 - Beschriftung mittig auf dem Stand aus konfigurierbarer Vorlage, z. B.

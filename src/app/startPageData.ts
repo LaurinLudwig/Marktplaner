@@ -60,5 +60,5 @@ export const connectionText = (r: StandRow) => (r.stand.connection ? CONNECTION_
 
 export function warningText(r: StandRow): string {
   const w = r.warnings;
-  return [w.infra && 'Infrastruktur', w.overlap && 'Überlappung', w.outside && 'außerhalb', w.duplicate && 'doppelte Nummer'].filter(Boolean).join(', ');
+  return [w.infra && 'Infrastruktur', w.overlap && 'Überlappung', w.outside && 'außerhalb', w.duplicate && 'doppelte Nummer', w.distance && 'Abstand'].filter(Boolean).join(', ');
 }
