@@ -1,7 +1,7 @@
 import { UserError } from './errors';
 import { newId } from './id';
-import { clampMinDistance } from './model/schema';
-import type { Category, Id } from './model/types';
+import { clampMinDistance, normalizeCategoryPrice } from './model/schema';
+import type { Category, CategoryPrice, Id } from './model/types';
 
 /**
  * Kategorielisten (#1, #2): fertige Zusammenstellungen von Kategorien, aus denen ein neues Projekt startet oder die in
@@ -14,6 +14,8 @@ export interface CategoryListEntry {
   color: string;
   /** Mindestabstand zur gleichen Kategorie in Metern (#3); fehlt oder null = keine Prüfung. */
   minDistance?: number | null;
+  /** Sonderpreis fürs Standgeld (#5); fehlt oder null = Preis je Frontmeter des Projekts. */
+  price?: CategoryPrice | null;
 }
 
 export interface CategoryList {
@@ -94,7 +96,7 @@ export const builtinList = (id: string) => BUILTIN_CATEGORY_LISTS.find((l) => l.
 /** Vergleichsschlüssel für Namen: Groß-/Kleinschreibung und Leerraum an den Rändern zählen nicht. */
 const key = (name: string) => name.trim().toLocaleLowerCase('de-DE');
 
-const categoryOf = (e: CategoryListEntry, id: Id = newId()): Category => ({ id, name: e.name, color: e.color, minDistance: e.minDistance ?? null });
+const categoryOf = (e: CategoryListEntry, id: Id = newId()): Category => ({ id, name: e.name, color: e.color, minDistance: e.minDistance ?? null, price: e.price ?? null });
 
 /** Kategorien einer Liste mit neuen IDs (neues Projekt). */
 export const categoriesFromList = (list: CategoryList): Category[] => list.entries.map((e) => categoryOf(e));
@@ -111,7 +113,7 @@ export interface ApplyResult {
  * Liste auf die Kategorien eines Projekts anwenden.
  * - `merge`: nur Namen ergänzen, die es noch nicht gibt; Bestehendes bleibt unverändert.
  * - `replace`: danach gilt genau die Liste. Gleichnamige Kategorien behalten ihre ID (Stände behalten die Kategorie)
- *   und übernehmen Farbe und Mindestabstand der Liste; alle anderen entfallen.
+ *   und übernehmen Farbe, Mindestabstand und Sonderpreis der Liste; alle anderen entfallen.
  */
 export function applyCategoryList(current: readonly Category[], list: CategoryList, mode: ApplyMode): ApplyResult {
   const byName = new Map(current.map((c) => [key(c.name), c]));
@@ -145,7 +147,7 @@ export const listFromCategories = (name: string, categories: readonly Category[]
   id: newId(),
   name,
   builtin: false,
-  entries: categories.map((c) => ({ name: c.name, color: c.color, minDistance: c.minDistance })),
+  entries: categories.map((c) => ({ name: c.name, color: c.color, minDistance: c.minDistance, price: c.price })),
 });
 
 /** Name, den es unter `existing` noch nicht gibt: „Markt“, „Markt (2)“, … */
@@ -171,7 +173,7 @@ function normalizeEntries(raw: unknown): CategoryListEntry[] {
     if (!isObj(e) || typeof e.name !== 'string' || !e.name.trim() || !isColor(e.color)) continue;
     if (seen.has(key(e.name))) continue;
     seen.add(key(e.name));
-    out.push({ name: e.name.trim(), color: e.color.toLowerCase(), minDistance: clampMinDistance(e.minDistance) });
+    out.push({ name: e.name.trim(), color: e.color.toLowerCase(), minDistance: clampMinDistance(e.minDistance), price: normalizeCategoryPrice(e.price) });
   }
   return out;
 }
@@ -198,7 +200,7 @@ export const CATEGORY_LIST_VERSION = 1;
 export const CATEGORY_LIST_EXTENSION = 'json';
 
 export function encodeCategoryListFile(list: CategoryList): string {
-  const categories = list.entries.map((e) => ({ name: e.name, color: e.color, minDistance: e.minDistance ?? null }));
+  const categories = list.entries.map((e) => ({ name: e.name, color: e.color, minDistance: e.minDistance ?? null, price: e.price ?? null }));
   const file = { format: CATEGORY_LIST_FORMAT, version: CATEGORY_LIST_VERSION, name: list.name, categories };
   return `${JSON.stringify(file, null, 2)}\n`;
 }

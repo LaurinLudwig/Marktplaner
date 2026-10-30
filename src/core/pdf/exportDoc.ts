@@ -3,6 +3,7 @@
  * Tab-Reihenfolge und Tabellen des Anhangs. Rein; der PDF-Schreiber (writePdf.ts) macht daraus Bytes.
  */
 import { CONNECTION_LABEL } from '../label';
+import { hasPricing, fmtMoney } from '../fee';
 import { fmt } from '../format';
 import { pageFree } from '../hiddenFree';
 import { freeSpaceRows, sortFreeSpaces } from '../freeSpaceList';
@@ -49,7 +50,7 @@ export function buildExport(project: Project, profile: ExportProfile, req: Expor
 const num = (n: number) => fmt(n);
 
 /** Spalten der Standliste in fester Reihenfolge, nur erlaubte Felder (§9). */
-const STAND_COLUMNS: { field: StandField; label: string; align: AppendixColumn['align'] }[] = [
+const STAND_COLUMNS: { field: StandField; label: string; align: AppendixColumn['align']; gross?: true }[] = [
   { field: 'nr', label: 'Nr.', align: 'left' },
   { field: 'name', label: 'Name', align: 'left' },
   { field: 'owner', label: 'Eigentümer', align: 'left' },
@@ -59,11 +60,15 @@ const STAND_COLUMNS: { field: StandField; label: string; align: AppendixColumn['
   { field: 'd', label: 'Tiefe (m)', align: 'right' },
   { field: 'power', label: 'Strom (kW)', align: 'right' },
   { field: 'connection', label: 'Anschluss', align: 'left' },
+  { field: 'fee', label: 'Standgeld netto (€)', align: 'right' },
+  { field: 'fee', label: 'Standgeld brutto (€)', align: 'right', gross: true },
   { field: 'note', label: 'Notiz', align: 'left' },
 ];
 
 function standTable(project: Project, profile: ExportProfile): AppendixTable {
   const allowed = new Set(profile.fields);
+  // Standgeld nur, wenn ein Preis festgelegt ist (sonst wären die Spalten leer)
+  if (!hasPricing(project.settings.pricing, project.categories)) allowed.delete('fee');
   const cols = STAND_COLUMNS.filter((c) => allowed.has(c.field));
   const rows = sortRows(standRows(project), DEFAULT_STAND_SORT).map((r) => [
     r.pageName,
@@ -90,6 +95,8 @@ function standTable(project: Project, profile: ExportProfile): AppendixTable {
           return s.connection ? CONNECTION_LABEL[s.connection] : '';
         case 'note':
           return s.note.replace(/\s+/g, ' ').trim();
+        case 'fee':
+          return r.fee ? fmtMoney(c.gross ? r.fee.gross : r.fee.net) : '';
       }
     }),
   ]);

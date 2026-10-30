@@ -1,10 +1,11 @@
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { NumberingScope } from '../../core/model/types';
 import { formatNr, NUMBERING_LIMITS } from '../../core/numbering';
 import { setNumberingDigits, setNumberingScope, setNumberingStart } from '../../state/numbering';
 import { setProjectName } from '../../state/pages';
 import { useStore } from '../../state/store';
 import { NumberField } from '../panels/NumberField';
-import { CategoryPanel, FreeSpacePanel, LabelPanel, SnapPanel } from '../panels/ProjectPanels';
+import { CategoryPanel, FreeSpacePanel, LabelPanel, PricingPanel, SnapPanel } from '../panels/ProjectPanels';
 import { TextField } from '../panels/TextField';
 import { InfraTypesPanel, InfraWarningsPanel, TitleBlockSettingsPanel } from './InfraSettings';
 import { ShapeTemplatesPanel } from './ShapeTemplates';
@@ -12,25 +13,73 @@ import { ShapeTemplatesPanel } from './ShapeTemplates';
 /**
  * Projekteinstellungen (M6-05, spec.md §7): alles Projektweite an einer Stelle. Seitenbezogenes (Präfix, Modus,
  * Stromlimit, Blockieren) bleibt in der Seitenleiste der Festplatz-Page.
+ *
+ * Aufteilung: so viele Spalten, wie nebeneinander passen (mindestens `MIN_COL` breit, 1 bis n); jedes Panel kommt in
+ * dieser Reihenfolge in die gerade kürzeste Spalte. Neu verteilt wird nur, wenn sich die Spaltenzahl ändert, damit
+ * beim Bearbeiten (z. B. eine Kategorie mehr) kein Panel samt Eingabefeld in eine andere Spalte springt.
  */
+const PANELS: { key: string; panel: ReactNode }[] = [
+  { key: 'project', panel: <ProjectPanel /> },
+  { key: 'numbering', panel: <NumberingCirclePanel /> },
+  { key: 'label', panel: <LabelPanel /> },
+  { key: 'titleBlock', panel: <TitleBlockSettingsPanel /> },
+  { key: 'free', panel: <FreeSpacePanel /> },
+  { key: 'snap', panel: <SnapPanel /> },
+  { key: 'safety', panel: <InfraWarningsPanel /> },
+  { key: 'categories', panel: <CategoryPanel /> },
+  { key: 'pricing', panel: <PricingPanel /> },
+  { key: 'shapes', panel: <ShapeTemplatesPanel /> },
+  { key: 'infraTypes', panel: <InfraTypesPanel /> },
+];
+const MIN_COL = 340;
+const GAP = 16;
+
+/** Panel-Index → Spalte: jedes Panel in die bis dahin kürzeste Spalte (bei Gleichstand die linke). */
+function distribute(heights: readonly number[], n: number): number[] {
+  const cols = Array.from({ length: n }, () => 0);
+  return heights.map((h) => {
+    const c = cols.indexOf(Math.min(...cols));
+    cols[c]! += h + GAP;
+    return c;
+  });
+}
+
 export function ProjectSettings() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [n, setN] = useState(1);
+  const [assign, setAssign] = useState<number[]>(() => PANELS.map(() => 0));
+
+  // Spaltenzahl aus der Breite
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setN(Math.max(1, Math.floor((el.clientWidth + GAP) / (MIN_COL + GAP))));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Bei neuer Spaltenzahl die aktuellen Höhen messen und verteilen
+  useLayoutEffect(() => {
+    const heights = PANELS.map((p) => ref.current?.querySelector<HTMLElement>(`[data-panel="${p.key}"]`)?.offsetHeight ?? 0);
+    setAssign(distribute(heights, n));
+  }, [n]);
+
   return (
     <div className="sp-settings" data-testid="project-settings">
-      <div className="sp-settings-col">
-        <ProjectPanel />
-        <NumberingCirclePanel />
-        <LabelPanel />
-        <TitleBlockSettingsPanel />
-      </div>
-      <div className="sp-settings-col">
-        <FreeSpacePanel />
-        <SnapPanel />
-        <InfraWarningsPanel />
-        <CategoryPanel />
-        <ShapeTemplatesPanel />
-      </div>
-      <div className="sp-settings-col">
-        <InfraTypesPanel />
+      <div className="sp-settings-cols" ref={ref} style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
+        {Array.from({ length: n }, (_, c) => (
+          <div key={c} className="sp-settings-col">
+            {PANELS.map((p, i) =>
+              (assign[i] ?? 0) % n === c ? (
+                <div key={p.key} data-panel={p.key}>
+                  {p.panel}
+                </div>
+              ) : null,
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

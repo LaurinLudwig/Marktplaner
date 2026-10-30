@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   snap: { front: true, grid: false, neighbors: true },
   snapGap: 0.3,
   defaultStandColor: DEFAULT_STAND_COLOR,
+  pricing: { perMeter: null, roundUpMeters: false, vatRate: 19 },
 };
 
 /** Feste Infrastruktur-Typen (spec.md §11). Reihenfolge = Reihenfolge in Werkzeuggruppe und Legende. */

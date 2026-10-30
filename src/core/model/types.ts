@@ -42,6 +42,24 @@ export interface Category {
   color: string;
   /** Mindestabstand zur gleichen Kategorie in Metern (Konkurrenzschutz, #3); null = keine Prüfung. */
   minDistance: number | null;
+  /** Sonderpreis fürs Standgeld (#5), netto in Euro; null = Preis je Frontmeter des Projekts. */
+  price: CategoryPrice | null;
+}
+
+/** Sonderpreis einer Kategorie (#5): eigener Preis je Frontmeter oder feste Pauschale je Stand. */
+export interface CategoryPrice {
+  kind: 'perMeter' | 'flat';
+  amount: number;
+}
+
+/** Standgeld (#5): Preise netto in Euro; die Mehrwertsteuer kommt beim Anzeigen dazu. */
+export interface PricingSettings {
+  /** Preis je Frontmeter (Breite); null = keiner festgelegt (dann nur Sonderpreise der Kategorien). */
+  perMeter: number | null;
+  /** Angefangene Meter voll berechnen (4,30 m → 5 m). */
+  roundUpMeters: boolean;
+  /** Mehrwertsteuersatz in Prozent. */
+  vatRate: number;
 }
 
 /** IDs der festen Infrastruktur-Typen (spec.md §11). Eigene Typen haben eine zufällige ID. */
@@ -290,6 +308,8 @@ export interface ProjectSettings {
   snapGap: number;
   /** Farbe der Stände ohne eigene Farbe und ohne Kategorie (#3). */
   defaultStandColor: string;
+  /** Standgeld (#5). */
+  pricing: PricingSettings;
 }
 
 export interface Vendor {

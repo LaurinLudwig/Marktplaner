@@ -139,9 +139,10 @@ describe('An Seite anpassen mit freigehaltenen Papier-Elementen (M8-04, E-49)', 
 });
 
 describe('Export-Profile (M8-07)', () => {
-  it('mitgeliefert: Intern alles, Sanität ohne Eigentümer/Strom/Anschluss/Notiz, Händler nur Nummer und Name', () => {
+  it('mitgeliefert: Intern alles außer Standgeld (#5), Sanität ohne Eigentümer/Strom/Anschluss/Notiz, Händler nur Nummer und Name', () => {
     const [intern, safety, vendor] = BUILTIN_PROFILES;
-    expect(intern!.fields).toEqual([...STAND_FIELDS]);
+    expect(intern!.fields).toEqual(STAND_FIELDS.filter((f) => f !== 'fee'));
+    expect(BUILTIN_PROFILES.some((p) => p.fields.includes('fee'))).toBe(false);
     expect(safety!.fields).not.toContain('owner');
     expect(safety!.fields).not.toContain('power');
     expect(safety!.fields).not.toContain('connection');
@@ -178,7 +179,7 @@ describe('Export-Profile (M8-07)', () => {
   it('Stände: eigene Farbe > Kategorie > Standardfarbe des Projekts (#3), auch in der Legende', () => {
     const p = createProject('P');
     p.settings.defaultStandColor = '#123abc';
-    p.categories.push({ id: 'c', name: 'Imbiss', color: '#f0a35e', minDistance: null });
+    p.categories.push({ id: 'c', name: 'Imbiss', color: '#f0a35e', minDistance: null, price: null });
     const pg = p.pages[0]!;
     pg.stands.push(
       createStand({ cx: 0, cy: 0, w: 3, d: 3, rot: 0 }),

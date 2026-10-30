@@ -17,7 +17,7 @@ async function seed(page: Page) {
     const base = { nrLocked: false, owner: '', ware: '', powerKw: 0, connection: null, note: '', color: null, rot: 0, d: 3, w: 4, cy: 0, shape: 'rect', shapeTemplateId: null };
     s.change('Testdaten', (p: any) => {
       p.settings.warnOutside = false;
-      p.categories.push({ id: 'suess', name: 'Süßwaren', color: '#f06292', minDistance: 50 }, { id: 'imbiss', name: 'Imbiss', color: '#f0a35e', minDistance: null });
+      p.categories.push({ id: 'suess', name: 'Süßwaren', color: '#f06292', minDistance: 50, price: null }, { id: 'imbiss', name: 'Imbiss', color: '#f0a35e', minDistance: null, price: null });
       p.pages[0].stands.push(
         { ...base, id: 'a', nr: '1', name: 'Schokofrüchte Meier', cx: 0, categoryId: 'suess' },
         { ...base, id: 'b', nr: '2', name: 'Mandeln Kaya', cx: 27.4, categoryId: 'suess' },

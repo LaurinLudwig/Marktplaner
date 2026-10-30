@@ -11,7 +11,7 @@ import { activeWarnings, cachedDistanceWarnings, countWarnings, distanceConflict
 /** #3: Abstandsprüfung für Stände gleicher Kategorie (Konkurrenzschutz). */
 
 const r = (cx: number, cy: number, w = 4, d = 3, rot = 0): Rect => ({ cx, cy, w, d, rot });
-const cat = (id: string, minDistance: number | null): Category => ({ id, name: id, color: '#aabbcc', minDistance });
+const cat = (id: string, minDistance: number | null): Category => ({ id, name: id, color: '#aabbcc', minDistance, price: null });
 const st = (id: string, rect: Rect, categoryId: string | null, fields: Partial<Stand> = {}): Stand => ({ ...createStand(rect, { categoryId, ...fields }), id });
 
 describe('#3 Abstand Kante zu Kante', () => {
@@ -106,11 +106,11 @@ describe('#3 Warnung „Abstand“', () => {
 
 describe('#3 Mindestabstand in Kategorielisten', () => {
   it('kommt beim Speichern, Exportieren, Importieren und Ersetzen mit; Ergänzen lässt Bestehendes unverändert', () => {
-    const list = listFromCategories('Markt', [{ id: 'x', name: 'Süßwaren', color: '#f06292', minDistance: 50 }, { id: 'y', name: 'Imbiss', color: '#f0a35e', minDistance: null }]);
+    const list = listFromCategories('Markt', [{ id: 'x', name: 'Süßwaren', color: '#f06292', minDistance: 50, price: null }, { id: 'y', name: 'Imbiss', color: '#f0a35e', minDistance: null, price: null }]);
     const back = parseCategoryListFile(encodeCategoryListFile(list));
     expect(back.entries.map((e) => e.minDistance)).toEqual([50, null]);
-    const current = [{ id: 's', name: 'süßwaren', color: '#000000', minDistance: 10 }];
-    expect(applyCategoryList(current, back, 'replace').categories[0]).toEqual({ id: 's', name: 'Süßwaren', color: '#f06292', minDistance: 50 });
-    expect(applyCategoryList(current, back, 'merge').categories).toEqual([current[0], { id: expect.any(String), name: 'Imbiss', color: '#f0a35e', minDistance: null }]);
+    const current = [{ id: 's', name: 'süßwaren', color: '#000000', minDistance: 10, price: null }];
+    expect(applyCategoryList(current, back, 'replace').categories[0]).toEqual({ id: 's', name: 'Süßwaren', color: '#f06292', minDistance: 50, price: null });
+    expect(applyCategoryList(current, back, 'merge').categories).toEqual([current[0], { id: expect.any(String), name: 'Imbiss', color: '#f0a35e', minDistance: null, price: null }]);
   });
 });

@@ -11,6 +11,7 @@ import {
   type Area,
   type Background,
   type Category,
+  type CategoryPrice,
   type Connection,
   type Corner,
   type FestplatzPage,
@@ -21,6 +22,7 @@ import {
   type PaperAnchor,
   type PaperFormat,
   type Project,
+  type PricingSettings,
   type ProjectFile,
   type ShapePart,
   type ShapeTemplate,
@@ -108,6 +110,7 @@ function normalizeProject(p: Obj): Project {
       },
       snapGap: clampSnapGap(num(s.snapGap, DEFAULT_SETTINGS.snapGap)),
       defaultStandColor: isColor(s.defaultStandColor) ? s.defaultStandColor : DEFAULT_SETTINGS.defaultStandColor,
+      pricing: normalizePricing(s.pricing),
     },
     pages: p.pages.map((pg, i) => normalizePage(pg, i, ids, objectIds, categoryIds, infraTypes, templateIds)),
     categories,
@@ -233,13 +236,35 @@ export function clampMinDistance(v: unknown): number | null {
   return Math.round(Math.min(MIN_DISTANCE_LIMITS.max, Math.max(MIN_DISTANCE_LIMITS.min, v)) * 100) / 100;
 }
 
+/** Beträge fürs Standgeld (#5): 0–1.000.000 €, auf Cent gerundet; MwSt-Satz 0–100 %. */
+export const PRICE_LIMITS = { min: 0, max: 1_000_000 } as const;
+export const VAT_LIMITS = { min: 0, max: 100 } as const;
+const clampTo = (v: number, l: { min: number; max: number }) => Math.round(Math.min(l.max, Math.max(l.min, v)) * 100) / 100;
+export function clampPrice(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? clampTo(v, PRICE_LIMITS) : null;
+}
+export function normalizeCategoryPrice(v: unknown): CategoryPrice | null {
+  if (!isObj(v) || (v.kind !== 'perMeter' && v.kind !== 'flat')) return null;
+  const amount = clampPrice(v.amount);
+  return amount === null ? null : { kind: v.kind, amount };
+}
+function normalizePricing(raw: unknown): PricingSettings {
+  const p = isObj(raw) ? raw : {};
+  const d = DEFAULT_SETTINGS.pricing;
+  return {
+    perMeter: clampPrice(p.perMeter),
+    roundUpMeters: bool(p.roundUpMeters, d.roundUpMeters),
+    vatRate: typeof p.vatRate === 'number' && Number.isFinite(p.vatRate) ? clampTo(p.vatRate, VAT_LIMITS) : d.vatRate,
+  };
+}
+
 function normalizeCategories(raw: unknown): Category[] {
   const seen = new Set<string>();
   const out: Category[] = [];
   for (const c of arr(raw)) {
     if (!isObj(c) || typeof c.id !== 'string' || !c.id || seen.has(c.id)) continue;
     seen.add(c.id);
-    out.push({ id: c.id, name: str(c.name, 'Kategorie'), color: isColor(c.color) ? c.color : '#a7adb3', minDistance: clampMinDistance(c.minDistance) });
+    out.push({ id: c.id, name: str(c.name, 'Kategorie'), color: isColor(c.color) ? c.color : '#a7adb3', minDistance: clampMinDistance(c.minDistance), price: normalizeCategoryPrice(c.price) });
   }
   return out;
 }

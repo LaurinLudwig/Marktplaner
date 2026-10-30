@@ -6,6 +6,7 @@
  * Warnungen und doppelte Nummern kommen aus den
  * vorhandenen Zwischenspeichern, unveränderte Pages kosten nichts.
  */
+import { feesOf, NO_FEE_SUM, sumFees, type FeeSum } from './fee';
 import type { AreaFreeSpaces } from './freeSpace';
 import { cachedDuplicates, type NrRef } from './numbering';
 import { CONNECTION_KEYS, pagePower, type ConnectionKey, type PowerSummary } from './power';
@@ -60,6 +61,8 @@ export interface PageStats {
   /** Anzahl Infrastruktur-Objekte je Typ-ID (nur vorkommende Typen). */
   infraByType: Record<Id, number>;
   byCategory: ByCategory;
+  /** Standgeld (#5) der Stände mit Preis. */
+  fee: FeeSum;
 }
 
 export interface ProjectStats {
@@ -74,11 +77,12 @@ export interface ProjectStats {
     infraByType: Record<Id, number>;
     infraKw: number;
     byCategory: ByCategory;
+    fee: FeeSum;
   };
 }
 
 /** Was die Kennzahlen aus dem Projekt brauchen. */
-export type StatsProject = Pick<Project, 'pages' | 'infraTypes' | 'categories'> & { settings: WarnSettings & Pick<ProjectSettings, 'minPassageWidth' | 'numbering'> };
+export type StatsProject = Pick<Project, 'pages' | 'infraTypes' | 'categories'> & { settings: WarnSettings & Pick<ProjectSettings, 'minPassageWidth' | 'numbering' | 'pricing'> };
 
 export function pageStats(page: FestplatzPage, project: Omit<StatsProject, 'pages'>, duplicates: ReadonlyMap<Id, readonly NrRef[]>, freeOf: FreeOf, categoryIds: ReadonlySet<Id> = new Set(project.categories.map((c) => c.id))): PageStats {
   const { settings } = project;
@@ -97,6 +101,7 @@ export function pageStats(page: FestplatzPage, project: Omit<StatsProject, 'page
     }, cachedDistanceWarnings(page.stands, project.categories)),
     infraByType,
     byCategory: categoryFigures(page.stands, categoryIds),
+    fee: sumFees(feesOf(page.stands, project.categories, settings.pricing)),
   };
 }
 
@@ -114,7 +119,9 @@ export function projectStats(project: StatsProject, freeOf: FreeOf): ProjectStat
   let frontCm = 0;
   let freeCm = 0;
   let kw = 0;
+  let fee: FeeSum = NO_FEE_SUM;
   for (const p of pages) {
+    fee = { net: (Math.round(fee.net * 100) + Math.round(p.fee.net * 100)) / 100, gross: (Math.round(fee.gross * 100) + Math.round(p.fee.gross * 100)) / 100, count: fee.count + p.fee.count };
     frontCm += Math.round(p.frontM * 100);
     freeCm += Math.round(p.freeFrontM * 100);
     kw += p.power.sumKw;
@@ -135,6 +142,6 @@ export function projectStats(project: StatsProject, freeOf: FreeOf): ProjectStat
   for (const k of CONNECTION_KEYS) byConnection[k].kw = round3(byConnection[k].kw);
   return {
     pages,
-    total: { stands: pages.reduce((n, p) => n + p.stands, 0), frontM: frontCm / 100, freeFrontM: freeCm / 100, sumKw: round3(kw), byConnection, warnings, infraByType, infraKw: round3(infraKw), byCategory },
+    total: { stands: pages.reduce((n, p) => n + p.stands, 0), frontM: frontCm / 100, freeFrontM: freeCm / 100, sumKw: round3(kw), byConnection, warnings, infraByType, infraKw: round3(infraKw), byCategory, fee },
   };
 }

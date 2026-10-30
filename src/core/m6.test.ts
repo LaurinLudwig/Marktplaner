@@ -64,7 +64,7 @@ describe('M6-11 Freie Frontmeter', () => {
 });
 
 describe('M6 Geschäftstabelle', () => {
-  const cat = { id: 'c1', name: 'Imbiss', color: '#fff', minDistance: null };
+  const cat = { id: 'c1', name: 'Imbiss', color: '#fff', minDistance: null, price: null };
   const rowsOf = () => {
     const p1 = pg('Festplatz 1', [
       st(0, 3, { nr: 'A-10', name: 'Bratwurst Müller', owner: 'Hans Müller', ware: 'Wurst', categoryId: 'c1', connection: 'CEE16', powerKw: 5 }),
@@ -134,7 +134,7 @@ describe('M6 Geschäftstabelle', () => {
 
   it('Summenzeile über die gefilterten Zeilen, ohne Gleitkomma-Reste', () => {
     const rows = rowsOf();
-    expect(sumRows(rows)).toEqual({ count: 4, frontM: 15, powerKw: 25.5, byConnection: { '230V': 0, CEE16: 1, CEE32: 1, none: 2 } });
+    expect(sumRows(rows)).toEqual({ count: 4, frontM: 15, powerKw: 25.5, byConnection: { '230V': 0, CEE16: 1, CEE32: 1, none: 2 }, fee: { net: 0, gross: 0, count: 0 } });
     const tiny = standRows(proj([pg('P', [st(0, 0.1, { powerKw: 0.1 }), st(5, 0.2, { powerKw: 0.2 })])]));
     expect(sumRows(tiny)).toMatchObject({ frontM: 0.3, powerKw: 0.3 });
   });

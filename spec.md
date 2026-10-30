@@ -195,10 +195,29 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   mitgelieferten in „Kategorieliste laden …“, beim neuen Projekt und auf dem Startbildschirm. Verwalten: umbenennen
   und löschen (mit Rückfrage; nur eigene Listen), jede Liste als Datei exportieren, Dateien importieren. Vergebene
   Namen (auch die der mitgelieferten Listen) bekommen eine Nummer („Markt (2)“). Dateiformat: JSON
-  `{ "format": "marktplaner-kategorien", "version": 1, "name", "categories": [{ "name", "color", "minDistance" }] }`
-  (`minDistance` in m oder null, #3); Dateien ohne
+  `{ "format": "marktplaner-kategorien", "version": 1, "name", "categories": [{ "name", "color", "minDistance", "price" }] }`
+  (`minDistance` in m oder null, #3; `price` als `{ "kind": "perMeter" | "flat", "amount" }` netto in € oder null,
+  #5); Dateien ohne
   diese Kennung, ohne gültige Kategorie oder mit neuerer Version weist die App mit deutscher Meldung ab, ungültige
-  Einträge fallen beim Import weg.
+  Einträge fallen beim Import weg. Ein Listeneintrag bringt seinen Sonderpreis mit wie den Mindestabstand.
+- **Standgeld** (#5, Entscheidungen 2026-10-30): Die App berechnet das Standgeld je Stand aus den Frontmetern (Breite).
+  - Projekteinstellungen, Bereich „Standgeld“: **Preis je Frontmeter** (netto in €, leer = keiner), **MwSt-Satz** (%,
+    Standard 19) und der Schalter **„Angefangene Meter voll berechnen“** (4,30 m → 5 m, 4,00 m → 4 m; Standard aus =
+    exakt auf 0,01 m). Darunter **Sonderpreise je Kategorie**: „wie Projekt“ (Standard, Preis je Frontmeter des Projekts),
+    „je Frontmeter“ (eigener Preis) oder „Pauschale“ (fester Betrag je Stand, unabhängig von der Breite), jeweils netto.
+  - Rechnung: netto = Frontmeter × Preis (bzw. die Pauschale), auf Cent gerundet; brutto = netto × (1 + MwSt-Satz),
+    je Stand auf Cent gerundet. Summen addieren die gerundeten Beträge der Stände. Stände ohne Kategorie und mit
+    Kategorie ohne Sonderpreis zahlen den Preis je Frontmeter; ist keiner festgelegt, haben sie kein Standgeld (nicht
+    0 €). Kein abweichender Betrag je Stand, kein Strom (eigenes Issue).
+  - Grenzen: Beträge 0–1.000.000 €, auf Cent gerundet; MwSt-Satz 0–100 %. Alle Änderungen sind je ein Undo-Schritt.
+  - Seitenleiste: Standgeld netto und brutto (nur Anzeige) mit der Herkunft („4,3 m × 25,00 €“, „Sonderpreis der
+    Kategorie“, „Pauschale der Kategorie“); bei mehreren Ständen die Summe.
+  - Geschäftstabelle: Spalten „Standgeld netto (€)“ und „brutto (€)“ (sortierbar, ein-/ausblendbar, nicht
+    editierbar), Summe in der Summenzeile; Kennzahlen der Start-Page: Summe netto und brutto gesamt und je Festplatz;
+    CSV mit beiden Spalten. Ist weder ein Preis je Frontmeter noch ein Sonderpreis festgelegt, zeigt die App das
+    Standgeld nirgends.
+  - PDF nur über das Export-Profil (Feld „Standgeld“, in keinem mitgelieferten Profil erlaubt, §9).
+  - Formatversion 10 (Einstellung `pricing` mit `perMeter`, `roundUpMeters`, `vatRate`; Kategorie `price`).
 - Beschriftung mittig auf dem Stand aus konfigurierbarer Vorlage, z. B.
   `{nr}` / `{name}` / `{breite}×{tiefe} m`. Platzhalter: `{nr}`, `{name}`, `{eigentuemer}`, `{ware}`,
   `{breite}`, `{tiefe}`, `{strom}`, `{anschluss}`, `{kategorie}`. Zeilen, die nach dem Einsetzen leer
@@ -344,7 +363,7 @@ Entscheidungen 2026-10-12 (M6-Planung).
   eine Überlappung, eine Infrastruktur-Warnung oder eine zu enge Durchfahrt dabei ist.
 - **Geschäftstabelle** über alle Festplätze:
   - Spalten: Sprung, Festplatz, Nummer (mit Schloss), Name, Eigentümer, Ware, Kategorie, Breite, Tiefe, Strom,
-    Anschlussart, Warnungen, Notiz. Spalten ein-/ausblendbar (Sprung und Name immer sichtbar); die Auswahl gilt pro
+    Anschlussart, Standgeld netto und brutto (#5, nur mit festgelegtem Preis), Warnungen, Notiz. Spalten ein-/ausblendbar (Sprung und Name immer sichtbar); die Auswahl gilt pro
     Rechner, nicht in der Projektdatei.
   - Sortieren per Klick auf den Spaltenkopf (erneuter Klick kehrt um, Shift+Klick ergibt eine zweite Stufe);
     Nummern natürlich sortiert („A-2“ vor „A-10“), Stände ohne Nummer zuletzt. Standard: Festplatz, dann Nummer.
@@ -353,7 +372,8 @@ Entscheidungen 2026-10-12 (M6-Planung).
   - Freitextsuche in Name, Eigentümer und Ware (ohne Groß-/Kleinschreibung und Akzente). Filter nach Festplatz,
     Kategorie und Anschlussart (jeweils auch „ohne“), „mit Warnung“, „ohne Nummer“. Suche, Filter und Sortierung
     gelten nur für die Sitzung, werden nicht im Projekt gespeichert (Entscheidung 2026-10-12) und bleiben beim Wechsel der Page erhalten.
-  - Summenzeile über die gefilterten Zeilen: Anzahl, Frontmeter, Strom, Anzahl je Anschlussart.
+  - Summenzeile über die gefilterten Zeilen: Anzahl, Frontmeter, Strom, Standgeld netto und brutto (#5), Anzahl je
+    Anschlussart.
   - Direkt editierbar: Nummer, Schloss, Name, Eigentümer, Ware, Kategorie, Breite, Tiefe, Strom, Anschlussart,
     Notiz. Es gelten dieselben Regeln wie in der Seitenleiste (Grenzen, Rundung, Zahlenformat, Fixierung,
     Stromlimit-Blockieren aus §6). Jede Zelländerung ist genau ein Undo-Schritt und wirkt sofort im Plan.
@@ -554,11 +574,12 @@ Hintergrund; E-23). Symbole (Material Symbols) und alle Formen sind Vektoren.
   - Warnungen: keine, „Rettungswege“ (nur „Infrastruktur“ = Stand in Freihaltefläche und „Durchfahrt zu eng“) oder
     alle;
   - erlaubte Felder für Standbeschriftung und Anhang: Nummer, Name, Eigentümer, Ware, Breite, Tiefe, Strom,
-    Anschlussart, Kategorie, Notiz. Platzhalter nicht erlaubter Felder werden in der Beschriftungsvorlage leer, Zeilen
+    Anschlussart, Kategorie, Notiz, Standgeld (#5; nur im Anhang als Spalten netto und brutto, nur wenn ein Preis
+    festgelegt ist; ohne das Feld enthält die Kopie fürs PDF keine Preise). Platzhalter nicht erlaubter Felder werden in der Beschriftungsvorlage leer, Zeilen
     entfallen wie in §3. Strom, Anschlussart und Notiz gelten auch für Infrastruktur-Objekte;
   - Anhang: Standliste, Freiflächenliste, Infrastrukturliste (je an/aus).
 - Mitgeliefert (bearbeitbar, „Zurücksetzen“ stellt den Auslieferungsstand her, nicht löschbar):
-  - „Intern“: alles, alle Warnungen, Anhang mit allen drei Listen.
+  - „Intern“: alles außer Standgeld (#5, Datenschutz), alle Warnungen, Anhang mit allen drei Listen.
   - „Sanität/Ordnungsamt“: alle Ebenen außer Raster, Warnungen „Rettungswege“, ohne Eigentümer, Strom,
     Anschlussart und Notiz; Anhang Standliste und Infrastrukturliste.
   - „Händler“: ohne Freiflächen, Raster und Warnungen; nur Nummer und Name; kein Anhang.

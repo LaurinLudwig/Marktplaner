@@ -23,10 +23,11 @@
  *   7  M11: Page `hiddenFree` (ausgeblendete Freiflächen mit Schlüssel und Achsenintervall, #8).
  *   8  M12: Geschäft `shape` und `shapeTemplateId`, Projekt `shapeTemplates` (Geschäftsformen, #9).
  *   9  Konkurrenzschutz (#3): Kategorie `minDistance`, Geschäft `suppressDistanceWarning`, Einstellung `warnDistance`.
+ *  10  Standgeld (#5): Einstellung `pricing` (Preis je Frontmeter, Rundung, MwSt-Satz), Kategorie `price`.
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -126,6 +127,12 @@ export const MIGRATIONS: Record<number, Migration> = {
     pages: mapList(p.pages, (pg) =>
       isObj(pg) ? { ...pg, stands: mapList(pg.stands, (s) => (isObj(s) ? { suppressDistanceWarning: false, ...s } : s)) } : pg,
     ),
+  }),
+  /** 9 → 10 (#5): Noch kein Preis festgelegt; MwSt-Satz 19 %, Meter exakt. */
+  9: (p) => ({
+    ...p,
+    settings: isObj(p.settings) ? { pricing: { perMeter: null, roundUpMeters: false, vatRate: 19 }, ...p.settings } : p.settings,
+    categories: mapList(p.categories, (c) => (isObj(c) ? { price: null, ...c } : c)),
   }),
 };
 

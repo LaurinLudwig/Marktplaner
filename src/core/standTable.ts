@@ -2,6 +2,7 @@
  * Geschäftstabelle der Start-Page (M6, spec.md §7): Zeilen über alle Festplätze, Suche, Filter, Sortierung und
  * Summen. Rein und ohne UI; die Tabelle zeigt nur an, was hier berechnet wird.
  */
+import { feesOf, sumFees, type Fee, type FeeSum } from './fee';
 import { sumWidths } from './stats';
 import { cachedDuplicates, nrKey, type NrRef } from './numbering';
 import { CONNECTION_KEYS, sumPower, type ConnectionKey } from './power';
@@ -20,6 +21,8 @@ export interface StandRow {
   duplicates: readonly NrRef[];
   /** Zu nahe Stände derselben Kategorie (nur wenn die Warnung „Abstand“ angezeigt wird, #3). */
   tooClose: readonly DistanceConflict[];
+  /** Standgeld (#5); null = kein Preis festgelegt. */
+  fee: Fee | null;
 }
 
 export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categories'> & Partial<Pick<Project, 'infraTypes'>>): StandRow[] {
@@ -30,7 +33,8 @@ export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categor
     const w = cachedPageWarnings(page.areas, page.stands);
     const iw = project.infraTypes ? cachedInfraWarnings(page, project.infraTypes, project.settings.minPassageWidth) : NO_INFRA_WARNINGS;
     const dw = cachedDistanceWarnings(page.stands, project.categories);
-    for (const s of page.stands) {
+    const fees = feesOf(page.stands, project.categories, project.settings.pricing);
+    page.stands.forEach((s, i) => {
       const d = dups.get(s.id);
       const close = dw.get(s.id);
       const warnings = activeWarnings(w.byStand.get(s.id), s, project.settings, !!d, iw.byStand.has(s.id), !!close);
@@ -43,8 +47,9 @@ export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categor
         warnings,
         duplicates: warnings.duplicate && d ? d : [],
         tooClose: warnings.distance && close ? close : [],
+        fee: fees[i]!,
       });
-    }
+    });
   });
   return rows;
 }
@@ -103,7 +108,7 @@ export function filterRows(rows: readonly StandRow[], f: StandFilter): StandRow[
 
 // ---------- Sortierung ----------
 
-export type StandSortColumn = 'page' | 'nr' | 'name' | 'owner' | 'ware' | 'category' | 'w' | 'd' | 'power' | 'connection' | 'warnings' | 'note';
+export type StandSortColumn = 'page' | 'nr' | 'name' | 'owner' | 'ware' | 'category' | 'w' | 'd' | 'power' | 'connection' | 'fee' | 'warnings' | 'note';
 export interface SortKey<C extends string = StandSortColumn> {
   col: C;
   dir: 'asc' | 'desc';
@@ -167,6 +172,8 @@ function sortValue(r: StandRow, col: StandSortColumn): string | number | null {
       return s.powerKw;
     case 'connection':
       return s.connection ? CONN_RANK[s.connection] : null;
+    case 'fee':
+      return r.fee ? r.fee.net : null;
     case 'warnings':
       return WARN_RANK(r) || null;
   }
@@ -215,11 +222,13 @@ export interface StandSums {
   frontM: number;
   powerKw: number;
   byConnection: Record<ConnectionKey, number>;
+  /** Standgeld (#5) der Zeilen mit Preis. */
+  fee: FeeSum;
 }
 
 export function sumRows(rows: readonly StandRow[]): StandSums {
   const stands = rows.map((r) => r.stand);
   const byConnection = Object.fromEntries(CONNECTION_KEYS.map((k) => [k, 0])) as Record<ConnectionKey, number>;
   for (const s of stands) byConnection[s.connection ?? 'none']++;
-  return { count: rows.length, frontM: sumWidths(stands), powerKw: sumPower(stands), byConnection };
+  return { count: rows.length, frontM: sumWidths(stands), powerKw: sumPower(stands), byConnection, fee: sumFees(rows.map((r) => r.fee)) };
 }

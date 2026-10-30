@@ -10,7 +10,7 @@ import { newId } from './id';
 import { LAYER_IDS, type LayerId, type LayerState, type Project } from './model/types';
 
 /** Felder eines Stands, die Beschriftung und Anhang zeigen können. */
-export const STAND_FIELDS = ['nr', 'name', 'owner', 'ware', 'w', 'd', 'power', 'connection', 'category', 'note'] as const;
+export const STAND_FIELDS = ['nr', 'name', 'owner', 'ware', 'w', 'd', 'power', 'connection', 'category', 'note', 'fee'] as const;
 export type StandField = (typeof STAND_FIELDS)[number];
 
 export const STAND_FIELD_LABEL: Record<StandField, string> = {
@@ -24,6 +24,7 @@ export const STAND_FIELD_LABEL: Record<StandField, string> = {
   connection: 'Anschlussart',
   category: 'Kategorie',
   note: 'Notiz',
+  fee: 'Standgeld',
 };
 
 /** Platzhalter der Beschriftungsvorlage (§3) je Feld. */
@@ -38,6 +39,7 @@ export const FIELD_PLACEHOLDER: Record<StandField, string | null> = {
   connection: 'anschluss',
   category: 'kategorie',
   note: null,
+  fee: null,
 };
 
 /** Ebenen, die ein Profil schalten kann. */
@@ -82,7 +84,8 @@ export const BUILTIN_PROFILES: readonly ExportProfile[] = [
     name: 'Intern',
     layers: allLayers(true),
     warnings: 'all',
-    fields: [...STAND_FIELDS],
+    // Standgeld (#5) nur auf ausdrücklichen Wunsch im PDF (Datenschutz)
+    fields: STAND_FIELDS.filter((f) => f !== 'fee'),
     appendix: { stands: true, free: true, infra: true },
   },
   {
@@ -182,8 +185,9 @@ export function blankedPlaceholders(profile: ExportProfile): Set<string> {
 /**
  * Kopie des Projekts ohne die nicht erlaubten Felder (Datenschutz, §9). Maße bleiben (die Stände werden gezeichnet);
  * sie verschwinden nur aus Beschriftung und Anhang. Die Kategorie bleibt am Stand (Farbe, Legende) und fehlt nur in
- * Beschriftung und Anhang. Strom, Anschlussart und Notiz gelten auch für Infrastruktur-Objekte. Personenbezogene
- * Daten der Händlerliste (`unplaced`) kommen nie in den Export.
+ * Beschriftung und Anhang. Strom, Anschlussart und Notiz gelten auch für Infrastruktur-Objekte. Ohne „Standgeld“
+ * fehlen alle Preise (#5), das Standgeld lässt sich daraus also nicht berechnen. Personenbezogene Daten der
+ * Händlerliste (`unplaced`) kommen nie in den Export.
  */
 export function redactProject(project: Project, profile: ExportProfile): Project {
   const allow = new Set(profile.fields);
@@ -191,6 +195,12 @@ export function redactProject(project: Project, profile: ExportProfile): Project
   return {
     ...project,
     unplaced: [],
+    ...(has('fee')
+      ? {}
+      : {
+          settings: { ...project.settings, pricing: { ...project.settings.pricing, perMeter: null } },
+          categories: project.categories.map((c) => ({ ...c, price: null })),
+        }),
     pages: project.pages.map((pg) => ({
       ...pg,
       stands: pg.stands.map((s) => ({

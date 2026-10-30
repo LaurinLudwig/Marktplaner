@@ -14,7 +14,7 @@ async function seed(page: Page) {
     const s = (window as any).__marktplanerStore.getState();
     const base = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', color: null, rot: 0, d: 3, w: 4, cy: 0 };
     s.change('Testdaten', (p: any) => {
-      p.categories.push({ id: 'c1', name: 'Imbiss', color: '#111111', minDistance: null }, { id: 'c2', name: 'Eigene', color: '#222222', minDistance: null });
+      p.categories.push({ id: 'c1', name: 'Imbiss', color: '#111111', minDistance: null, price: null }, { id: 'c2', name: 'Eigene', color: '#222222', minDistance: null, price: null });
       p.pages[0].stands.push({ ...base, id: 's1', cx: 0, categoryId: 'c1' }, { ...base, id: 's2', cx: 10, categoryId: 'c2' });
     });
   });
@@ -77,8 +77,8 @@ test.describe('#1 Kategorielisten', () => {
     const merged = (await st(page)).project.categories;
     expect(merged).toHaveLength(12);
     expect(merged.slice(0, 2)).toEqual([
-      { id: 'c1', name: 'Imbiss', color: '#111111', minDistance: null },
-      { id: 'c2', name: 'Eigene', color: '#222222', minDistance: null },
+      { id: 'c1', name: 'Imbiss', color: '#111111', minDistance: null, price: null },
+      { id: 'c2', name: 'Eigene', color: '#222222', minDistance: null, price: null },
     ]);
     await expect(page.getByTestId('category-row')).toHaveCount(12);
     expect(await pastLen(page)).toBe(n0 + 1);
@@ -101,7 +101,7 @@ test.describe('#1 Kategorielisten', () => {
     await confirm.getByRole('button', { name: 'Ersetzen' }).click();
     const s = await st(page);
     expect(s.project.categories).toHaveLength(11);
-    expect(s.project.categories.find((c: any) => c.name === 'Imbiss')).toEqual({ id: 'c1', name: 'Imbiss', color: '#f0a35e', minDistance: null });
+    expect(s.project.categories.find((c: any) => c.name === 'Imbiss')).toEqual({ id: 'c1', name: 'Imbiss', color: '#f0a35e', minDistance: null, price: null });
     expect(s.project.pages[0].stands.map((x: any) => x.categoryId)).toEqual(['c1', null]);
     await page.keyboard.press(`${MOD}+z`);
     const back = await st(page);
@@ -191,7 +191,7 @@ test.describe('Kategorien umsortieren', () => {
     await page.evaluate(() => {
       (window as any).__marktplanerStore.getState().change('Testdaten', (p: any) => {
         p.categories = p.categories.filter((c: any) => c.id === 'c1' || c.id === 'c2');
-        p.categories.push({ id: 'c3', name: 'Dritte', color: '#333333', minDistance: null });
+        p.categories.push({ id: 'c3', name: 'Dritte', color: '#333333', minDistance: null, price: null });
       });
     });
     await openSettings(page);

@@ -844,8 +844,8 @@ test.describe('QA M3-01/M3-18: Speichern und Neuladen', () => {
     await seed(page, {
       categories: [
         // seit #3 mit Mindestabstand (Formatversion 9); c2 mit Wert, damit er Speichern und Öffnen übersteht
-        { id: 'c1', name: 'Imbiss', color: '#e57373', minDistance: null },
-        { id: 'c2', name: 'Süß „&“', color: '#4fc3f7', minDistance: 25.5 },
+        { id: 'c1', name: 'Imbiss', color: '#e57373', minDistance: null, price: null },
+        { id: 'c2', name: 'Süß „&“', color: '#4fc3f7', minDistance: 25.5, price: null },
       ],
       areas: [
         { id: 'a1', cx: 1.23, cy: -4.56, w: 50, d: 10, rot: 33.3, name: 'Nord · Ost' },
