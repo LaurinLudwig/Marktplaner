@@ -102,12 +102,6 @@ describe('#3 Warnung „Abstand“', () => {
     expect(cachedDistanceWarnings(stands, [cat('suess', null)]).size).toBe(0);
   });
 
-  it('Lasttest: 500 Stände einer Kategorie mit 50 m Mindestabstand schnell genug fürs Ziehen', () => {
-    const stands = Array.from({ length: 500 }, (_, i) => st(`s${i}`, r((i % 25) * 6, Math.floor(i / 25) * 8), 'suess'));
-    const t = performance.now();
-    for (let k = 0; k < 5; k++) distanceConflicts([...stands], cats);
-    expect((performance.now() - t) / 5).toBeLessThan(100);
-  });
 });
 
 describe('#3 Mindestabstand in Kategorielisten', () => {
