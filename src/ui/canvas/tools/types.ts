@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { LabelPlacement } from '../../../core/labelLayout';
 import type { FestplatzPage, Id, InfraGeometry, Vec, View } from '../../../core/model/types';
 import type { SnapResult } from '../../../core/snap';
 import type { PagePaper } from '../../../core/paper';
@@ -22,6 +23,8 @@ export interface ToolContext {
   markerSize: number;
   /** Blatt und Papier-Elemente der Page (M7). */
   paper: PagePaper;
+  /** Platz der Standbeschriftungen (#9) der gespeicherten Page. */
+  labels: ReadonlyMap<Id, LabelPlacement>;
 }
 
 export interface ToolPointer {

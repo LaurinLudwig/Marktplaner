@@ -142,7 +142,7 @@ test.describe('QA M10: Formatversion 6 und Standardfarbe', () => {
     expect(d.suggestedFilename()).toBe('format-v5-m8.mplan');
     const { unzipSync, strFromU8 } = await import('fflate');
     const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync((await d.path())!)))['project.json']!));
-    expect(json.schemaVersion).toBe(10); // seit #5 Version 10, angepasst vom Entwickler (vorher 9, davor 8)
+    expect(json.schemaVersion).toBe(11); // seit #9 Version 11, angepasst vom Entwickler (vorher 10, 9, 8)
     expect(json.project.settings.snapGap).toBe(0.3);
     expect(json.project.settings.defaultStandColor).toBe('#a7adb3');
     expect(errors).toEqual([]);

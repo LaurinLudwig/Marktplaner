@@ -41,6 +41,8 @@ export const PAPER_STYLE: Record<StyleKey, PaperStyle> = {
   'warn-icon': { fill: WARN },
   'warn-icon-mark': { fill: '#ffffff' },
   'stand-label': { fill: '#141414', halo: true },
+  /** Führungslinie einer ausgelagerten Standbeschriftung (#9). */
+  'label-leader': { stroke: '#141414', strokeOpacity: 0.75, width: 0.15 },
   'area-label': { fill: INK, halo: true },
   'free-label': { fill: '#1f6b39' },
   'infra-label': { fill: INK, halo: true },

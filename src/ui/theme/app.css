@@ -648,6 +648,7 @@ kbd {
 .world .stand.selected { stroke: var(--select); stroke-width: 2.5; }
 .world .layer-labels text { font-family: var(--f-ui); font-weight: 500; stroke: none; text-rendering: optimizeSpeed; }
 .world .stand-label { fill: var(--label-ink); }
+.world .label-leader { stroke: var(--label-ink); stroke-opacity: 0.75; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .world .area-label { fill: var(--area-label-ink); }
 .world .layer-labels.halo text { paint-order: stroke; stroke-linejoin: round; }
 .world .layer-labels.halo .stand-label { stroke: var(--label-halo); }
