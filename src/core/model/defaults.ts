@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   warnInfra: true,
   warnPassageWidth: true,
   minPassageWidth: 3.5,
+  warnDistance: true,
   snap: { front: true, grid: false, neighbors: true },
   snapGap: 0.3,
   defaultStandColor: DEFAULT_STAND_COLOR,

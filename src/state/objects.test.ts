@@ -11,6 +11,7 @@ import {
   deleteCategory,
   deleteSelection,
   duplicateSelection,
+  moveCategory,
   moveGroupTo,
   nudge,
   paste,
@@ -220,6 +221,19 @@ describe('Kategorien (M3-08)', () => {
     s().undo();
     expect(page().stands[0]!.categoryId).toBe(c);
     expect(s().project.categories).toHaveLength(1);
+  });
+
+  it('moveCategory sortiert um, ein Undo-Schritt', () => {
+    addCategory();
+    const b = addCategory();
+    addCategory();
+    const names = () => s().project.categories.map((c) => c.name);
+    moveCategory(b, 0);
+    expect(names()).toEqual(['Kategorie 2', 'Kategorie 1', 'Kategorie 3']);
+    moveCategory(b, 99);
+    expect(names()).toEqual(['Kategorie 1', 'Kategorie 3', 'Kategorie 2']);
+    s().undo();
+    expect(names()).toEqual(['Kategorie 2', 'Kategorie 1', 'Kategorie 3']);
   });
 
   it('neue Kategorien bekommen verschiedene Farben und Namen', () => {

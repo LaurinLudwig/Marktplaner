@@ -45,7 +45,7 @@ async function drag(page: Page, from: P, to: P, steps = 12) {
 // suppressOverlapWarning (M4, Formatversion 2), suppressDuplicateWarning (M5, Formatversion 3), suppressInfraWarning (M7, Version 4) sowie shape und
 // shapeTemplateId (M12, Version 8): Teil des Modells,
 // nachgetragen vom Entwickler, siehe qa/M3.md
-const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, shape: 'rect', shapeTemplateId: null };
+const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9)
 async function seed(page: Page, objs: { areas?: any[]; stands?: any[]; categories?: any[] }) {
   await page.evaluate(
     ({ o, base }) => {
@@ -843,8 +843,9 @@ test.describe('QA M3-01/M3-18: Speichern und Neuladen', () => {
     await openApp(page);
     await seed(page, {
       categories: [
-        { id: 'c1', name: 'Imbiss', color: '#e57373' },
-        { id: 'c2', name: 'Süß „&“', color: '#4fc3f7' },
+        // seit #3 mit Mindestabstand (Formatversion 9); c2 mit Wert, damit er Speichern und Öffnen übersteht
+        { id: 'c1', name: 'Imbiss', color: '#e57373', minDistance: null },
+        { id: 'c2', name: 'Süß „&“', color: '#4fc3f7', minDistance: 25.5 },
       ],
       areas: [
         { id: 'a1', cx: 1.23, cy: -4.56, w: 50, d: 10, rot: 33.3, name: 'Nord · Ost' },

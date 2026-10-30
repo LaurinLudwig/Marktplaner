@@ -22,10 +22,11 @@
  *      Stände ohne Kategorie und eigene Farbe, #3).
  *   7  M11: Page `hiddenFree` (ausgeblendete Freiflächen mit Schlüssel und Achsenintervall, #8).
  *   8  M12: Geschäft `shape` und `shapeTemplateId`, Projekt `shapeTemplates` (Geschäftsformen, #9).
+ *   9  Konkurrenzschutz (#3): Kategorie `minDistance`, Geschäft `suppressDistanceWarning`, Einstellung `warnDistance`.
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -115,6 +116,15 @@ export const MIGRATIONS: Record<number, Migration> = {
     ...p,
     pages: mapList(p.pages, (pg) =>
       isObj(pg) ? { ...pg, stands: mapList(pg.stands, (s) => (isObj(s) ? { shape: 'rect', shapeTemplateId: null, ...s } : s)) } : pg,
+    ),
+  }),
+  /** 8 → 9 (#3): Noch keine Kategorie mit Mindestabstand; die Warnung ist eingeschaltet, greift aber erst mit einem Wert. */
+  8: (p) => ({
+    ...p,
+    settings: isObj(p.settings) ? { warnDistance: true, ...p.settings } : p.settings,
+    categories: mapList(p.categories, (c) => (isObj(c) ? { minDistance: null, ...c } : c)),
+    pages: mapList(p.pages, (pg) =>
+      isObj(pg) ? { ...pg, stands: mapList(pg.stands, (s) => (isObj(s) ? { suppressDistanceWarning: false, ...s } : s)) } : pg,
     ),
   }),
 };

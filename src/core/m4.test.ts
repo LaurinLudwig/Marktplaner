@@ -204,16 +204,16 @@ describe('M4 Freiflächen: Schlüssel, Auflösung, Zwischenspeicher', () => {
 });
 
 describe('M4 Warnungen', () => {
-  const settings = { warnOutside: true, warnOverlap: true, warnDuplicateNr: true, warnInfra: true, warnPassageWidth: true };
+  const settings = { warnOutside: true, warnOverlap: true, warnDuplicateNr: true, warnInfra: true, warnPassageWidth: true, warnDistance: true };
   it('zählt Stände mit aktiver Warnung; Häkchen und Projektschalter wirken je Art', () => {
     const stands = [st('s1', 20, 28), st('s2', 27, 30), st('s3', 40, 45, -5, -2)];
     const w = pageWarnings([G], stands);
-    expect(countWarnings(w, stands, settings)).toEqual({ stands: 3, outside: 1, overlap: 2, duplicate: 0, infra: 0, narrow: 0 });
-    expect(countWarnings(w, stands, { ...settings, warnOutside: false })).toEqual({ stands: 2, outside: 0, overlap: 2, duplicate: 0, infra: 0, narrow: 0 });
-    expect(countWarnings(w, stands, { ...settings, warnOverlap: false })).toEqual({ stands: 1, outside: 1, overlap: 0, duplicate: 0, infra: 0, narrow: 0 });
+    expect(countWarnings(w, stands, settings)).toEqual({ stands: 3, outside: 1, overlap: 2, duplicate: 0, infra: 0, narrow: 0, distance: 0 });
+    expect(countWarnings(w, stands, { ...settings, warnOutside: false })).toEqual({ stands: 2, outside: 0, overlap: 2, duplicate: 0, infra: 0, narrow: 0, distance: 0 });
+    expect(countWarnings(w, stands, { ...settings, warnOverlap: false })).toEqual({ stands: 1, outside: 1, overlap: 0, duplicate: 0, infra: 0, narrow: 0, distance: 0 });
     // „Überlappung ignorieren“ wirkt nur auf den eigenen Stand
     const ignored = [{ ...stands[0]!, suppressOverlapWarning: true }, stands[1]!, { ...stands[2]!, suppressOutsideWarning: true }];
-    expect(countWarnings(pageWarnings([G], ignored), ignored, settings)).toEqual({ stands: 1, outside: 0, overlap: 1, duplicate: 0, infra: 0, narrow: 0 });
+    expect(countWarnings(pageWarnings([G], ignored), ignored, settings)).toEqual({ stands: 1, outside: 0, overlap: 1, duplicate: 0, infra: 0, narrow: 0, distance: 0 });
   });
 
   it('Überlappungsfläche wird für die Darstellung geliefert', () => {

@@ -1,5 +1,6 @@
 import { UserError } from './errors';
 import { newId } from './id';
+import { clampMinDistance } from './model/schema';
 import type { Category, Id } from './model/types';
 
 /**
@@ -11,6 +12,8 @@ import type { Category, Id } from './model/types';
 export interface CategoryListEntry {
   name: string;
   color: string;
+  /** Mindestabstand zur gleichen Kategorie in Metern (#3); fehlt oder null = keine Prüfung. */
+  minDistance?: number | null;
 }
 
 export interface CategoryList {
@@ -91,8 +94,10 @@ export const builtinList = (id: string) => BUILTIN_CATEGORY_LISTS.find((l) => l.
 /** Vergleichsschlüssel für Namen: Groß-/Kleinschreibung und Leerraum an den Rändern zählen nicht. */
 const key = (name: string) => name.trim().toLocaleLowerCase('de-DE');
 
+const categoryOf = (e: CategoryListEntry, id: Id = newId()): Category => ({ id, name: e.name, color: e.color, minDistance: e.minDistance ?? null });
+
 /** Kategorien einer Liste mit neuen IDs (neues Projekt). */
-export const categoriesFromList = (list: CategoryList): Category[] => list.entries.map((e) => ({ id: newId(), name: e.name, color: e.color }));
+export const categoriesFromList = (list: CategoryList): Category[] => list.entries.map((e) => categoryOf(e));
 
 export type ApplyMode = 'merge' | 'replace';
 
@@ -106,7 +111,7 @@ export interface ApplyResult {
  * Liste auf die Kategorien eines Projekts anwenden.
  * - `merge`: nur Namen ergänzen, die es noch nicht gibt; Bestehendes bleibt unverändert.
  * - `replace`: danach gilt genau die Liste. Gleichnamige Kategorien behalten ihre ID (Stände behalten die Kategorie)
- *   und übernehmen die Farbe der Liste; alle anderen entfallen.
+ *   und übernehmen Farbe und Mindestabstand der Liste; alle anderen entfallen.
  */
 export function applyCategoryList(current: readonly Category[], list: CategoryList, mode: ApplyMode): ApplyResult {
   const byName = new Map(current.map((c) => [key(c.name), c]));
@@ -114,7 +119,7 @@ export function applyCategoryList(current: readonly Category[], list: CategoryLi
     const added: Category[] = [];
     for (const e of list.entries) {
       if (byName.has(key(e.name))) continue;
-      const c = { id: newId(), name: e.name, color: e.color };
+      const c = categoryOf(e);
       byName.set(key(e.name), c);
       added.push(c);
     }
@@ -128,7 +133,7 @@ export function applyCategoryList(current: readonly Category[], list: CategoryLi
     seen.add(key(e.name));
     const old = byName.get(key(e.name));
     if (old) kept.add(old.id);
-    categories.push({ id: old?.id ?? newId(), name: e.name, color: e.color });
+    categories.push(categoryOf(e, old?.id));
   }
   return { categories, removed: current.filter((c) => !kept.has(c.id)).map((c) => c.id) };
 }
@@ -140,7 +145,7 @@ export const listFromCategories = (name: string, categories: readonly Category[]
   id: newId(),
   name,
   builtin: false,
-  entries: categories.map((c) => ({ name: c.name, color: c.color })),
+  entries: categories.map((c) => ({ name: c.name, color: c.color, minDistance: c.minDistance })),
 });
 
 /** Name, den es unter `existing` noch nicht gibt: „Markt“, „Markt (2)“, … */
@@ -166,7 +171,7 @@ function normalizeEntries(raw: unknown): CategoryListEntry[] {
     if (!isObj(e) || typeof e.name !== 'string' || !e.name.trim() || !isColor(e.color)) continue;
     if (seen.has(key(e.name))) continue;
     seen.add(key(e.name));
-    out.push({ name: e.name.trim(), color: e.color.toLowerCase() });
+    out.push({ name: e.name.trim(), color: e.color.toLowerCase(), minDistance: clampMinDistance(e.minDistance) });
   }
   return out;
 }
@@ -193,7 +198,8 @@ export const CATEGORY_LIST_VERSION = 1;
 export const CATEGORY_LIST_EXTENSION = 'json';
 
 export function encodeCategoryListFile(list: CategoryList): string {
-  const file = { format: CATEGORY_LIST_FORMAT, version: CATEGORY_LIST_VERSION, name: list.name, categories: list.entries };
+  const categories = list.entries.map((e) => ({ name: e.name, color: e.color, minDistance: e.minDistance ?? null }));
+  const file = { format: CATEGORY_LIST_FORMAT, version: CATEGORY_LIST_VERSION, name: list.name, categories };
   return `${JSON.stringify(file, null, 2)}\n`;
 }
 

@@ -6,7 +6,7 @@
  */
 import type { Rect, Vec } from '../model/types';
 import type { Bounds } from '../viewport';
-import { rectCorners, toLocal } from './rect';
+import { fromLocal, rectCorners, toLocal } from './rect';
 import { EPS, greaterThan, isZero, KERNEL_EPS } from './tolerance';
 import { add, cross, dot, mul, normalize, rotate, sub, vec } from './vec';
 
@@ -228,6 +228,35 @@ export function hatchPath(poly: readonly Vec[], spacing: number): string {
 export function distToRect(r: Rect, p: Vec): number {
   const l = toLocal(r, p);
   return Math.hypot(Math.max(Math.abs(l.x) - r.w / 2, 0), Math.max(Math.abs(l.y) - r.d / 2, 0));
+}
+
+/** Nächster Punkt eines (gedrehten) Rechtecks zu `p`; liegt `p` darin, `p` selbst. */
+export function closestOnRect(r: Rect, p: Vec): Vec {
+  const l = toLocal(r, p);
+  return fromLocal(r, vec(Math.max(-r.w / 2, Math.min(r.w / 2, l.x)), Math.max(-r.d / 2, Math.min(r.d / 2, l.y))));
+}
+
+/**
+ * Kürzester Abstand Kante zu Kante zweier (gedrehter) Rechtecke als Luftlinie (#3), mit den beiden nächsten Punkten.
+ * Bei Überschneidung 0 (Punkte: die Mittelpunkte). Für getrennte konvexe Polygone liegt der kürzeste Abstand immer an
+ * einer Ecke des einen Rechtecks; geprüft werden deshalb die Ecken beider Rechtecke gegen das jeweils andere.
+ */
+export function rectGap(a: Rect, b: Rect): { dist: number; from: Vec; to: Vec } {
+  const pa = rectGeo(a).poly;
+  const pb = rectGeo(b).poly;
+  if (penetration(pa, pb) > 0) return { dist: 0, from: vec(a.cx, a.cy), to: vec(b.cx, b.cy) };
+  let best = { dist: Infinity, from: vec(a.cx, a.cy), to: vec(b.cx, b.cy) };
+  for (const p of pa) {
+    const q = closestOnRect(b, p);
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    if (d < best.dist) best = { dist: d, from: p, to: q };
+  }
+  for (const q of pb) {
+    const p = closestOnRect(a, q);
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    if (d < best.dist) best = { dist: d, from: p, to: q };
+  }
+  return best;
 }
 
 /** Kreisbogen-Stützpunkte je Viertelkreis: Das Polygon umschreibt den Bogen höchstens EPS zu weit. */

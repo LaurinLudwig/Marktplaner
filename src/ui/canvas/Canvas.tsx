@@ -11,7 +11,7 @@ import type { FestplatzPage, Id, Rect, Vec, View } from '../../core/model/types'
 import { findSnap, rectSnapSource } from '../../core/snap';
 import { defaultView, fitBounds, focusBounds, screenToWorld, worldToScreen, zoomAt, type Bounds } from '../../core/viewport';
 import { cachedDuplicates } from '../../core/numbering';
-import { activeNarrow, cachedInfraWarnings, cachedPageWarnings } from '../../core/warnings';
+import { activeNarrow, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings } from '../../core/warnings';
 import { hideFreeSpace } from '../../state/freeSpaces';
 import { useStore } from '../../state/store';
 import { Menu } from '../shell/Menu';
@@ -153,10 +153,11 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const warnDuplicateNr = useStore((s) => s.project.settings.warnDuplicateNr);
   const warnInfra = useStore((s) => s.project.settings.warnInfra);
   const warnPassageWidth = useStore((s) => s.project.settings.warnPassageWidth);
+  const warnDistance = useStore((s) => s.project.settings.warnDistance);
   const minPassageWidth = useStore((s) => s.project.settings.minPassageWidth);
   const warnSettings = useMemo(
-    () => ({ warnOutside, warnOverlap, warnDuplicateNr, warnInfra, warnPassageWidth }),
-    [warnOutside, warnOverlap, warnDuplicateNr, warnInfra, warnPassageWidth],
+    () => ({ warnOutside, warnOverlap, warnDuplicateNr, warnInfra, warnPassageWidth, warnDistance }),
+    [warnOutside, warnOverlap, warnDuplicateNr, warnInfra, warnPassageWidth, warnDistance],
   );
   const infraTypes = useStore((s) => s.project.infraTypes);
   const typesById = useMemo(() => typeMap(infraTypes), [infraTypes]);
@@ -172,6 +173,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const warnings = useMemo(() => cachedPageWarnings(page.areas, page.stands), [page.areas, page.stands]);
   const infraWarnings = useMemo(() => cachedInfraWarnings(page, infraTypes, minPassageWidth), [page, infraTypes, minPassageWidth]);
   const infraWarnStands = useMemo(() => new Set(infraWarnings.byStand.keys()), [infraWarnings]);
+  // Konkurrenzschutz (#3) live aus der Page mit Vorschau: Warnung und Linien folgen dem gezogenen Stand
+  const distanceWarnings = useMemo(() => cachedDistanceWarnings(page.stands, categories), [page.stands, categories]);
   // Blatt, Schriftfeld, Legende (M7-10 bis M7-12)
   const projectName = useStore((s) => s.project.name);
   const titleFields = useStore((s) => s.project.titleBlock);
@@ -540,6 +543,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
             markerSize={markerSize(labelFontSize)}
             infraWarnStands={infraWarnStands}
             infraWarnObjects={infraWarnObjects}
+            distanceWarnings={distanceWarnings}
           />
           {page.layers.sheet.visible && (
             <PaperLayer

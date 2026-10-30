@@ -6,7 +6,7 @@ import { fmt } from '../../core/format';
 import { cachedDuplicates } from '../../core/numbering';
 import { folderOf } from '../../core/recentFiles';
 import { pageSumKw } from '../../core/power';
-import { cachedInfraWarnings, cachedPageWarnings, countWarnings, warningSevere, warningTotal } from '../../core/warnings';
+import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, countWarnings, warningSevere, warningTotal } from '../../core/warnings';
 import { addPage, duplicatePage, movePage, renamePage } from '../../state/pages';
 import { checkRecent, clearRecent, useRecent } from '../../state/recent';
 import { selectCanRedo, selectCanUndo, selectDirty, START_PAGE, useStore } from '../../state/store';
@@ -247,17 +247,18 @@ function WarnBadge({ pageId }: { pageId: Id }) {
     const n = countWarnings(cachedPageWarnings(page.areas, page.stands), page.stands, s.project.settings, dups, {
       warnings: cachedInfraWarnings(page, s.project.infraTypes, s.project.settings.minPassageWidth),
       objects: page.infra,
-    });
-    return warningTotal(n) ? `${warningTotal(n)}|${n.overlap}|${n.outside}|${n.duplicate}|${n.infra}|${n.narrow}|${warningSevere(n) ? 1 : 0}` : '';
+    }, cachedDistanceWarnings(page.stands, s.project.categories));
+    return warningTotal(n) ? `${warningTotal(n)}|${n.overlap}|${n.outside}|${n.duplicate}|${n.infra}|${n.narrow}|${warningSevere(n) ? 1 : 0}|${n.distance}` : '';
   });
   if (!summary) return null;
-  const [n, overlap, outside, duplicate, infra, narrow, severe] = summary.split('|').map(Number) as [number, number, number, number, number, number, number];
+  const [n, overlap, outside, duplicate, infra, narrow, severe, distance] = summary.split('|').map(Number) as [number, number, number, number, number, number, number, number];
   const parts = [
     overlap ? `${overlap} Überlappung${overlap === 1 ? '' : 'en'}` : '',
     outside ? `${outside} außerhalb` : '',
     duplicate ? `${duplicate} mit doppelter Nummer` : '',
     infra ? `${infra} in Freihalteflächen` : '',
     narrow ? `${narrow} Durchfahrt${narrow === 1 ? '' : 'en'} zu eng` : '',
+    distance ? `${distance} zu nah an gleicher Kategorie` : '',
   ].filter(Boolean);
   return (
     <span className={`warn-badge${severe ? ' overlap' : ''}`} data-testid="warn-badge" {...tip({ label: `${n} ${n === 1 ? 'Warnung' : 'Warnungen'}: ${parts.join(', ')}`, side: 'bottom' })}>

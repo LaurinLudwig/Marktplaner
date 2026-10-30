@@ -40,6 +40,8 @@ export interface Category {
   id: Id;
   name: string;
   color: string;
+  /** Mindestabstand zur gleichen Kategorie in Metern (Konkurrenzschutz, #3); null = keine Prüfung. */
+  minDistance: number | null;
 }
 
 /** IDs der festen Infrastruktur-Typen (spec.md §11). Eigene Typen haben eine zufällige ID. */
@@ -133,6 +135,8 @@ export interface Stand extends Rect {
   suppressDuplicateWarning: boolean;
   /** Warnung „Infrastruktur“ für diesen Stand ignorieren. */
   suppressInfraWarning: boolean;
+  /** Warnung „Abstand“ (gleiche Kategorie zu nah, #3) für diesen Stand ignorieren. */
+  suppressDistanceWarning: boolean;
   /** Grundform (M12); gilt, solange keine Formvorlage gesetzt ist. */
   shape: StandShape;
   /** Formvorlage (M12); hat Vorrang vor `shape`. */
@@ -278,6 +282,8 @@ export interface ProjectSettings {
   /** Warnung „Durchfahrt zu eng“ und die Mindestbreite in Metern (§11). */
   warnPassageWidth: boolean;
   minPassageWidth: number;
+  /** Warnung „Abstand“: Stände gleicher Kategorie näher als deren Mindestabstand (#3). */
+  warnDistance: boolean;
   /** Fang-Umschalter: Ansichtseinstellung (kein Undo-Schritt), wird aber mitgespeichert. */
   snap: { front: boolean; grid: boolean; neighbors: boolean };
   /** Abstand in Metern, mit dem ein Stand an einem Nachbarstand einrastet (#2); 0 = bündig. */

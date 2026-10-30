@@ -51,6 +51,7 @@ import i_sortDown from '@material-symbols/svg-400/outlined/arrow_downward.svg?ra
 import i_refresh from '@material-symbols/svg-400/outlined/refresh.svg?raw';
 import i_loadList from '@material-symbols/svg-400/outlined/playlist_add.svg?raw';
 import i_manageLists from '@material-symbols/svg-400/outlined/list_alt.svg?raw';
+import i_drag from '@material-symbols/svg-400/outlined/drag_indicator.svg?raw';
 
 const RAW = {
   select: i_select,
@@ -105,6 +106,7 @@ const RAW = {
   refresh: i_refresh,
   loadList: i_loadList,
   manageLists: i_manageLists,
+  drag: i_drag,
 };
 
 export type IconName = keyof typeof RAW;

@@ -54,6 +54,7 @@ export function createStand(rect: Rect, fields: Partial<Omit<Stand, 'id'>> = {})
     suppressOverlapWarning: false,
     suppressDuplicateWarning: false,
     suppressInfraWarning: false,
+    suppressDistanceWarning: false,
     shape: 'rect',
     shapeTemplateId: null,
     ...fields,
