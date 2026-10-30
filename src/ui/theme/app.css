@@ -938,7 +938,9 @@ kbd {
 .stat-warn-row { display: flex; flex-wrap: wrap; gap: 4px; }
 .vt-row.hidden-free .vt-td { color: var(--faint); }
 .vt-row.hidden-free .vt-td.num { text-decoration: line-through; }
-.stat-cat { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; font-size: 11px; }
+/* minmax(0, 1fr) und min-width: 0: der nicht umbrechende Name wird gekürzt, statt die Zahlen aus der Karte zu schieben */
+.stat-cat { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; font-size: 11px; }
+.stat-cat .link-btn { min-width: 0; }
 .stat-cat .link-btn { display: flex; align-items: center; gap: 5px; width: 100%; padding: 0; text-align: left; font-size: 11px; color: var(--muted); }
 .stat-cat .link-btn:hover { text-decoration: none; }
 .stat-cat .link-btn:hover .stat-cat-name { text-decoration: underline; }
