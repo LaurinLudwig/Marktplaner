@@ -9,7 +9,7 @@ import { distanceConflicts } from './warnings';
  * nah. Gewertet wird der schnellste von mehreren Durchläufen; höchstens 100 ms (≈ 10 Aktualisierungen pro Sekunde).
  */
 
-const suess: Category = { id: 'suess', name: 'Süßwaren', color: '#aabbcc', minDistance: 50 };
+const suess: Category = { id: 'suess', name: 'Süßwaren', color: '#aabbcc', minDistance: 50, price: null };
 
 it('500 Stände einer Kategorie mit 50 m Mindestabstand schnell genug fürs Ziehen', () => {
   const stands: Stand[] = Array.from({ length: 500 }, (_, i) => ({

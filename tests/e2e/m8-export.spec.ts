@@ -263,7 +263,7 @@ test.describe('M8: Dateiformat Version 5', () => {
     const path = await (await download).path();
     const { unzipSync, strFromU8 } = await import('fflate');
     const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(path)))['project.json']!));
-    expect(json.schemaVersion).toBe(9); // seit #3 Version 9, angepasst vom Entwickler (vorher 8)
+    expect(json.schemaVersion).toBe(10); // seit #5 Version 10, angepasst vom Entwickler (vorher 9, davor 8)
     expect(json.project).not.toHaveProperty('exportProfiles');
     expect(json.project.pages[2].scaleBar).toEqual({ visible: true, corner: 'tl', dx: 10, dy: 10 });
   });

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { freeOf } from '../../app/startPageData';
 import { showCategory, showInfraWarnings, showWarnings } from '../../app/startPageNav';
 import { InfraIconView } from '../icons/infraIcons';
+import { fmtEuro, hasPricing, type FeeSum } from '../../core/fee';
 import { fmt } from '../../core/format';
 import { CONNECTION_LABEL } from '../../core/label';
 import { CONNECTION_KEYS, type ConnectionKey } from '../../core/power';
@@ -27,6 +28,7 @@ export function StatsBar() {
   const setUi = useStore((s) => s.setUi);
   const stats = useMemo(() => projectStats({ pages, settings, infraTypes, categories }, freeOf(settings.minFreeWidth, infraTypes)), [pages, settings, infraTypes, categories]);
   const t = stats.total;
+  const withFee = hasPricing(settings.pricing, categories);
   return (
     <div className="sp-stats" data-testid="stats">
       <article className="stat-card total" data-testid="stat-total" aria-label="Gesamt">
@@ -36,6 +38,7 @@ export function StatsBar() {
           <Icon name="bolt" size={14} /> {fmt(t.sumKw)} kW
         </div>
         <Connections by={t.byConnection} />
+        {withFee && <FeeLine fee={t.fee} />}
         <CategoryCounts by={t.byCategory} pageId={null} />
         <InfraCounts byType={t.infraByType} infraKw={t.infraKw} />
         <Warn count={t.warnings} pageId={null} />
@@ -56,6 +59,7 @@ export function StatsBar() {
             <PowerMeter power={p.power} compact />
           )}
           <Connections by={p.power.byConnection} />
+          {withFee && <FeeLine fee={p.fee} />}
           <CategoryCounts by={p.byCategory} pageId={p.pageId} />
           <InfraCounts byType={p.infraByType} infraKw={p.power.infraKw} />
           <Warn count={p.warnings} pageId={p.pageId} />
@@ -86,6 +90,22 @@ function Figures({ stands, frontM, freeFrontM }: { stands: number; frontM: numbe
         </dd>
       </div>
     </dl>
+  );
+}
+
+/** Standgeld (#5): Summe netto und brutto der Stände mit Preis. */
+function FeeLine({ fee }: { fee: FeeSum }) {
+  return (
+    <ul className="stat-conn stat-fee" data-testid="stat-fee" title="Standgeld der Stände mit Preis">
+      <li>
+        <span>Standgeld netto</span>
+        <b>{fmtEuro(fee.net)}</b>
+      </li>
+      <li>
+        <span>brutto</span>
+        <span>{fmtEuro(fee.gross)}</span>
+      </li>
+    </ul>
   );
 }
 

@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { exportCurrentList, STAND_COLUMN_ORDER } from '../../app/exportCsv';
+import { exportCurrentList, visibleStandColumns } from '../../app/exportCsv';
 import { jumpToStand } from '../../app/jump';
 import { connectionText, displayedStandRows } from '../../app/startPageData';
+import { fmtEuro, fmtMoney, hasPricing } from '../../core/fee';
 import { fmt, fmtInput, parseNum } from '../../core/format';
 import { fmtGap } from '../../core/warnings';
 import { CONNECTION_LABEL } from '../../core/label';
@@ -11,7 +12,7 @@ import { CONNECTION_KEYS, type ConnectionKey } from '../../core/power';
 import { isFilterActive, sumRows, toggleSort, EMPTY_STAND_FILTER, type StandRow, type StandSortColumn } from '../../core/standTable';
 import { setNrLocked } from '../../state/numbering';
 import { setRectField, updateStands } from '../../state/objects';
-import { HIDEABLE_COLUMNS, useStartPage, type ActiveCell, type StandColumn } from '../../state/startPage';
+import { FEE_COLUMNS, HIDEABLE_COLUMNS, useStartPage, type ActiveCell, type StandColumn } from '../../state/startPage';
 import { useStore } from '../../state/store';
 import { Icon } from '../icons/Icon';
 import { keyLabel, tip } from '../shortcuts/tip';
@@ -51,6 +52,8 @@ const COLS: Record<Col, ColDef> = {
   d: { id: 'd', label: 'T (m)', width: 66, num: true, edit: 'num', sort: 'd' },
   power: { id: 'power', label: 'Strom (kW)', width: 84, num: true, edit: 'num', sort: 'power' },
   connection: { id: 'connection', label: 'Anschluss', width: 92, edit: 'select', sort: 'connection' },
+  fee: { id: 'fee', label: 'Standgeld netto (€)', width: 112, num: true, sort: 'fee' },
+  feeGross: { id: 'feeGross', label: 'brutto (€)', width: 92, num: true, sort: 'fee' },
   warnings: { id: 'warnings', label: 'Warnungen', width: 130, sort: 'warnings' },
   note: { id: 'note', label: 'Notiz', width: 200, edit: 'text', sort: 'note' },
 };
@@ -66,6 +69,8 @@ const COLUMN_LABEL: Record<StandColumn, string> = {
   d: 'Tiefe',
   power: 'Strom',
   connection: 'Anschlussart',
+  fee: 'Standgeld netto',
+  feeGross: 'Standgeld brutto',
   warnings: 'Warnungen',
   note: 'Notiz',
 };
@@ -148,7 +153,8 @@ export function StandTable() {
   const { standFilter: filter, standSort: sort, frozen, hidden, cell } = sp;
   const { all, rows, stale } = useMemo(() => displayedStandRows(project, { standFilter: filter, standSort: sort, frozen }), [project, filter, sort, frozen]);
   const sums = useMemo(() => sumRows(rows), [rows]);
-  const cols = useMemo(() => (['jump', ...STAND_COLUMN_ORDER] as Col[]).filter((c) => c === 'jump' || c === 'name' || !hidden.includes(c as StandColumn)).map((c) => COLS[c]), [hidden]);
+  const withFee = hasPricing(project.settings.pricing, project.categories);
+  const cols = useMemo(() => (['jump', ...visibleStandColumns(hidden, withFee)] as Col[]).map((c) => COLS[c]), [hidden, withFee]);
   const template = cols.map((c) => `${c.width}px`).join(' ');
   const width = cols.reduce((n, c) => n + c.width, 0);
 
@@ -316,6 +322,11 @@ export function StandTable() {
         <span>
           <b>{fmt(sums.powerKw)}</b> kW
         </span>
+        {withFee && (
+          <span data-testid="stand-sums-fee">
+            Standgeld <b>{fmtEuro(sums.fee.net)}</b> netto · <b>{fmtEuro(sums.fee.gross)}</b> brutto
+          </span>
+        )}
         {CONNECTION_KEYS.filter((k) => sums.byConnection[k]).map((k) => (
           <span key={k}>
             {k === 'none' ? 'ohne Anschluss' : CONNECTION_LABEL[k]}: <b>{sums.byConnection[k]}</b>
@@ -427,6 +438,9 @@ function CellView({ row, col }: { row: StandRow; col: Col }) {
       return <>{s.powerKw ? fmt(s.powerKw) : ''}</>;
     case 'connection':
       return <span className={s.connection ? '' : 'muted'}>{connectionText(row) || '–'}</span>;
+    case 'fee':
+    case 'feeGross':
+      return <>{row.fee ? fmtMoney(col === 'fee' ? row.fee.net : row.fee.gross) : ''}</>;
     case 'warnings':
       return <WarnChips row={row} />;
   }
@@ -593,6 +607,7 @@ function StandToolbar({ total, shown, stale }: { total: number; shown: number; s
   const sp = useStartPage();
   const pages = useStore((s) => s.project.pages);
   const categories = useStore((s) => s.project.categories);
+  const withFee = useStore((s) => hasPricing(s.project.settings.pricing, s.project.categories));
   const f = sp.standFilter;
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -656,7 +671,7 @@ function StandToolbar({ total, shown, stale }: { total: number; shown: number; s
       <div className="spacer" />
       <Popover testId="columns" label={<><Icon name="columns" size={14} /> Spalten</>}>
         <div className="popover-list" role="group" aria-label="Spalten">
-          {HIDEABLE_COLUMNS.map((c) => (
+          {HIDEABLE_COLUMNS.filter((c) => withFee || !FEE_COLUMNS.includes(c)).map((c) => (
             <label key={c} className="check">
               <input type="checkbox" checked={!sp.hidden.includes(c)} onChange={(e) => sp.setHidden(c, !e.target.checked)} />
               {COLUMN_LABEL[c]}

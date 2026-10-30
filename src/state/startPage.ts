@@ -16,8 +16,10 @@ import { useStore } from './store';
 export type StartTab = 'stands' | 'free' | 'infra' | 'settings';
 
 /** Spalten der Geschäftstabelle, die sich ausblenden lassen (Sprung und Name sind immer sichtbar). */
-export type StandColumn = 'page' | 'nr' | 'name' | 'owner' | 'ware' | 'category' | 'w' | 'd' | 'power' | 'connection' | 'warnings' | 'note';
-export const HIDEABLE_COLUMNS: readonly StandColumn[] = ['page', 'nr', 'owner', 'ware', 'category', 'w', 'd', 'power', 'connection', 'warnings', 'note'];
+export type StandColumn = 'page' | 'nr' | 'name' | 'owner' | 'ware' | 'category' | 'w' | 'd' | 'power' | 'connection' | 'fee' | 'feeGross' | 'warnings' | 'note';
+export const HIDEABLE_COLUMNS: readonly StandColumn[] = ['page', 'nr', 'owner', 'ware', 'category', 'w', 'd', 'power', 'connection', 'fee', 'feeGross', 'warnings', 'note'];
+/** Standgeld-Spalten (#5): nur, wenn im Projekt ein Preis festgelegt ist. */
+export const FEE_COLUMNS: readonly StandColumn[] = ['fee', 'feeGross'];
 const DEFAULT_HIDDEN: StandColumn[] = ['note'];
 const COLUMNS_KEY = `${APP_KEY_PREFIX}standColumns`;
 

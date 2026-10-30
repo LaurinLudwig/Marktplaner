@@ -18,7 +18,7 @@ import { parseProjectFile, toProjectFile } from './model/schema';
 import type { Category } from './model/types';
 
 const list = (names: [string, string][]): CategoryList => ({ id: 'x', name: 'Test', builtin: false, entries: names.map(([name, color]) => ({ name, color })) });
-const cat = (id: string, name: string, color = '#000000'): Category => ({ id, name, color, minDistance: null });
+const cat = (id: string, name: string, color = '#000000'): Category => ({ id, name, color, minDistance: null, price: null });
 
 describe('#1 Mitgelieferte Kategorielisten', () => {
   it('Namen sind je Liste eindeutig, Farben gültig, Kategorien gut unterscheidbar (keine doppelte Farbe)', () => {
@@ -66,7 +66,7 @@ describe('#1 Mitgelieferte Kategorielisten', () => {
     const r = applyCategoryList(current, list([['Ausschank', '#333333'], ['IMBISS', '#222222'], ['Imbiss', '#444444']]), 'replace');
     expect(r.removed).toEqual(['a']);
     expect(r.categories.map((c) => c.name)).toEqual(['Ausschank', 'IMBISS']);
-    expect(r.categories[1]).toEqual({ id: 'b', name: 'IMBISS', color: '#222222', minDistance: null });
+    expect(r.categories[1]).toEqual({ id: 'b', name: 'IMBISS', color: '#222222', minDistance: null, price: null });
     expect(r.categories[0]!.id).not.toBe('a');
   });
 });
@@ -81,8 +81,8 @@ describe('#2 Eigene Kategorielisten', () => {
     expect(back.id).not.toBe(own.id);
     expect(back.name).toBe('Schelmenmarkt');
     expect(back.entries).toEqual([
-      { name: 'Imbiss', color: '#f0a35e', minDistance: null },
-      { name: 'Ausschank', color: '#f2d15c', minDistance: null },
+      { name: 'Imbiss', color: '#f0a35e', minDistance: null, price: null },
+      { name: 'Ausschank', color: '#f2d15c', minDistance: null, price: null },
     ]);
     expect(parseCategoryListFile(`\uFEFF${text}`).entries).toHaveLength(2);
     expect(categoryListFileName({ ...own, name: 'Markt: 2027/neu' })).toBe('Kategorien Markt- 2027-neu.json');
@@ -105,11 +105,11 @@ describe('#2 Eigene Kategorielisten', () => {
     // Ungültige Einträge fallen weg, doppelte Namen zählen einmal, fehlender Name wird ersetzt
     const ok = parseCategoryListFile(file({ name: ' ', categories: [{ name: 'A', color: '#aabbcc' }, { name: 'a', color: '#000000' }, { name: 'B' }] }));
     expect(ok.name).toBe('Importierte Liste');
-    expect(ok.entries).toEqual([{ name: 'A', color: '#aabbcc', minDistance: null }]);
+    expect(ok.entries).toEqual([{ name: 'A', color: '#aabbcc', minDistance: null, price: null }]);
   });
 
   it('gespeicherte Listen: Beschädigtes fällt mit Hinweis weg, mitgelieferte IDs sind tabu', () => {
-    const good = { id: 'l1', name: 'Eigene', builtin: false, entries: [{ name: 'A', color: '#aabbcc', minDistance: 25 }] };
+    const good = { id: 'l1', name: 'Eigene', builtin: false, entries: [{ name: 'A', color: '#aabbcc', minDistance: 25, price: null }] };
     expect(loadOwnLists(undefined)).toEqual({ lists: [] });
     expect(loadOwnLists([good])).toEqual({ lists: [good] });
     expect(loadOwnLists('kaputt').error).toMatch(/beschädigt/);
@@ -124,5 +124,20 @@ describe('#2 Eigene Kategorielisten', () => {
     expect(uniqueListName('jahrmarkt klein', lists)).toBe('jahrmarkt klein (2)');
     expect(uniqueListName(' Markt ', lists)).toBe('Markt (2)');
     expect(uniqueListName('  ', lists)).toBe('Eigene Liste');
+  });
+});
+
+describe('#5 Sonderpreise in Kategorielisten', () => {
+  it('speichern, Datei hin und zurück, ungültige Preise fallen weg; ersetzen übernimmt, ergänzen lässt Bestehendes', () => {
+    const own = listFromCategories('Preise', [{ ...cat('a', 'Imbiss'), price: { kind: 'perMeter', amount: 40 } }, { ...cat('b', 'Karussell'), price: { kind: 'flat', amount: 500 } }]);
+    const back = parseCategoryListFile(encodeCategoryListFile(own));
+    expect(back.entries.map((e) => e.price)).toEqual([{ kind: 'perMeter', amount: 40 }, { kind: 'flat', amount: 500 }]);
+    const broken = parseCategoryListFile(JSON.stringify({ format: 'marktplaner-kategorien', version: 1, name: 'X', categories: [{ name: 'A', color: '#aabbcc', price: { kind: 'flat', amount: -1 } }] }));
+    expect(broken.entries[0]!.price).toBeNull();
+
+    const current = [{ ...cat('x', 'Imbiss'), price: { kind: 'flat' as const, amount: 1 } }];
+    expect(applyCategoryList(current, back, 'replace').categories[0]).toMatchObject({ id: 'x', price: { kind: 'perMeter', amount: 40 } });
+    const merged = applyCategoryList(current, back, 'merge').categories;
+    expect(merged.map((c) => c.price)).toEqual([{ kind: 'flat', amount: 1 }, { kind: 'flat', amount: 500 }]);
   });
 });

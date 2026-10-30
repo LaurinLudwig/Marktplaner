@@ -221,7 +221,7 @@ describe('Kopieren (M3-16)', () => {
 describe('Projektdatei: Grundflächen, Geschäfte, Kategorien (M3-01)', () => {
   it('Rundreise erhält alle Felder', () => {
     const p = createProject('T');
-    p.categories.push({ id: 'c1', name: 'Imbiss', color: '#e57373', minDistance: null });
+    p.categories.push({ id: 'c1', name: 'Imbiss', color: '#e57373', minDistance: null, price: null });
     p.pages[0]!.areas.push(createArea({ cx: 1, cy: 2, w: 50, d: 10, rot: 15 }, 'Nord'));
     p.pages[0]!.stands.push(createStand({ cx: 3, cy: 4, w: 3, d: 2, rot: 0 }, { categoryId: 'c1', color: '#ffffff', connection: 'CEE16', powerKw: 11 }));
     expect(parseProjectFile(JSON.parse(JSON.stringify(toProjectFile(p))))).toEqual(p);

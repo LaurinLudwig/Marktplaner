@@ -9,8 +9,8 @@ import { normAngle, roundRect, setFront } from '../core/geometry/rect';
 import { allSelectable } from '../core/hit';
 import { newId } from '../core/id';
 import { clampToLimits, createInfra, fitRect, INFRA_LIMITS } from '../core/infra';
-import { clampMinPassage, clampSnapGap } from '../core/model/schema';
-import type { Area, Category, EdgeIndex, FestplatzPage, Id, InfraObject, Project, Rect, Stand } from '../core/model/types';
+import { clampMinPassage, clampPrice, clampSnapGap, VAT_LIMITS } from '../core/model/schema';
+import type { Area, Category, EdgeIndex, FestplatzPage, Id, InfraObject, PricingSettings, Project, Rect, Stand } from '../core/model/types';
 import { cloneObjects, createArea, createStand, findObjects, LIMITS, MIN_DRAW_SIZE, PALETTE, STAND_DEFAULT, type Clipboard, type ObjectKind } from '../core/objects';
 import { groupCenter, moveRects, type RectMap } from '../core/transform';
 import type { Bounds } from '../core/viewport';
@@ -369,13 +369,14 @@ export function addCategory(): Id {
   let i = cats.length + 1;
   while (names.has(`Kategorie ${i}`)) i++;
   const used = new Set(cats.map((c) => c.color));
-  const cat: Category = { id: newId(), name: `Kategorie ${i}`, color: PALETTE.find((c) => !used.has(c)) ?? PALETTE[cats.length % PALETTE.length]!, minDistance: null };
+  const cat: Category = { id: newId(), name: `Kategorie ${i}`, color: PALETTE.find((c) => !used.has(c)) ?? PALETTE[cats.length % PALETTE.length]!, minDistance: null, price: null };
   st().change('Kategorie anlegen', (p) => void p.categories.push(cat));
   return cat.id;
 }
 
 export function updateCategory(id: Id, patch: Partial<Omit<Category, 'id'>>) {
-  const label = patch.minDistance !== undefined ? 'Mindestabstand ändern' : patch.color !== undefined ? 'Kategorie umfärben' : 'Kategorie umbenennen';
+  const label =
+    patch.price !== undefined ? 'Sonderpreis ändern' : patch.minDistance !== undefined ? 'Mindestabstand ändern' : patch.color !== undefined ? 'Kategorie umfärben' : 'Kategorie umbenennen';
   st().change(label, (p) => {
     const c = p.categories.find((x) => x.id === id);
     if (c) Object.assign(c, patch);
@@ -449,6 +450,14 @@ export function setSnapGap(gap: number) {
 export function setDefaultStandColor(color: string) {
   if (!/^#[0-9a-f]{6}$/i.test(color)) return;
   st().change('Standardfarbe ändern', (p) => void (p.settings.defaultStandColor = color.toLowerCase()));
+}
+
+/** Standgeld (#5): Preis je Frontmeter (null = keiner), Rundung, MwSt-Satz; ein Undo-Schritt. */
+export function setPricing(patch: Partial<PricingSettings>) {
+  const label = patch.perMeter !== undefined ? 'Preis je Frontmeter ändern' : patch.vatRate !== undefined ? 'MwSt-Satz ändern' : 'Rundung der Frontmeter ändern';
+  const pricing = { ...st().project.settings.pricing, ...patch };
+  const next: PricingSettings = { perMeter: clampPrice(pricing.perMeter), roundUpMeters: pricing.roundUpMeters, vatRate: Math.round(Math.min(VAT_LIMITS.max, Math.max(VAT_LIMITS.min, pricing.vatRate)) * 100) / 100 };
+  st().change(label, (p) => void (p.settings.pricing = next));
 }
 
 export type WarningKind = 'outside' | 'overlap' | 'duplicate' | 'infra' | 'distance';

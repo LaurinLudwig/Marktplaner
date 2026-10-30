@@ -2,7 +2,8 @@ import { safeFileName, toCsv, withExportNote, type CsvCell } from '../core/csv';
 import { userMessage } from '../core/errors';
 import type { StandRow } from '../core/standTable';
 import { platform } from '../platform';
-import { useStartPage, type StandColumn } from '../state/startPage';
+import { hasPricing } from '../core/fee';
+import { FEE_COLUMNS, useStartPage, type StandColumn } from '../state/startPage';
 import { useStore } from '../state/store';
 import { showError } from './dialogs';
 import { notify } from './notify';
@@ -22,15 +23,21 @@ const STAND_CSV: Record<StandColumn, { header: string; value: (r: StandRow) => C
   d: { header: 'Tiefe (m)', value: (r) => r.stand.d },
   power: { header: 'Strom (kW)', value: (r) => r.stand.powerKw },
   connection: { header: 'Anschlussart', value: connectionText },
+  fee: { header: 'Standgeld netto (€)', value: (r) => r.fee?.net ?? null },
+  feeGross: { header: 'Standgeld brutto (€)', value: (r) => r.fee?.gross ?? null },
   warnings: { header: 'Warnungen', value: warningText },
   note: { header: 'Notiz', value: (r) => r.stand.note },
 };
 
 /** Spalten in Tabellen-Reihenfolge; Name ist immer dabei. */
-export const STAND_COLUMN_ORDER: readonly StandColumn[] = ['page', 'nr', 'name', 'owner', 'ware', 'category', 'w', 'd', 'power', 'connection', 'warnings', 'note'];
+export const STAND_COLUMN_ORDER: readonly StandColumn[] = ['page', 'nr', 'name', 'owner', 'ware', 'category', 'w', 'd', 'power', 'connection', 'fee', 'feeGross', 'warnings', 'note'];
 
-export function standCsv(rows: readonly StandRow[], hidden: readonly StandColumn[]): string {
-  const cols = STAND_COLUMN_ORDER.filter((c) => c === 'name' || !hidden.includes(c));
+/** Sichtbare Spalten: Name immer; Standgeld nur mit festgelegtem Preis (#5). */
+export const visibleStandColumns = (hidden: readonly StandColumn[], withFee: boolean) =>
+  STAND_COLUMN_ORDER.filter((c) => c === 'name' || (!hidden.includes(c) && (withFee || !FEE_COLUMNS.includes(c))));
+
+export function standCsv(rows: readonly StandRow[], hidden: readonly StandColumn[], withFee: boolean): string {
+  const cols = visibleStandColumns(hidden, withFee);
   return toCsv(
     cols.map((c) => STAND_CSV[c].header),
     rows.map((r) => cols.map((c) => STAND_CSV[c].value(r))),
@@ -69,7 +76,7 @@ export async function exportCurrentList() {
     );
     what = 'Infrastruktur';
   } else {
-    csv = standCsv(displayedStandRows(project, st).rows, st.hidden);
+    csv = standCsv(displayedStandRows(project, st).rows, st.hidden, hasPricing(project.settings.pricing, project.categories));
     what = 'Geschäfte';
   }
   const name = `${safeFileName(project.name)} – ${what}.csv`;

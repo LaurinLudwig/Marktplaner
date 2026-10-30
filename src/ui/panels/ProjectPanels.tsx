@@ -1,10 +1,11 @@
 import { useRef, useState, type HTMLAttributes, type PointerEvent as ReactPointerEvent } from 'react';
 import { loadListInteractive, openCategoryListManager } from '../../app/categoryLists';
 import { confirm } from '../../app/dialogs';
+import { fmtInput } from '../../core/format';
 import { LABEL_PLACEHOLDERS } from '../../core/label';
 import { MIN_FREE_WIDTH } from '../../core/freeSpace';
-import type { Category, FestplatzPage, Id, LayerId } from '../../core/model/types';
-import { MIN_DISTANCE_LIMITS, SNAP_GAP_LIMITS } from '../../core/model/schema';
+import type { Category, CategoryPrice, FestplatzPage, Id, LayerId } from '../../core/model/types';
+import { MIN_DISTANCE_LIMITS, PRICE_LIMITS, SNAP_GAP_LIMITS, VAT_LIMITS } from '../../core/model/schema';
 import { DEFAULT_STAND_COLOR } from '../../core/objects';
 import {
   addCategory,
@@ -15,6 +16,7 @@ import {
   setLabelFontSize,
   setLabelTemplate,
   setMinFreeWidth,
+  setPricing,
   setSnapGap,
   setWarningsEnabled,
   updateCategory,
@@ -207,6 +209,90 @@ export function CategoryPanel() {
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Standgeld (#5): Preis je Frontmeter, MwSt-Satz, Rundung und Sonderpreise je Kategorie (eigener Preis je Frontmeter
+ * oder Pauschale). Alle Preise netto.
+ */
+export function PricingPanel() {
+  const pricing = useStore((s) => s.project.settings.pricing);
+  const categories = useStore((s) => s.project.categories);
+  return (
+    <section className="panel" aria-label="Standgeld">
+      <div className="panel-head">
+        <span>Standgeld</span>
+        <span className="panel-badge muted">projektweit</span>
+      </div>
+      <div className="panel-body form">
+        <div className="fields-2">
+          <NumberField
+            id="price-per-meter"
+            label="Preis je Frontmeter (netto)"
+            unit="€"
+            value={pricing.perMeter}
+            min={PRICE_LIMITS.min}
+            max={PRICE_LIMITS.max}
+            step={1}
+            placeholder="–"
+            onCommit={(perMeter) => setPricing({ perMeter })}
+            onClear={() => setPricing({ perMeter: null })}
+          />
+          <NumberField id="vat-rate" label="MwSt-Satz" unit="%" value={pricing.vatRate} min={VAT_LIMITS.min} max={VAT_LIMITS.max} step={1} onCommit={(vatRate) => setPricing({ vatRate })} />
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={pricing.roundUpMeters} onChange={(e) => setPricing({ roundUpMeters: e.target.checked })} />
+          Angefangene Meter voll berechnen (4,30 m → 5 m)
+        </label>
+        {categories.length > 0 && (
+          <div className="price-list" role="group" aria-label="Sonderpreise je Kategorie">
+            <div className="price-list-head">Sonderpreise je Kategorie</div>
+            {categories.map((c) => (
+              <CategoryPriceRow key={c.id} cat={c} fallback={pricing.perMeter} />
+            ))}
+          </div>
+        )}
+        <p className="hint">
+          Netto, Breite = Frontmeter. Ohne Sonderpreis gilt der Preis je Frontmeter; ist keiner festgelegt, zeigt die App kein Standgeld. Brutto = netto + MwSt, je Stand auf Cent gerundet.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+type PriceKind = CategoryPrice['kind'] | 'project';
+
+function CategoryPriceRow({ cat, fallback }: { cat: Category; fallback: number | null }) {
+  const kind: PriceKind = cat.price?.kind ?? 'project';
+  const setKind = (k: PriceKind) => updateCategory(cat.id, { price: k === 'project' ? null : { kind: k, amount: cat.price?.amount ?? fallback ?? 0 } });
+  return (
+    <div className="price-row" data-testid="category-price-row">
+      <span className="price-name" title={cat.name}>
+        <span className="swatch" style={{ background: cat.color }} aria-hidden="true" />
+        <span>{cat.name}</span>
+      </span>
+      <select id={`cat-price-kind-${cat.id}`} aria-label={`Preis für „${cat.name}“`} value={kind} onChange={(e) => setKind(e.target.value as PriceKind)}>
+        <option value="project">wie Projekt</option>
+        <option value="perMeter">je Frontmeter</option>
+        <option value="flat">Pauschale</option>
+      </select>
+      {cat.price ? (
+        <NumberField
+          id={`cat-price-${cat.id}`}
+          className="price-amount"
+          label={cat.price.kind === 'flat' ? `Pauschale für „${cat.name}“` : `Preis je Frontmeter für „${cat.name}“`}
+          unit={cat.price.kind === 'flat' ? '€' : '€/m'}
+          value={cat.price.amount}
+          min={PRICE_LIMITS.min}
+          max={PRICE_LIMITS.max}
+          step={1}
+          onCommit={(amount) => updateCategory(cat.id, { price: { kind: cat.price!.kind, amount: Math.round(amount * 100) / 100 } })}
+        />
+      ) : (
+        <span className="price-amount muted">{fallback === null ? '–' : `${fmtInput(fallback)} €/m`}</span>
+      )}
+    </div>
   );
 }
 

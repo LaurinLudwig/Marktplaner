@@ -5,7 +5,8 @@ import { PASSAGE_TYPE_ID, typeMap } from '../../core/infra';
 import { STAND_SHAPES, type Area, type Connection, type EdgeIndex, type FestplatzPage, type InfraObject, type Stand } from '../../core/model/types';
 import { cachedDuplicates } from '../../core/numbering';
 import { SHAPE_LABEL } from '../../core/shape';
-import { fmt } from '../../core/format';
+import { feesOf, fmtEuro, hasPricing, sumFees, type Fee } from '../../core/fee';
+import { fmt, fmtInput } from '../../core/format';
 import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, fmtGap } from '../../core/warnings';
 import { Icon } from '../icons/Icon';
 import { tip } from '../shortcuts/tip';
@@ -312,6 +313,7 @@ function StandFields({ pageId, stands }: { pageId: string; stands: Stand[] }) {
           </p>
         )}
       </div>
+      <FeeInfo stands={stands} />
       <ColorField
         id="st-color"
         label={mixedColor ? 'Eigene Farbe (unterschiedlich)' : 'Eigene Farbe'}
@@ -323,6 +325,47 @@ function StandFields({ pageId, stands }: { pageId: string; stands: Stand[] }) {
       />
       <TextField id="st-note" label="Notiz" value={text('note')} multiline onCommit={(note) => set({ note }, 'Notiz ändern')} />
     </>
+  );
+}
+
+/** Wie sich das Standgeld eines Stands ergibt: „4,3 m × 25 €“ bzw. „Pauschale der Kategorie“. */
+function feeBasis(f: Fee): string {
+  if (f.source === 'flat') return 'Pauschale der Kategorie';
+  return `${fmtInput(f.meters)} m × ${fmtEuro(f.rate)}${f.source === 'perMeter' ? ' (Sonderpreis der Kategorie)' : ''}`;
+}
+
+/**
+ * Standgeld (#5, nur Anzeige): netto und brutto, bei mehreren Ständen die Summe. Nur, wenn im Projekt ein Preis
+ * festgelegt ist; die Preise stehen in den Projekteinstellungen.
+ */
+function FeeInfo({ stands }: { stands: Stand[] }) {
+  const pricing = useStore((s) => s.project.settings.pricing);
+  const categories = useStore((s) => s.project.categories);
+  if (!hasPricing(pricing, categories)) return null;
+  const fees = feesOf(stands, categories, pricing);
+  const sum = sumFees(fees);
+  const single = stands.length === 1 ? fees[0] : undefined;
+  return (
+    <div className="field fee-info" data-testid="fee-info">
+      <span className="field-label">{stands.length === 1 ? 'Standgeld' : `Standgeld (${stands.length} Stände)`}</span>
+      {sum.count ? (
+        <>
+          <span>
+            <b>{fmtEuro(sum.net)}</b> netto · {fmtEuro(sum.gross)} brutto
+          </span>
+          {single && <span className="hint">{feeBasis(single)}</span>}
+          {stands.length > 1 && sum.count < stands.length && <span className="hint">{stands.length - sum.count} ohne Preis</span>}
+        </>
+      ) : (
+        <span className="hint">
+          Kein Preis festgelegt (
+          <button type="button" className="link-btn" onClick={() => openProjectSettings()}>
+            Projekteinstellungen
+          </button>
+          )
+        </span>
+      )}
+    </div>
   );
 }
 
