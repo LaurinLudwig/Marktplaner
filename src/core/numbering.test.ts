@@ -337,6 +337,48 @@ describe('#12 Eigene Richtung über zwei Punkte', () => {
   });
 });
 
+describe('#12 Grenzfälle', () => {
+  it('große Koordinaten (100 km) und lange Richtung bleiben ganzzahlig exakt, 0,01 m entscheidet weiter', () => {
+    // Skalarprodukt bis ca. 2 · 10⁷ cm · 10⁷ cm = 2 · 10¹⁴, weit unter 2⁵³
+    const dir = { from: { x: -100_000, y: -100_000 }, to: { x: 100_000, y: 99_999.99 } };
+    const axes = directionAxes(dir)!;
+    expect(axes.main).toEqual({ x: 20_000_000, y: 19_999_999 });
+    const a = st('a', 50_000, 50_000);
+    const b = st('b', 50_000.01, 50_000);
+    const c = st('c', 50_000, 50_000.01);
+    for (const list of [[a, b, c], [c, b, a], [b, a, c]]) expect(ids(orderAlong(list, axes))).toEqual(['a', 'c', 'b']);
+    expect(ids(orderAlong([b, a], FIXED_AXES.rightToLeft))).toEqual(['b', 'a']);
+  });
+
+  it('Stand genau im Mittelpunkt: in beiden Drehsinnen zuerst; Gleichstand im Winkel in beiden Drehsinnen gleich aufgelöst', () => {
+    const cw = { center: { x: 0, y: 0 }, startAngle: 0 };
+    const list = [st('E', 10, 0), st('m', 0.004, 0), st('W', -10, 0), st('Wfern', -20, 0)];
+    expect(ids(orderClockwise(list, cw, 0, 1))).toEqual(['m', 'E', 'W', 'Wfern']);
+    expect(ids(orderClockwise(list, cw, 0, -1))).toEqual(['m', 'W', 'Wfern', 'E']);
+  });
+
+  it('gegen den Uhrzeigersinn: Neu nummerieren mit Startnummer und fixierter Nummer', () => {
+    const cw = { center: { x: 0, y: 0 }, startAngle: 0 };
+    const stands = [st('N', 0, -10), st('E', 10, 0, { nr: '11', nrLocked: true }), st('S', 0, 10), st('W', -10, 0)];
+    const plan = planRenumber(project([page('p', { numberingMode: 'counterClockwise', clockwise: cw, stands })], { start: 10 }), 'p');
+    expect(plan.changes.map((c) => [c.standId, c.next])).toEqual([
+      ['N', '10'],
+      ['W', '12'],
+      ['S', '13'],
+    ]);
+    expect(plan.fixed).toBe(1);
+  });
+
+  it('eigene Richtung ohne gesetzte Punkte: Vorgabe aus den Ständen, auch für gedrehte Stände über ihre Hülle', () => {
+    const r = st('r', 10, 0, { w: 4, d: 2, rot: 90 });
+    expect(defaultDirection(page('p', { stands: [r, st('a', 0, 0)] }))).toEqual({ from: { x: -1, y: 0 }, to: { x: 11, y: 0 } });
+    // ohne Objekte: keine Reihenfolge, aber auch kein Hinweis (nichts zu nummerieren)
+    const empty = page('leer', { numberingMode: 'direction' });
+    expect(orderStands(empty)).toEqual([]);
+    expect(numberingIssue(empty)).toBeNull();
+  });
+});
+
 describe('#12 Reihenfolge: Eigenschaften (QA-M5-01) für alle Richtungen und Drehsinne', () => {
   const standsArb = fc
     .uniqueArray(fc.record({ x: fc.integer({ min: -30, max: 30 }), y: fc.integer({ min: -30, max: 30 }) }), { minLength: 1, maxLength: 25, selector: (p) => `${p.x}|${p.y}` })

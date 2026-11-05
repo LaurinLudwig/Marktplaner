@@ -25,9 +25,16 @@ export function useDirectionTool(ctx: ToolContext, active: boolean): ToolHandler
   const [hover, setHover] = useState<SnapResult | null>(null);
   const [cursor, setCursor] = useState<Vec | null>(null);
   const [from, setFrom] = useState<Vec | null>(null);
-  // Anderes Werkzeug gewählt (nicht nur Leertaste zum Verschieben der Ansicht): angefangenen Startpunkt verwerfen
+  // Anderes Werkzeug oder andere Page gewählt (nicht nur Leertaste zum Verschieben der Ansicht): angefangenen
+  // Startpunkt verwerfen, sonst ginge A einer Page in die Richtung der nächsten ein (Zurücksetzen beim Rendern)
   const selected = useStore((s) => s.ui.tool === 'numberDirection');
-  if (!selected && from) setFrom(null);
+  const key = selected ? ctx.page.id : '';
+  const [prevKey, setPrevKey] = useState(key);
+  if (key !== prevKey) {
+    setPrevKey(key);
+    setFrom(null);
+    setHover(null);
+  }
   const done = () => {
     setFrom(null);
     setHover(null);
