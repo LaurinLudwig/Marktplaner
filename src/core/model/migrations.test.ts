@@ -697,6 +697,7 @@ describe('Migration 13 → 14 (#13: Blatt ohne festes Papierformat)', () => {
         { id: 'b' },
         { id: 'c', sheet: { format: 'plan', margin: 20, targetWidth: 1000, region: { cx: 1, cy: 2, w: 3, h: 4 } } },
         'kaputt',
+        { id: 'd', sheet: { format: 'A5', orientation: 'portrait', scale: 250 } },
       ],
     };
     const before = structuredClone(v13);
@@ -704,8 +705,12 @@ describe('Migration 13 → 14 (#13: Blatt ohne festes Papierformat)', () => {
     expect(v13).toEqual(before);
     expect(v14.pages[0].sheet).toEqual({ format: 'A1', orientation: 'portrait', scale: 500, cx: 3, cy: 4, margin: null, targetWidth: 841, region: null });
     expect(v14.pages[1].sheet).toEqual({ format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null });
-    expect(v14.pages[2].sheet).toMatchObject({ format: 'plan', margin: 20, targetWidth: 1000, region: { cx: 1, cy: 2, w: 3, h: 4 } });
+    // Vor Version 14 gab es nur DIN: Ein anderes Format wird wie vor #13 zu A3 (nicht zum neuen Standard „Plan“; vom Tester)
+    expect(v14.pages[2].sheet).toMatchObject({ format: 'A3', margin: 20, targetWidth: 1000, region: { cx: 1, cy: 2, w: 3, h: 4 } });
     expect(v14.pages[3]).toBe('kaputt');
+    expect(v14.pages[4].sheet).toEqual({ format: 'A3', orientation: 'portrait', scale: 250, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null });
+    const loaded = parseProjectFile({ format: 'schelmeplaner', schemaVersion: 13, project: { id: 'x', pages: [{ id: 'p', name: 'P', sheet: { format: 'A5', orientation: 'portrait', scale: 250, cx: 1, cy: 2 } }] } });
+    expect(loaded.pages[0]!.sheet).toEqual({ format: 'A3', orientation: 'portrait', scale: 250, cx: 1, cy: 2, margin: null, targetWidth: 841, region: null });
     expect((MIGRATIONS[13]!({ id: 'x', pages: 'kaputt' }) as any).pages).toBe('kaputt');
   });
 

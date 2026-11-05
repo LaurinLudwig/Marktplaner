@@ -15,12 +15,11 @@ import {
   type ExportDpi,
   type ExportProfile,
   type WarningMode,
-  profileLayers,
 } from '../../core/exportProfiles';
 import { fmt } from '../../core/format';
 import { SCALE_LIMITS, TARGET_WIDTH_LIMITS } from '../../core/model/schema';
-import type { FestplatzPage, Project } from '../../core/model/types';
-import { pagePaper } from '../../core/paper';
+import type { FestplatzPage } from '../../core/model/types';
+import { exportFrame } from '../../core/paper';
 import { exceedsPdfLimit, isFreeFormat, paperSizeText, PDF_MAX_MM, sheetLabel } from '../../core/sheet';
 import { addProfile, deleteProfile, loadExportSettings, resetProfile, selectProfile, setExportDpi, updateProfile, useExportSettings } from '../../state/exportSettings';
 import { fixSheetScale, setSheet } from '../../state/paper';
@@ -127,6 +126,7 @@ function ExportDialogBody() {
                     checked={all || scope.pageIds!.includes(p.id)}
                     disabled={all}
                     previewed={p.id === previewPageId}
+                    profile={profile}
                     onToggle={(on) => togglePage(p.id, on)}
                   />
                 ))}
@@ -192,12 +192,13 @@ function profileSummary(p: ExportProfile): string {
  * Zeile je Page: Häkchen, Name (Klick = Vorschau) und Blatt (Format, Ausrichtung, Maßstab bzw. Zielbreite), darunter
  * das Papiermaß in mm (#13) und gegebenenfalls die Warnung für Seiten über 5 080 mm.
  */
-function PageRow({ page, checked, disabled, previewed, onToggle }: { page: FestplatzPage; checked: boolean; disabled: boolean; previewed: boolean; onToggle: (on: boolean) => void }) {
+function PageRow({ page, checked, disabled, previewed, profile, onToggle }: { page: FestplatzPage; checked: boolean; disabled: boolean; previewed: boolean; profile: ExportProfile; onToggle: (on: boolean) => void }) {
   const project = useStore((s) => s.project);
   const s = page.sheet;
   const auto = s.scale === null;
   const free = isFreeFormat(s.format);
-  const frame = pagePaper(page, project).frame;
+  // Maß und Maßstab wie im PDF: Die Legende folgt den Ebenen des Profils (beim Plan ändert das das Papiermaß)
+  const frame = exportFrame(page, project, profile);
   return (
     <div className={`export-page${previewed ? ' previewed' : ''}`} role="listitem" data-testid="export-page">
       <input type="checkbox" aria-label={`${page.name} exportieren`} checked={checked} disabled={disabled} onChange={(e) => onToggle(e.target.checked)} />
@@ -375,7 +376,7 @@ function Preview({ pageId, profile }: { pageId: string | null; profile: ExportPr
   const error = !busy ? result?.error : null;
   const page = project.pages.find((p) => p.id === pageId);
   // Maß und Maßstab der Seite im PDF (Ebenen des Profils, wie die Vorschau selbst)
-  const frame = page && buildPreviewFrame(page, project, profile);
+  const frame = page && exportFrame(page, project, profile);
   return (
     <div className="export-preview" aria-label="Vorschau" data-testid="export-preview" data-state={busy ? 'busy' : error ? 'error' : 'ok'}>
       <div className="export-preview-head">
@@ -394,9 +395,4 @@ function Preview({ pageId, profile }: { pageId: string | null; profile: ExportPr
       </div>
     </div>
   );
-}
-
-/** Blatt der Page, wie es im PDF erscheint: Die Legende folgt den Ebenen des Profils (§8). */
-function buildPreviewFrame(page: FestplatzPage, project: Project, profile: ExportProfile) {
-  return pagePaper(page, project, profileLayers(profile)).frame;
 }

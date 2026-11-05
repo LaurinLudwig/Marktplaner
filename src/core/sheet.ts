@@ -202,9 +202,10 @@ export interface PlanPaper {
 /**
  * Papier eines Plans bei Maßstab 1:n (#13): Inhalt plus Rand; jedes sichtbare Papier-Element bekommt ein Band an
  * seiner Ecke, damit es keinen Inhalt verdeckt. Ein Element wächst entweder oben/unten (Band = Abstand + Höhe + 3 mm)
- * oder links/rechts (Abstand + Breite + 3 mm); gewählt wird die Verteilung mit der kleinsten Papierfläche (bei
- * Gleichstand oben/unten). Elemente an derselben Blattkante müssen nebeneinander passen, sonst wird das Blatt breiter
- * bzw. höher (Inhalt bleibt mittig). Das Maß wird auf volle mm aufgerundet; der Rest verteilt sich auf beide Seiten.
+ * oder links/rechts (Abstand + Breite + 3 mm); gewählt wird die Verteilung mit der kleinsten Papierfläche, bei
+ * der sich keine Elemente überdecken (bei Gleichstand oben/unten). Elemente an derselben Blattkante müssen
+ * nebeneinander passen, sonst wird das Blatt breiter bzw. höher (Inhalt bleibt mittig). Das Maß wird auf volle mm
+ * aufgerundet; der Rest verteilt sich auf beide Seiten.
  */
 export function planPaper(content: Bounds, n: number, margin: number | null, elements: SheetElements = []): PlanPaper {
   const cw = mToMm(content.maxX - content.minX, n);
@@ -240,9 +241,21 @@ export function planPaper(content: Bounds, n: number, margin: number | null, ele
     const h = Math.ceil(Math.max(top + ch + bottom, minH) - 1e-6);
     const ex = (w - (left + cw + right)) / 2;
     const ey = (h - (top + ch + bottom)) / 2;
+    // Elemente an verschiedenen Ecken dürfen sich nicht überdecken (z. B. hohe Legende rechts neben einem breiten
+    // Maßstabsbalken oben bei schmalem Inhalt). Alles oben/unten (mask 0) überdeckt sich nie, gibt es also immer.
+    if (mask && overlapping(els, { w, h })) continue;
     if (!best || w * h < best.w * best.h - 1e-9) best = { w, h, left: left + ex, right: right + ex, top: top + ey, bottom: bottom + ey, margin: m, layoutHeight };
   }
   return best!;
+}
+
+/** Überdecken sich zwei Papier-Elemente an verschiedenen Ecken auf dem Papier `paper` (mm)? */
+function overlapping(els: readonly SheetElement[], paper: { w: number; h: number }): boolean {
+  const eps = 1e-6;
+  const r = els.map((e) => ({ corner: e.corner, ...anchorToPaper(e, e, paper), w: e.w, h: e.h }));
+  return r.some((a, i) =>
+    r.some((b, j) => j > i && a.corner !== b.corner && a.x < b.x + b.w - eps && b.x < a.x + a.w - eps && a.y < b.y + b.h - eps && b.y < a.y + a.h - eps),
+  );
 }
 
 /** Kleinster Maßstab (volle 10), bei dem das Papier höchstens `targetWidth` mm breit ist. */

@@ -2,6 +2,7 @@
  * Papier-Elemente einer Page zusammengestellt (M7, M8, spec.md §8): Blatt, Schriftfeld, Legende, Maßstabsbalken und
  * Nordpfeil mit ihrer Lage auf dem Plan. Gemeinsam für Zeichenfläche, Befehle (Ziehen, Pfeiltasten) und PDF-Export.
  */
+import { profileLayers, type ExportProfile } from './exportProfiles';
 import { pageFree } from './hiddenFree';
 import { legendEntries, legendLayout, type LegendLayout } from './legend';
 import type { FestplatzPage, LayerId, LayerState, PaperAnchor, Project, Vec } from './model/types';
@@ -107,4 +108,13 @@ export function paperElementAt(page: Pick<FestplatzPage, PaperKind | 'layers'>, 
     if (b && w.x >= b.minX && w.x <= b.maxX && w.y >= b.minY && w.y <= b.maxY) return kind;
   }
   return null;
+}
+
+/**
+ * Blatt der Page im PDF (§9): Die Legende entsteht aus den Ebenen des Export-Profils; beim Plan hängt davon auch das
+ * Papiermaß ab (#13). Für Export-Dialog, Vorschau, gerasterte Hintergründe und Größenschätzung, damit alle dasselbe
+ * Blatt wie `pageScene` verwenden.
+ */
+export function exportFrame(page: FestplatzPage, project: ProjectPart, profile: ExportProfile): SheetFrame {
+  return pagePaper(page, project, profileLayers(profile)).frame;
 }

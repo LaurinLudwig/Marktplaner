@@ -39,6 +39,8 @@ type Migration = (project: Obj) => Obj;
 
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 /** Wendet `fn` auf jedes Element an; alles andere als ein Array bleibt unverändert (die Prüfung macht schema.ts). */
+/** DIN-Formate bis Formatversion 13 (#13). */
+const DIN_FORMATS = ['A4', 'A3', 'A2', 'A1', 'A0'];
 const mapList = (v: unknown, fn: (x: unknown) => unknown) => (Array.isArray(v) ? v.map(fn) : v);
 
 /** MIGRATIONS[n] hebt ein Projekt von Version n auf n+1. */
@@ -165,7 +167,9 @@ export const MIGRATIONS: Record<number, Migration> = {
     pages: mapList(p.pages, (pg) => {
       if (!isObj(pg)) return pg;
       const sheet = isObj(pg.sheet) ? pg.sheet : {};
-      return { ...pg, sheet: { format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null, ...sheet } };
+      // Ungültiges Format: wie vor #13 A3 (beim Laden würde es sonst zum neuen Standard „Plan“)
+      const format = typeof sheet.format === 'string' && DIN_FORMATS.includes(sheet.format) ? sheet.format : 'A3';
+      return { ...pg, sheet: { orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null, ...sheet, format } };
     }),
   }),
 };

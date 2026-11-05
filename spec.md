@@ -542,8 +542,8 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
       gerundet, mindestens 10 mm.
     - Das Blatt wächst um die sichtbaren Papier-Elemente, statt sie über den Inhalt zu legen: Jedes Element bekommt an
       seiner Ecke ein Band, entweder oben/unten (Abstand + Höhe + 3 mm) oder links/rechts (Abstand + Breite + 3 mm);
-      jede Seite ist mindestens so breit wie der Rand. Gewählt wird die Verteilung mit der kleinsten Papierfläche (bei
-      Gleichstand oben/unten). Elemente an derselben Blattkante müssen nebeneinander passen; sonst wird das Blatt
+      jede Seite ist mindestens so breit wie der Rand. Gewählt wird die Verteilung mit der kleinsten Papierfläche, bei
+      der sich keine Elemente überdecken (bei Gleichstand oben/unten). Elemente an derselben Blattkante müssen nebeneinander passen; sonst wird das Blatt
       breiter bzw. höher. Die Legende bricht nach der Höhe Inhalt + 2 × Rand um.
     - Das Papiermaß wird auf volle mm aufgerundet; der Rest verteilt sich gleich auf beide Seiten.
   - **„Ausschnitt“:** ein achsenparalleles Rechteck auf dem Plan (ohne Drehung); exportiert wird genau dieser

@@ -2,8 +2,10 @@ import * as fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { createPage, createProject, DEFAULT_SHEET, LEGACY_SHEET } from './model/defaults';
 import type { Corner, FestplatzPage, Sheet } from './model/types';
-import { createArea } from './objects';
-import { pagePaper } from './paper';
+import { BUILTIN_PROFILES } from './exportProfiles';
+import { createArea, createStand } from './objects';
+import { exportFrame, pagePaper } from './paper';
+import { pageScene } from './scene/page';
 import {
   anchorToPaper,
   autoMargin,
@@ -134,6 +136,31 @@ describe('Plan: Das Blatt wächst um die Papier-Elemente', () => {
     );
   });
 
+  // Tester: Die kleinste Fläche legte bei schmalem Inhalt eine hohe Legende (rechts) über den Maßstabsbalken (oben)
+  it('Elemente an verschiedenen Ecken überdecken sich nicht (hohe Legende rechts, breiter Balken oben, schmaler Inhalt)', () => {
+    const tl: SheetElement = { corner: 'tl', dx: 10, dy: 10, w: 92, h: 14 };
+    const br: SheetElement = { corner: 'br', dx: 10, dy: 10, w: 60, h: 100 };
+    const p = planPaper({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, 1000, null, [tl, br]);
+    const a = anchorToPaper(tl, tl, p);
+    const b = anchorToPaper(br, br, p);
+    expect(a.x + tl.w <= b.x || b.x + br.w <= a.x || a.y + tl.h <= b.y || b.y + br.h <= a.y).toBe(true);
+    // Balken oben, Legende unten links neben dem Inhalt wäre größer; erlaubt ist z. B. beides oben/unten: 102 × 150 mm
+    expect(p).toMatchObject({ w: 102, h: 150 });
+  });
+
+  it('Eigenschaft: Papier-Elemente an verschiedenen Ecken überdecken sich nie', () => {
+    const corner = fc.constantFrom<Corner>('tl', 'tr', 'bl', 'br');
+    const el = fc.record({ corner, dx: fc.integer({ min: 0, max: 40 }), dy: fc.integer({ min: 0, max: 40 }), w: fc.integer({ min: 10, max: 300 }), h: fc.integer({ min: 10, max: 300 }) });
+    fc.assert(
+      fc.property(fc.uniqueArray(el, { maxLength: 4, selector: (e) => e.corner }), fc.integer({ min: 1, max: 3000 }), fc.integer({ min: 1, max: 3000 }), fc.integer({ min: 1, max: 1000 }), (els, wM, hM, k) => {
+        const p = planPaper({ minX: 0, minY: 0, maxX: wM, maxY: hM }, k * 10, null, els);
+        const r = els.map((e) => ({ ...anchorToPaper(e, e, p), w: e.w, h: e.h }));
+        return r.every((a, i) => r.every((b, j) => j <= i || a.x + a.w <= b.x + 1e-6 || b.x + b.w <= a.x + 1e-6 || a.y + a.h <= b.y + 1e-6 || b.y + b.h <= a.y + 1e-6));
+      }),
+      { numRuns: 400 },
+    );
+  });
+
   it('Page: Schriftfeld, Legende, Maßstabsbalken und Nordpfeil liegen außerhalb des Inhalts, in mm gleich groß', () => {
     const p = createProject('P');
     const pg = p.pages[0]!;
@@ -208,5 +235,22 @@ describe('Grenzen, Anzeige, Druck-Hinweis', () => {
     });
     expect(dinPrintHint({ w: 100, h: 50 })).toMatchObject({ fits: { format: 'A4', orientation: 'landscape' }, reduced: null });
     expect(dinPrintHint({ w: 6000, h: 1000 })).toMatchObject({ fits: null, reduced: { format: 'A0', orientation: 'landscape' } });
+  });
+});
+
+// Tester: Export-Dialog, gerasterte SVG-Hintergründe und Größenschätzung nahmen das Blatt mit den Ebenen der Page,
+// das PDF das mit den Ebenen des Profils. Beim Plan ändert die Legende das Papiermaß.
+describe('Blatt im PDF folgt den Ebenen des Export-Profils (#13)', () => {
+  it('exportFrame = Blatt der PDF-Seite für jedes Profil; „Händler“ ohne Freiflächen hat ein anderes Papiermaß', () => {
+    const p = createProject('P');
+    const pg = p.pages[0]!;
+    pg.sheet = { ...DEFAULT_SHEET, scale: 200 };
+    pg.areas.push(...wide);
+    // ein Stand an der Vorderkante, daneben bleibt Freifläche
+    pg.stands.push(createStand({ cx: 5, cy: 2, w: 10, d: 4, rot: 0 }));
+    expect(pagePaper(pg, p).legend!.layout.rows.map((r) => r.entry.kind)).toContain('free');
+    for (const profile of BUILTIN_PROFILES) expect(exportFrame(pg, p, profile)).toEqual(pageScene(pg, p, profile).frame);
+    const vendor = BUILTIN_PROFILES.find((x) => x.id === 'vendor')!;
+    expect(exportFrame(pg, p, vendor).paper).not.toEqual(pagePaper(pg, p).frame.paper);
   });
 });
