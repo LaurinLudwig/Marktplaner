@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BUILTIN_PROFILES, type ExportProfile } from '../exportProfiles';
 import { decodeProjectFile } from '../fileFormat';
-import { createPage, createProject } from '../model/defaults';
+import { createPage, createProject, LEGACY_SHEET } from '../model/defaults';
 import type { Project } from '../model/types';
 import { createStand } from '../objects';
 import { buildExport } from './exportDoc';
@@ -30,7 +30,7 @@ async function exportPdf(project: Project, prof: ExportProfile, pageIds: string[
 function oneStand(format: 'A1' | 'A3' | 'A4', n: number): Project {
   const p = createProject('Maßstabstest');
   const pg = p.pages[0]!;
-  pg.sheet = { format, orientation: 'landscape', scale: n, cx: 0, cy: 0 };
+  pg.sheet = { ...LEGACY_SHEET, format, scale: n };
   pg.stands.push({ ...createStand({ cx: 0, cy: 0, w: 10, d: 4, rot: 0 }), name: 'Probe' });
   for (const k of ['titleBlock', 'legend', 'scaleBar', 'northArrow'] as const) pg[k].visible = false;
   return p;
@@ -79,7 +79,7 @@ describe('PDF: Seitengröße und Maßstab', () => {
   it('gemischte Formate in einem PDF, Pages in Tab-Reihenfolge, Lesezeichen je Page', async () => {
     const p = oneStand('A1', 500);
     const second = createPage('Zweiter Platz');
-    second.sheet = { format: 'A4', orientation: 'portrait', scale: 200, cx: 0, cy: 0 };
+    second.sheet = { ...LEGACY_SHEET, format: 'A4', orientation: 'portrait', scale: 200 };
     p.pages.push(second);
     p.pages[0]!.name = 'Erster Platz';
     const pdf = await readPdf(await exportPdf(p, profile('internal'), null, { stands: false, free: false, infra: false }));
@@ -243,4 +243,45 @@ describe('PDF: Anhang', () => {
     expect(appendix).toContain('Treffpunkt Sanität');
     expect(pdf.pages[4]!.w).toBeCloseTo(mmToPt(297), 2);
   }, 30_000);
+});
+
+describe('PDF: freies Blatt (#13)', () => {
+  /** Stand 10 × 4 m bei (0, 0) auf einem freien Blatt. */
+  async function onePage(sheet: Partial<Project['pages'][number]['sheet']>, visible = false) {
+    const p = oneStand('A3', 200);
+    const pg = p.pages[0]!;
+    pg.sheet = { ...pg.sheet, ...sheet };
+    for (const k of ['titleBlock', 'legend', 'scaleBar', 'northArrow'] as const) pg[k].visible = visible;
+    const bytes = await exportPdf(p, standsOnly, null, { stands: false, free: false, infra: false });
+    return { bytes, pdf: await readPdf(bytes) };
+  }
+
+  it('Plan bei 1:200: Inhalt 50 × 20 mm plus 10 mm Rand = Seite exakt 70 × 40 mm, Stand mittig im Maßstab', async () => {
+    const { bytes, pdf } = await onePage({ format: 'plan', scale: 200 });
+    expect(pdf.pages).toHaveLength(1);
+    expect(pdf.pages[0]!.w).toBeCloseTo(mmToPt(70), 2);
+    expect(pdf.pages[0]!.h).toBeCloseTo(mmToPt(40), 2);
+    const b = (await pathBoxes(bytes)).filter((x) => x.maxX - x.minX < pdf.pages[0]!.w - 1)[0]!;
+    expect(b.maxX - b.minX).toBeCloseTo(mmToPt(50), 2);
+    expect((b.minX + b.maxX) / 2).toBeCloseTo(mmToPt(35), 2);
+  });
+
+  it('Plan mit Papier-Elementen: Seite wächst, Schriftfeld nennt das freie Maß', async () => {
+    const { pdf } = await onePage({ format: 'plan', scale: 200 }, true);
+    expect(pdf.pages[0]!.w).toBeGreaterThan(mmToPt(180));
+    const wMm = Math.round(pdf.pages[0]!.w / mmToPt(1));
+    const hMm = Math.round(pdf.pages[0]!.h / mmToPt(1));
+    expect(pdf.pages[0]!.text).toContain(`Maßstab 1:200 bei Druck in Originalgröße (${wMm} × ${hMm} mm)`);
+  });
+
+  it('Ausschnitt 100 × 40 m bei 1:500: Seite exakt 200 × 80 mm (566,93 × 226,77 pt)', async () => {
+    const { pdf } = await onePage({ format: 'region', scale: 500, region: { cx: 0, cy: 0, w: 100, h: 40 } });
+    expect(pdf.pages[0]!.w).toBeCloseTo(566.93, 2);
+    expect(pdf.pages[0]!.h).toBeCloseTo(226.77, 2);
+  });
+
+  it('über 5 080 mm: Seite trotzdem in Originalgröße (Warnung in der Oberfläche)', async () => {
+    const { pdf } = await onePage({ format: 'region', scale: 100, region: { cx: 0, cy: 0, w: 520, h: 10 } });
+    expect(pdf.pages[0]!.w).toBeCloseTo(mmToPt(5200), 1);
+  });
 });

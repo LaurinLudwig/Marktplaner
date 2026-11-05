@@ -1,7 +1,9 @@
 import { PAPER_KIND_LABEL, pagePaper, type PaperKind } from '../core/paper';
-import { mmToM, nudgeAnchor } from '../core/sheet';
-import { SCALE_LIMITS } from '../core/model/schema';
-import type { Id, PaperAnchor, Project, Sheet } from '../core/model/types';
+import { isFreeFormat, mmToM, nudgeAnchor, regionOf } from '../core/sheet';
+import { clampToLimits } from '../core/infra';
+import { MARGIN_LIMITS, normalizeRegion, SCALE_LIMITS, TARGET_WIDTH_LIMITS } from '../core/model/schema';
+import type { Id, PaperAnchor, Project, Sheet, Vec } from '../core/model/types';
+import type { Bounds } from '../core/viewport';
 import { useStore } from './store';
 
 /**
@@ -17,34 +19,70 @@ const SHEET_LABEL: Record<keyof Sheet, string> = {
   scale: 'Maßstab ändern',
   cx: 'Blatt verschieben',
   cy: 'Blatt verschieben',
+  margin: 'Rand ändern',
+  targetWidth: 'Zielbreite ändern',
+  region: 'Ausschnitt ändern',
 };
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+const centerOf = (b: Bounds): Vec => ({ x: round2((b.minX + b.maxX) / 2), y: round2((b.minY + b.maxY) / 2) });
 
 /**
  * Blatt ändern. Beim Wechsel von „an Seite anpassen“ auf einen festen Maßstab werden die aktuelle Mitte und n
- * (auf volle 10) übernommen (§8).
+ * (auf volle 10) übernommen (§8). Wechsel auf „Ausschnitt“ ohne aufgezogenen Ausschnitt: das bisherige Blatt wird der
+ * Ausschnitt, bei angepasstem Maßstab mit dessen n, damit sich das Papier nicht ändert. Wechsel von einem freien
+ * Blatt auf ein DIN-Format mit festem Maßstab: die bisherige Mitte (#13).
  */
-export function setSheet(pageId: Id, patch: Partial<Sheet>) {
+export function setSheet(pageId: Id, patch: Partial<Sheet>, label?: string) {
   const page = pageOf(st().project, pageId);
   if (!page) return;
-  const next = { ...patch };
-  if (next.scale !== undefined && next.scale !== null) next.scale = Math.round(Math.min(SCALE_LIMITS.max, Math.max(SCALE_LIMITS.min, next.scale)));
-  if (page.sheet.scale === null && next.scale !== undefined && next.scale !== null) {
-    const f = pagePaper(page, st().project).frame;
-    next.cx = Math.round(((f.bounds.minX + f.bounds.maxX) / 2) * 100) / 100;
-    next.cy = Math.round(((f.bounds.minY + f.bounds.maxY) / 2) * 100) / 100;
+  const next: Partial<Sheet> = { ...patch };
+  if (next.scale !== undefined && next.scale !== null) next.scale = Math.round(clampToLimits(next.scale, SCALE_LIMITS));
+  if (next.margin !== undefined && next.margin !== null) next.margin = Math.round(clampToLimits(next.margin, MARGIN_LIMITS));
+  if (next.targetWidth !== undefined) next.targetWidth = Math.round(clampToLimits(next.targetWidth, TARGET_WIDTH_LIMITS));
+  if (next.region) next.region = normalizeRegion(next.region);
+  const frame = () => pagePaper(page, st().project).frame;
+  const format = next.format ?? page.sheet.format;
+  const scale = next.scale !== undefined ? next.scale : page.sheet.scale;
+  const fromFree = isFreeFormat(page.sheet.format);
+  if (!isFreeFormat(format) && scale !== null && next.cx === undefined && (page.sheet.scale === null || fromFree)) {
+    const c = centerOf(frame().bounds);
+    next.cx = c.x;
+    next.cy = c.y;
+  }
+  if (format === 'region' && page.sheet.format !== 'region' && !page.sheet.region && next.region === undefined) {
+    const f = frame();
+    next.region = regionOf(f.bounds);
+    if (scale === null && next.scale === undefined) next.scale = f.scale;
   }
   const key = Object.keys(patch)[0] as keyof Sheet | undefined;
-  st().change(key ? SHEET_LABEL[key] : 'Blatt ändern', (p) => {
+  st().change(label ?? (key ? SHEET_LABEL[key] : 'Blatt ändern'), (p) => {
     const pg = pageOf(p, pageId);
     if (pg) Object.assign(pg.sheet, next);
   });
 }
 
-/** Bei „an Seite anpassen“: fester Maßstab mit dem aktuellen n (Knopf in der Seitenleiste). */
+/** Bei angepasstem Maßstab (bzw. Zielbreite): fester Maßstab mit dem aktuellen n (Knopf in der Seitenleiste). */
 export function fixSheetScale(pageId: Id) {
   const page = pageOf(st().project, pageId);
   if (!page || page.sheet.scale !== null) return;
   setSheet(pageId, { scale: pagePaper(page, st().project).frame.scale });
+}
+
+/** Blatt per Ziehen verschieben: neue Mitte in Metern (DIN mit festem Maßstab oder Ausschnitt). */
+export function moveSheetTo(pageId: Id, c: Vec) {
+  const page = pageOf(st().project, pageId);
+  if (!page) return;
+  const center = { x: round2(c.x), y: round2(c.y) };
+  if (page.sheet.format === 'region') {
+    const r = page.sheet.region ?? regionOf(pagePaper(page, st().project).frame.bounds);
+    setSheet(pageId, { region: { ...r, cx: center.x, cy: center.y } }, 'Blatt verschieben');
+  } else setSheet(pageId, { cx: center.x, cy: center.y });
+}
+
+/** Ausschnitt setzen (Aufziehen oder Größe ändern an den Griffen, #13); schaltet auf „Ausschnitt“. */
+export function setSheetRegion(pageId: Id, b: Bounds, label = 'Ausschnitt ändern') {
+  setSheet(pageId, { format: 'region', region: regionOf(b) }, label);
 }
 
 export function setPaperAnchor(pageId: Id, kind: PaperKind, anchor: Pick<PaperAnchor, 'corner' | 'dx' | 'dy'>, label = `${PAPER_KIND_LABEL[kind]} verschieben`, merge?: { mergeKey: string; mergeIntoPrevious: boolean }) {
@@ -92,22 +130,27 @@ export function nudgePaper(dxMm: number, dyMm: number, repeat = false) {
   const page = s.project.pages.find((p) => p.id === s.ui.activePage);
   if (sel?.kind !== 'paper' || !page) return;
   const merge = { mergeKey: `nudge-paper:${page.id}:${sel.element}:${dxMm},${dyMm}`, mergeIntoPrevious: repeat };
+  const paper = pagePaper(page, s.project);
   if (sel.element === 'sheet') {
-    if (page.sheet.scale === null) return;
-    const k = page.sheet.scale;
+    if (!paper.frame.movable) return;
+    const k = paper.frame.scale;
     s.change(
       'Blatt verschieben',
       (p) => {
         const pg = pageOf(p, page.id);
         if (!pg) return;
-        pg.sheet.cx = Math.round((pg.sheet.cx + mmToM(dxMm, k)) * 100) / 100;
-        pg.sheet.cy = Math.round((pg.sheet.cy + mmToM(dyMm, k)) * 100) / 100;
+        if (pg.sheet.format === 'region') {
+          const r = pg.sheet.region ?? regionOf(paper.frame.bounds);
+          pg.sheet.region = { ...r, cx: round2(r.cx + mmToM(dxMm, k)), cy: round2(r.cy + mmToM(dyMm, k)) };
+        } else {
+          pg.sheet.cx = round2(pg.sheet.cx + mmToM(dxMm, k));
+          pg.sheet.cy = round2(pg.sheet.cy + mmToM(dyMm, k));
+        }
       },
       merge,
     );
     return;
   }
-  const paper = pagePaper(page, s.project);
   const el = paper[sel.element];
   if (!el) return;
   setPaperAnchor(page.id, sel.element, nudgeAnchor(el.anchor, dxMm, dyMm, el.layout, paper.frame.paper), undefined, merge);

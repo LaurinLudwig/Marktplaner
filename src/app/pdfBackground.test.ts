@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Background } from '../core/model/types';
-import type { SheetFrame } from '../core/sheet';
+import { sheetFrame, type SheetFrame } from '../core/sheet';
 import { BUILTIN_PROFILES } from '../core/exportProfiles';
-import { createProject } from '../core/model/defaults';
+import { createPage, createProject, DEFAULT_SHEET, LEGACY_SHEET } from '../core/model/defaults';
 import { dqtLumaSum, ijgLumaSum, outputFormat, rasterFactor, rasterPlan } from './pdfBackground';
 import { estimateExportBytes, sizeText } from './pdfEstimate';
 
 /** Rasterhintergründe im PDF (M8-06): Ausschnitt, Ziel-Auflösung, nie hochrechnen, Kacheln. */
 
 // A3 quer bei 1:1000: 420 × 297 m um (0, 0)
-const frame: SheetFrame = { scale: 1000, paper: { w: 420, h: 297 }, bounds: { minX: -210, minY: -148.5, maxX: 210, maxY: 148.5 }, fit: false };
+const frame: SheetFrame = { scale: 1000, paper: { w: 420, h: 297 }, bounds: { minX: -210, minY: -148.5, maxX: 210, maxY: 148.5 }, fit: false, kind: 'din', movable: true, layoutHeight: 297, margin: null };
 const image = (w: number, h: number, metersPerPx: number, x = 0, y = 0, kind: Background['kind'] = 'image'): Background => ({
   assetId: `bild.${kind === 'svg' ? 'svg' : 'jpg'}`,
   kind,
@@ -90,7 +90,7 @@ describe('Geschätzte Dateigröße (M8-Nacharbeit)', () => {
   it('Raster: Ausgabepixel × Bytes je Pixel der Quelle; „E-Mail“ deutlich kleiner; ohne Hintergrund-Ebene nur Vektor', () => {
     const p = createProject('P');
     const pg = p.pages[0]!;
-    pg.sheet = { format: 'A3', orientation: 'landscape', scale: 1000, cx: 0, cy: 0 };
+    pg.sheet = { ...LEGACY_SHEET, scale: 1000 };
     pg.background = image(8000, 6000, 0.05, -200, -150);
     const assets = { 'bild.jpg': new Uint8Array(4_800_000) }; // 0,1 B/px
     const intern = BUILTIN_PROFILES[0]!;
@@ -106,5 +106,35 @@ describe('Geschätzte Dateigröße (M8-Nacharbeit)', () => {
     expect(sizeText(12_345_678)).toBe('ca. 12 MB');
     expect(sizeText(1_540_000)).toBe('ca. 1,5 MB');
     expect(sizeText(450_000)).toBe('ca. 450 KB');
+  });
+});
+
+describe('Große freie Blätter (#13)', () => {
+  // Ausschnitt 500 × 150 m bei 1:100 = 5000 × 1500 mm
+  const big = sheetFrame({ ...createPage('P'), sheet: { ...DEFAULT_SHEET, format: 'region', scale: 100, region: { cx: 250, cy: 75, w: 500, h: 150 } } }, null);
+
+  it('SVG bei 300 dpi: höchstens 200 Megapixel je Seite, Kacheln höchstens 2049 Pixel', () => {
+    expect(big.paper).toEqual({ w: 5000, h: 1500 });
+    // 1 mm je Pixel auf dem Papier; 300 dpi wären 59055 × 17717 ≈ 1046 MP
+    const plan = rasterPlan(image(5000, 1500, 0.1, 0, 0, 'svg'), big, 300)!;
+    expect(plan.outPx).toBeLessThanOrEqual(200_000_000 * 1.001);
+    expect(plan.outPx).toBeGreaterThan(190_000_000);
+    expect(Math.max(...plan.tiles.map((t) => Math.max(t.out.w, t.out.h)))).toBeLessThanOrEqual(2049);
+    // Kacheln decken den ganzen Ausschnitt ab
+    const right = Math.max(...plan.tiles.map((t) => t.src.x + t.src.w));
+    const bottom = Math.max(...plan.tiles.map((t) => t.src.y + t.src.h));
+    expect(right).toBeGreaterThanOrEqual(plan.region.w - 1e-6);
+    expect(bottom).toBeGreaterThanOrEqual(plan.region.h - 1e-6);
+  });
+
+  it('JPEG „Original“: nie größer als die Quelle; Schätzung bleibt endlich', () => {
+    const plan = rasterPlan(image(20000, 6000, 0.025, 0, 0), big, 'original')!;
+    expect(plan.outPx).toBeLessThanOrEqual(120_000_000);
+    expect(plan.factor).toBe(1);
+    const p = createProject('P');
+    p.pages[0]!.sheet = { ...DEFAULT_SHEET, format: 'region', scale: 100, region: { cx: 250, cy: 75, w: 500, h: 150 } };
+    p.pages[0]!.background = image(20000, 6000, 0.025, 0, 0);
+    const bytes = estimateExportBytes(p, BUILTIN_PROFILES[0]!, null, { stands: false, free: false, infra: false }, 300, { 'bild.jpg': new Uint8Array(12_000_000) });
+    expect(Number.isFinite(bytes)).toBe(true);
   });
 });

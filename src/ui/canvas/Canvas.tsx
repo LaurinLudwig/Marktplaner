@@ -37,6 +37,7 @@ import { useMeasureTool } from './tools/useMeasureTool';
 import { useSelectTool } from './tools/useSelectTool';
 import { useInfraTool } from './tools/useInfraTool';
 import { useTitleBlockTool } from './tools/useTitleBlockTool';
+import { useRegionTool } from './tools/useRegionTool';
 import { interpretWheel } from './wheel';
 
 /** Unter dieser Schrifthöhe (px) wird die Beschriftung ausgeblendet. */
@@ -286,6 +287,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const titleBlockTool = useTitleBlockTool(ctx, tool === 'titleBlock' && !spaceDown);
   const centerTool = useCenterTool(ctx, tool === 'numberCenter' && !spaceDown);
   const directionTool = useDirectionTool(ctx, tool === 'numberDirection' && !spaceDown);
+  const regionTool = useRegionTool(ctx, tool === 'sheetRegion' && !spaceDown);
   const activeTool =
     tool === 'measure'
       ? measureTool
@@ -305,7 +307,9 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
                   ? centerTool
                 : tool === 'numberDirection'
                   ? directionTool
-                  : null;
+                  : tool === 'sheetRegion'
+                    ? regionTool
+                    : null;
   const activeToolRef = useRef(activeTool);
   useLayoutEffect(() => {
     activeToolRef.current = activeTool;

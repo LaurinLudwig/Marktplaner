@@ -43,7 +43,12 @@ export const DEFAULT_INFRA_TYPES: InfraTypeDef[] = [
   { id: 'marker', builtin: true, label: 'Marker', geometry: 'point', color: '#16a085', icon: 'location_on', defaultW: 0, defaultD: 0, occupiesArea: false, keepClear: false },
 ];
 
-export const DEFAULT_SHEET: Sheet = { format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0 };
+/** Zielbreite eines freien Blatts ohne festen Maßstab (#13): Breite von A1 quer, passt auf übliche Plotterrollen. */
+export const DEFAULT_TARGET_WIDTH = 841;
+/** Neue Pages (#13): „Plan“, Maßstab aus der Zielbreite, Rand automatisch. */
+export const DEFAULT_SHEET: Sheet = { format: 'plan', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: DEFAULT_TARGET_WIDTH, region: null };
+/** Blatt bis Formatversion 11 (A3 quer, an Seite anpassen); bestehende Blätter bleiben DIN (Migration 11 → 12). */
+export const LEGACY_SHEET: Sheet = { format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: DEFAULT_TARGET_WIDTH, region: null };
 export const DEFAULT_TITLE_BLOCK_ANCHOR: PaperAnchor = { visible: true, corner: 'br', dx: 10, dy: 10 };
 export const DEFAULT_LEGEND_ANCHOR: PaperAnchor = { visible: true, corner: 'bl', dx: 10, dy: 10 };
 export const DEFAULT_SCALE_BAR_ANCHOR: PaperAnchor = { visible: true, corner: 'tl', dx: 10, dy: 10 };
@@ -72,7 +77,7 @@ export function createPage(name: string): FestplatzPage {
     areas: [],
     stands: [],
     infra: [],
-    sheet: { ...DEFAULT_SHEET },
+    sheet: structuredClone(DEFAULT_SHEET),
     titleBlock: { ...DEFAULT_TITLE_BLOCK_ANCHOR },
     titleBlockText: '',
     legend: { ...DEFAULT_LEGEND_ANCHOR },

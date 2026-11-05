@@ -2,7 +2,7 @@ import { memo } from 'react';
 import type { PagePaper, PaperKind } from '../../../core/paper';
 import { legendFramePrims, legendRowPrims, northArrowPrims, scaleBarPrims, titleBlockPrims } from '../../../core/scene/paper';
 import type { Prim } from '../../../core/scene/prims';
-import { FORMAT_TEXT, mmToM, scaleText } from '../../../core/sheet';
+import { mmToM, sheetLabel } from '../../../core/sheet';
 import type { Sheet, Vec } from '../../../core/model/types';
 import type { PaperElement } from '../../../state/store';
 import { Prims } from '../scene/Prim';
@@ -27,7 +27,7 @@ export const PaperLayer = memo(function PaperLayer({ paper, sheet, visible, sele
   const { frame } = paper;
   const b = frame.bounds;
   const k = mmToM(1, frame.scale);
-  const label = `${FORMAT_TEXT(sheet)} · ${scaleText(frame.scale)}${frame.fit ? ' (angepasst)' : ''}`;
+  const label = sheetLabel(sheet, frame);
   const el = (kind: PaperKind, at: Vec, prims: Prim[], children?: React.ReactNode) =>
     visible[kind] && (
       <PaperEl key={kind} kind={kind} at={at} k={k} prims={prims} selected={selected === kind}>
@@ -37,7 +37,7 @@ export const PaperLayer = memo(function PaperLayer({ paper, sheet, visible, sele
   const legend = paper.legend;
   return (
     <g className={`layer-sheet${locked ? ' locked' : ''}`}>
-      <rect className={`sheet-frame${selected === 'sheet' ? ' selected' : ''}`} data-testid="sheet-frame" x={b.minX} y={b.minY} width={b.maxX - b.minX} height={b.maxY - b.minY} />
+      <rect className={`sheet-frame${selected === 'sheet' ? ' selected' : ''}`} data-testid="sheet-frame" data-kind={frame.kind} x={b.minX} y={b.minY} width={b.maxX - b.minX} height={b.maxY - b.minY} />
       <g transform={`translate(${b.minX} ${b.minY}) scale(${k})`}>
         <text className="sheet-label" data-testid="sheet-label" x={2} y={-2} fontSize={4}>
           {label}

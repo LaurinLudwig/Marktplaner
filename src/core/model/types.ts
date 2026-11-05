@@ -183,16 +183,39 @@ export interface InfraObject extends Rect {
 
 export const PAPER_FORMATS = ['A4', 'A3', 'A2', 'A1', 'A0'] as const;
 export type PaperFormat = (typeof PAPER_FORMATS)[number];
+/**
+ * Blatt ohne festes Papierformat (#13): „Plan“ = Inhalt plus Rand, „Ausschnitt“ = frei aufgezogenes Rechteck. Das
+ * Papiermaß ergibt sich aus Inhalt bzw. Ausschnitt und Maßstab.
+ */
+export const FREE_FORMATS = ['plan', 'region'] as const;
+export type FreeFormat = (typeof FREE_FORMATS)[number];
+export type SheetFormat = PaperFormat | FreeFormat;
+export const SHEET_FORMATS: readonly SheetFormat[] = [...FREE_FORMATS, ...PAPER_FORMATS];
+
+/** Ausschnitt eines Blatts (#13): achsenparalleles Rechteck auf dem Plan, Mitte und Maße in Metern. */
+export interface SheetRegion {
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+}
 
 /** Blatt einer Festplatz-Page (spec.md §8): Papier für Druck und PDF. */
 export interface Sheet {
-  format: PaperFormat;
+  format: SheetFormat;
+  /** Nur bei DIN-Formaten maßgeblich. */
   orientation: 'portrait' | 'landscape';
-  /** Maßstab 1:n; null = an Seite anpassen. */
+  /** Maßstab 1:n; null = DIN: an Seite anpassen, Plan und Ausschnitt: aus der Zielbreite (#13). */
   scale: number | null;
-  /** Mitte des Blatts in Metern (nur bei festem Maßstab maßgeblich). */
+  /** Mitte des Blatts in Metern (nur bei DIN mit festem Maßstab maßgeblich). */
   cx: number;
   cy: number;
+  /** Plan (#13): Rand in mm auf dem Papier; null = automatisch (3 % der längeren Seite, mindestens 10 mm). */
+  margin: number | null;
+  /** Plan und Ausschnitt ohne festen Maßstab (#13): Zielbreite des Papiers in mm. */
+  targetWidth: number;
+  /** Ausschnitt (#13); null = noch nicht aufgezogen (dann gilt der Inhalt). */
+  region: SheetRegion | null;
 }
 
 export type Corner = 'tl' | 'tr' | 'bl' | 'br';

@@ -43,7 +43,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   ob er die Fläche belegt (dann entsteht an dieser Stelle keine Freifläche, wie bei einem Geschäft).
   Weitere Typen lassen sich in den Projekteinstellungen anlegen. Details in §11 (Entscheidungen 2026-10-12,
   M7-Planung).
-- **Blatt**: pro Festplatz-Page das Papier für Druck und PDF (Format, Ausrichtung, Maßstab, Lage auf dem Plan), auf
+- **Blatt**: pro Festplatz-Page das Papier für Druck und PDF (Format A4–A0, „Plan“ oder „Ausschnitt“, Ausrichtung,
+  Maßstab, Lage auf dem Plan), auf
   der Zeichenfläche als Rahmen sichtbar (§8).
 - **Schriftfeld**: Planbeschriftung pro Festplatz-Page, ein Papier-Element des Blatts (§8).
 - **Legende**: automatisch erzeugte Zeichenerklärung pro Festplatz-Page, ein Papier-Element des Blatts (§8).
@@ -505,11 +506,14 @@ Entscheidungen 2026-10-12 (M7-Planung). Schriftfeld und Legende sind Papier-Elem
 Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem Maßstab gleich groß und lesbar.
 
 **Blatt** (pro Festplatz-Page):
-- Einstellungen: Papierformat A4–A0, Hoch/Quer, Maßstab 1:n oder „an Seite anpassen“.
-  - Standard: A3 quer, an Seite anpassen.
+- Einstellungen: Papierformat A4–A0 (Hoch/Quer, Maßstab 1:n oder „an Seite anpassen“) oder ein freies Blatt ohne
+  festes Papierformat (#13): „Plan“ oder „Ausschnitt“, Maßstab 1:n oder über eine Zielbreite in mm.
+  - Standard neuer Pages (#13, Entscheidung Laurin 2026-11-05): „Plan“, Maßstab über die Zielbreite 841 mm (Breite
+    von A1 quer, passt auf übliche Plotterrollen), Rand automatisch. Bis #13 war es A3 quer, an Seite anpassen;
+    bestehende Blätter bleiben DIN (Migration 11 → 12).
   - Einstellbar im Seitenleisten-Bereich „Blatt“ der Page, ohne Auswahl. Jede Änderung ist ein Undo-Schritt.
-- Auf der Zeichenfläche ist das Blatt als gestrichelter Rahmen sichtbar, mit der Marke „A1 quer · 1:500“. Es ist
-  nicht gedreht; seine Achsen sind die der Zeichenfläche.
+- Auf der Zeichenfläche ist das Blatt als gestrichelter Rahmen sichtbar, mit der Marke „A1 quer · 1:500“ (freies
+  Blatt: das Papiermaß, „1.236 × 341 mm · 1:200“). Es ist nicht gedreht; seine Achsen sind die der Zeichenfläche.
 - **Fester Maßstab 1:n:** Der Rahmen ist Papiermaß × n groß (A1 quer bei 1:500 = 420,5 × 297 m). Seine Lage (Mitte
   in Metern) ändert man, indem man Rahmen oder Marke mit dem Auswahlwerkzeug zieht (Undo-Schritt). n ist eine ganze
   Zahl von 10 bis 100.000.
@@ -524,6 +528,42 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
   - n wird auf volle 10 aufgerundet, damit ein lesbarer Maßstab entsteht (z. B. 1:440).
   - Der Rahmen folgt dem Inhalt und lässt sich nicht ziehen.
   - Beim Umschalten auf einen festen Maßstab werden die aktuelle Mitte und n (auf volle 10) übernommen.
+- **Freies Blatt** (#13, Entscheidungen Laurin 2026-11-05): Festplätze sind oft lang und schmal (Seestraße etwa
+  3,6 : 1, ein A-Format 1,41 : 1); gedruckt wird im Copyshop oder auf dem Plotter, wo jedes Maß geht. Das Papiermaß
+  ergibt sich aus Inhalt bzw. Ausschnitt × Maßstab und wird überall in mm angezeigt (Marke, Seitenleiste,
+  Export-Dialog, Vorschau, Schriftfeld).
+  - **Maßstab:** fest 1:n (10 bis 100.000) oder „über Zielbreite“: das kleinste n auf volle 10, bei dem das Papier
+    höchstens so breit ist wie die Zielbreite (100–20.000 mm). Beim Abschalten der Zielbreite wird das aktuelle n
+    übernommen.
+  - **„Plan“:** Das Blatt umfasst den Inhalt (wie bei „an Seite anpassen“: Grundflächen, Geschäfte, Infrastruktur,
+    ohne sie der Hintergrund, sonst 100 × 100 m) plus Rand. Der Rahmen folgt dem Inhalt und lässt sich nicht ziehen.
+    - Rand in mm auf dem Papier, einstellbar (10–500 mm). Vorbelegung („automatisch“, solange kein Wert eingetragen
+      ist; Knopf „Automatisch“ stellt sie wieder her): 3 % der längeren Seite des Inhalts auf dem Papier, auf volle mm
+      gerundet, mindestens 10 mm.
+    - Das Blatt wächst um die sichtbaren Papier-Elemente, statt sie über den Inhalt zu legen: Jedes Element bekommt an
+      seiner Ecke ein Band, entweder oben/unten (Abstand + Höhe + 3 mm) oder links/rechts (Abstand + Breite + 3 mm);
+      jede Seite ist mindestens so breit wie der Rand. Gewählt wird die Verteilung mit der kleinsten Papierfläche (bei
+      Gleichstand oben/unten). Elemente an derselben Blattkante müssen nebeneinander passen; sonst wird das Blatt
+      breiter bzw. höher. Die Legende bricht nach der Höhe Inhalt + 2 × Rand um.
+    - Das Papiermaß wird auf volle mm aufgerundet; der Rest verteilt sich gleich auf beide Seiten.
+  - **„Ausschnitt“:** ein achsenparalleles Rechteck auf dem Plan (ohne Drehung); exportiert wird genau dieser
+    Ausschnitt. Mitte, Breite und Höhe in Metern (auf 0,01 m gerundet, mindestens 1 × 1 m).
+    - Knopf „Ausschnitt aufziehen“ im Bereich „Blatt“: Ziehen auf der Zeichenfläche legt ihn fest (ein Undo-Schritt),
+      danach ist das Blatt ausgewählt; Esc bricht ab.
+    - Ist das Blatt ausgewählt, verschiebt Ziehen am Rahmen oder an der Marke den Ausschnitt (Pfeiltasten 1 bzw.
+      10 mm auf dem Papier); acht Griffe an Ecken und Kantenmitten ändern die Größe, die Gegenseite bleibt fest. Jede
+      Änderung ist ein Undo-Schritt.
+    - Wechsel auf „Ausschnitt“ ohne aufgezogenen Ausschnitt: Das bisherige Blatt wird der Ausschnitt; war der
+      Maßstab angepasst, wird dessen n fest übernommen, damit das Papier gleich bleibt.
+    - Die Papier-Elemente liegen wie bei DIN über dem Inhalt.
+  - Wechsel von einem freien Blatt auf ein DIN-Format mit festem Maßstab übernimmt die bisherige Mitte.
+  - **Grenze:** PDF-Programme zeigen Seiten über 200 Zoll = 5.080 mm (14.400 pt, Grenze von Acrobat) nicht vollständig.
+    Ist eine Seite länger, warnen Seitenleiste und Export-Dialog; exportiert wird trotzdem in Originalgröße. Kein
+    `UserUnit`: Viele Programme und Drucker-RIPs werten ihn nicht aus und würden die Seite in falscher Größe, also im
+    falschen Maßstab, zeigen oder drucken.
+  - **Druck-Hinweis** in der Seitenleiste: das kleinste DIN-Format, auf das das freie Blatt in Originalgröße passt,
+    und das nächstkleinere mit Verkleinerungsfaktor und dem sich daraus ergebenden Maßstab („verkleinert auf A1 quer
+    (79 %, dann etwa 1:252)“).
 - Ab M8 exportiert das PDF genau dieses Blatt (§9).
 
 **Papier-Elemente:**
@@ -541,8 +581,9 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
   - Nur ein bereits ausgewähltes Papier-Element wird per Ziehen verschoben.
   - Ziehen, das auf einem nicht ausgewählten Papier-Element beginnt, zieht ein Auswahlrechteck auf wie auf leerer
     Fläche.
-  - Dasselbe gilt für Rahmen und Marke des Blatts (bei festem Maßstab ziehbar, wenn das Blatt ausgewählt ist); ein
-    angepasstes Blatt lässt sich nicht ziehen, dort zieht Ziehen immer ein Auswahlrechteck auf.
+  - Dasselbe gilt für Rahmen und Marke des Blatts (bei festem Maßstab und beim Ausschnitt ziehbar, wenn das Blatt
+    ausgewählt ist); ein angepasstes DIN-Blatt und ein Plan lassen sich nicht ziehen, dort zieht Ziehen immer ein
+    Auswahlrechteck auf.
   Beim Ziehen dienen die Blattecken als Fangpunkte: Eine Ecke des Elements
   rastet in 8 Bildschirm-Pixeln an der Blattecke ein, bündig (0 mm) oder mit dem Standardrand von 10 mm;
   Cmd/Strg schaltet den Fang aus. Beim Loslassen wird die nächstgelegene Ecke zur gewählten Ecke; gespeichert
@@ -561,7 +602,8 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
 - Auf jeder Festplatz-Page, einheitliches festes Layout auf allen Pages, 180 mm breit (nach ISO 7200):
   - Zeile 1: Projektname (5 mm Schrifthöhe).
   - Zeile 2: Festplatz (3,5 mm).
-  - Zeile 3: „Maßstab 1:500 bei Druck in Originalgröße (A1 quer) · Datum · Version“ (2,5 mm). Leere Angaben
+  - Zeile 3: „Maßstab 1:500 bei Druck in Originalgröße (A1 quer) · Datum · Version“ (2,5 mm), beim freien Blatt mit
+    dem Papiermaß („… (1.236 × 341 mm)“, #13). Leere Angaben
     entfallen. Maßstab und Format kommen aus dem Blatt. Der Zusatz steht da, weil „an Seite anpassen“ im Druckdialog
     den Maßstab zerstört (Entscheidung 2026-10-12, M8-Planung).
   - Darunter der optionale Freitext der Page: bis zu 4 Zeilen à 2,5 mm, weitere Zeilen werden abgeschnitten (mit
@@ -614,9 +656,16 @@ Fang-Hilfslinien, Blattrahmen und -marke, Fadenkreuz der Nummerierung, Bildraten
 Schrift.
 
 **Blatt und Maßstab.**
-- Jede Page wird als eine PDF-Seite exportiert, genau ihr Blatt (§8): Format A4–A0, Hoch/Quer, Maßstab 1:n oder „an
+- Jede Page wird als eine PDF-Seite exportiert, genau ihr Blatt (§8): Format A4–A0, „Plan“ oder „Ausschnitt“ (#13),
+  Hoch/Quer, Maßstab 1:n, Zielbreite oder „an
   Seite anpassen“. Der Export-Dialog zeigt und ändert diese Werte; die Änderung gilt für die Page (Undo-Schritt).
 - Seitengröße exakt in mm (1 pt = 25,4/72 mm; A1 quer = 841 × 594 mm). Bei 1:500 ist 1 cm auf dem Papier exakt 5 m.
+  Ein freies Blatt hat genau sein Papiermaß (Plan: volle mm, Ausschnitt: Ausschnitt / n), auch über 5.080 mm (mit
+  Warnung, §8).
+- Der Export-Dialog zeigt je Page das Papiermaß in mm („1.060 × 310 mm“) und gegebenenfalls die Warnung über
+  5.080 mm; der Kopf der Vorschau zeigt Format bzw. Maß und Maßstab wie die Marke („1.060 × 310 mm · 1:200“). Für ein
+  freies Blatt stehen dort statt der Ausrichtung die Zielbreite und statt „anpassen“ „Breite“ (Maßstab über
+  Zielbreite).
 - Inhalt außerhalb des Blatts wird abgeschnitten.
 
 **Inhalt einer Seite** in dieser Reihenfolge, jeweils gemäß Export-Profil: Hintergrund, Raster, Grundflächen,
@@ -630,6 +679,9 @@ Legende entsteht aus den Ebenen des Profils.
 **Hintergrund.**
 - PDF-Hintergründe werden als Vektor übernommen (Originalseite eingebettet, je Datei nur einmal), mit Lage, Drehung,
   Maßstab und Deckkraft wie auf der Zeichenfläche.
+- Große Blätter (#13): Je Seite entstehen höchstens 200 Megapixel aus Rasterhintergründen (auch bei „Original“ und
+  bei gerasterten SVG); darüber wird die Auflösung gleichmäßig gesenkt. Über 16 Megapixel wird in Kacheln von
+  höchstens 2048 Pixeln je Seite gearbeitet, damit keine Leinwandgrenze des Browsers erreicht wird.
 - Rasterbilder (PNG, JPEG): nur der Ausschnitt auf dem Blatt; heruntergerechnet, wenn sie feiner sind als die
   Ziel-Auflösung, nie hochgerechnet. Qualität im Export-Dialog: „E-Mail“, 150, 200, 300 dpi oder Original; Standard
   200 dpi, die zuletzt gewählte merkt sich der Rechner. JPEG bleibt JPEG (Qualität 85 nach libjpeg-Skala; unverändert,
@@ -732,7 +784,7 @@ Chromium und WebKit. Geprüft mit `npm run test:perf`.
   Standardwerten ergänzt. Dateien einer neueren Version, als die App kennt, werden mit einer
   verständlichen Meldung abgewiesen (Entscheidung 2026-10-11; Version 2 seit M4, Version 3 seit M5, Version 4 seit M7, Version 5 seit M8,
   Version 6 seit M10, Version 7 seit M11: ausgeblendete Freiflächen je Page, Version 8 seit M12: Form der Stände und
-  Formvorlagen).
+  Formvorlagen, Version 12 seit #13: freies Blatt „Plan“/„Ausschnitt“ mit Rand, Zielbreite und Ausschnitt).
 - Projekt als Vorlage fürs nächste Jahr duplizieren.
 - Import einer Händlerliste aus CSV/XLSX (Spalten zuordnen). Importierte Händler landen in einer
   Liste „noch nicht platziert“ und können per Drag & Drop platziert werden. [Phase 2]

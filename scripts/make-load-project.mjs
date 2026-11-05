@@ -54,7 +54,7 @@ function page(id, name, prefix) {
     areas: [],
     stands: [],
     infra: [],
-    sheet: { format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0 },
+    sheet: { format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null },
     titleBlock: { visible: true, corner: 'br', dx: 10, dy: 10 },
     titleBlockText: '',
     legend: { visible: true, corner: 'bl', dx: 10, dy: 10 },
@@ -170,6 +170,6 @@ const project = {
 const total = project.pages.reduce((n, p) => n + p.stands.length, 0);
 if (total !== 500) throw new Error(`Erwartet 500 Stände, erzeugt ${total}`);
 
-const file = { format: 'schelmeplaner', schemaVersion: 13, project };
+const file = { format: 'schelmeplaner', schemaVersion: 14, project };
 writeFileSync(out, zipSync({ 'project.json': [strToU8(JSON.stringify(file, null, 2)), { level: 6 }] }, { mtime: new Date('2026-01-01T00:00:00Z') }));
 console.warn(`${out}: ${total} Stände auf ${project.pages.length} Festplätzen`);

@@ -23,6 +23,9 @@ async function seed(page: Page, objs: { areas?: any[]; stands?: any[]; infra?: a
       const s = (window as any).__marktplanerStore.getState();
       s.change('Testdaten', (p: any) => {
         const pg = p.pages.find((x: any) => x.id === s.ui.activePage);
+        // Neue Pages haben seit #13 das Format „Plan“; diese Tests prüfen das DIN-Blatt, den bisherigen Standard
+        // A3 quer, an Seite anpassen (angepasst vom Entwickler)
+        Object.assign(pg.sheet, { format: 'A3', orientation: 'landscape', scale: null });
         p.categories.push(...(o.categories ?? []));
         for (const a of o.areas ?? []) pg.areas.push({ name: '', rot: 0, ...a });
         for (const st of o.stands ?? []) pg.stands.push({ ...base, rot: 0, ...st });
@@ -35,7 +38,7 @@ async function seed(page: Page, objs: { areas?: any[]; stands?: any[]; infra?: a
 const fitView = (page: Page) => page.keyboard.press(`${MOD}+0`);
 
 test.describe('M7: Blatt und Papier-Elemente', () => {
-  test('Standard: A3 quer, an Seite anpassen; Rahmen, Schriftfeld und Legende sind sichtbar', async ({ page }) => {
+  test('A3 quer, an Seite anpassen (Standard bis #13); Rahmen, Schriftfeld und Legende sind sichtbar', async ({ page }) => {
     const errors = collectErrors(page);
     await openApp(page);
     await seed(page, { areas: [{ id: 'G', cx: 87.5, cy: 25, w: 175, d: 50 }] });
@@ -254,7 +257,8 @@ test.describe('M7: Dateiformat Version 4', () => {
     await expect.poll(() => store(page, 's.project.pages.reduce((n, p) => n + p.stands.length, 0)')).toBe(500);
     const p = (await store(page, 's.project')) as any;
     expect(p.infraTypes).toHaveLength(8);
-    expect(p.pages[0].sheet).toEqual({ format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0 });
+    // seit #13 mit Rand, Zielbreite und Ausschnitt; das alte Blatt bleibt A3 quer (angepasst vom Entwickler)
+    expect(p.pages[0].sheet).toEqual({ format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null });
     expect(p.pages[0].powerLimitKw).toBe(100);
     expect(await store(page, 's.history.past.length')).toBe(0);
     const download = page.waitForEvent('download');
@@ -263,7 +267,7 @@ test.describe('M7: Dateiformat Version 4', () => {
     const { readFileSync } = await import('node:fs');
     const { unzipSync, strFromU8 } = await import('fflate');
     const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(path)))['project.json']!));
-    expect(json.schemaVersion).toBe(13); // seit #12 Version 13, angepasst vom Entwickler (vorher 12, 11, 10, 9, 8)
+    expect(json.schemaVersion).toBe(14); // seit #13 Version 14, angepasst vom Entwickler (vorher 13, 12, 11, 10, 9, 8)
     expect(json.project.pages[0]).not.toHaveProperty('titleBlockPos');
     expect(json.project.pages[0].legend).toEqual({ visible: true, corner: 'bl', dx: 10, dy: 10 });
   });
