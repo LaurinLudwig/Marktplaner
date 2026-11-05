@@ -15,7 +15,7 @@ import * as H from './history';
 export const START_PAGE = 'start';
 export type PageRef = typeof START_PAGE | Id;
 
-export type ToolId = 'select' | 'hand' | 'zoom' | 'measure' | 'calibrate' | 'area' | 'stand' | 'infra' | 'titleBlock' | 'numberCenter';
+export type ToolId = 'select' | 'hand' | 'zoom' | 'measure' | 'calibrate' | 'area' | 'stand' | 'infra' | 'titleBlock' | 'numberCenter' | 'numberDirection';
 
 /**
  * Auswahl auf der aktiven Page: der Hintergrund, Objekte (Grundflächen, Geschäfte, Infrastruktur gemischt) oder ein

@@ -310,7 +310,10 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 
 ### 5. Standnummern
 Entscheidungen 2026-10-12 (M5-Planung).
-- Modi pro Festplatz: links → rechts über den Festplatz, Uhrzeigersinn um einen Mittelpunkt, manuell.
+- Modi pro Festplatz (erweitert 2026-11-05, #12): **linear** in einer Richtung (links → rechts, rechts → links,
+  oben → unten, unten → oben oder eigene Richtung über zwei Punkte), **Kreis** um einen Mittelpunkt (im oder gegen den
+  Uhrzeigersinn), **manuell**. Die Seitenleiste wählt den Modus in zwei Stufen: „Linear“ + Richtung (→ ← ↓ ↑ /
+  eigene) bzw. „Kreis“ + Drehsinn. Beim Wechsel der ersten Stufe gilt links → rechts bzw. im Uhrzeigersinn.
 - **Links → rechts** (geändert 2026-10-12, Laurin): Alle Stände der Page werden von links nach rechts durchlaufen,
   unabhängig von den Grundflächen. Maßgeblich ist die Mitte des Stands auf dem Plan (x-Achse der Zeichenfläche,
   unabhängig von der Nordrichtung). Stände außerhalb von
@@ -324,6 +327,33 @@ Entscheidungen 2026-10-12 (M5-Planung).
   - Bei exakt gleichem x: kleineres y zuerst (weiter oben auf der Zeichenfläche).
   - Bei exakt gleicher Position: nach ID (der Fall ist ohnehin eine Überlappung mit Warnung).
   Das Ergebnis hängt nur vom Plan ab, nicht von der Reihenfolge, in der die Stände angelegt wurden.
+- **Weitere feste Richtungen** (#12; Entscheidung Laurin 2026-11-05: an den Achsen der Zeichenfläche, nicht an der
+  Nordrichtung der Page). Wie links → rechts unabhängig von den Grundflächen, Standmitte auf 0,01 m gerundet, bei
+  exakt gleicher Position nach ID:
+  - **Rechts → links:** größeres x zuerst; bei exakt gleichem x kleineres y.
+  - **Oben → unten:** kleineres y zuerst; bei exakt gleichem y kleineres x.
+  - **Unten → oben:** größeres y zuerst; bei exakt gleichem y kleineres x.
+- **Eigene Richtung (zwei Punkte, #12):** Startpunkt A und Zielpunkt B auf der Zeichenfläche; nummeriert wird in
+  Richtung A → B.
+  - Reihenfolge nach der Lage der Standmitte entlang A → B (Projektion auf die Richtung), kleinster Wert zuerst. Stände
+    vor A oder hinter B zählen genauso; die Punkte legen nur die Richtung fest, keinen Bereich.
+  - Gleichstand: zuerst der Stand links der Richtung (vom Pfeil aus gesehen), dann rechts; danach nach ID. (Die festen
+    Richtungen haben ihre eigene Regel oben; links → rechts ist mit beiden Regeln gleich.)
+  - Ohne Toleranz (QA-M5-01): Standmitten und Punkte auf 0,01 m gerundet und als ganze Zentimeter verrechnet
+    (Skalarprodukt ganzzahlig); das Ergebnis hängt nicht von der Anlegereihenfolge ab. Intern laufen die festen
+    Richtungen über dieselbe Rechnung (Einheitsvektoren).
+  - Liegen A und B nach dem Runden aufeinander, gibt es keine Richtung: Die Seitenleiste zeigt einen Hinweis, „Neu
+    nummerieren“ ist gesperrt (bei „global“ für alle Pages, solange eine betroffene Page so eingestellt ist).
+  - Setzen: Werkzeug „Richtung auf dem Plan setzen“ (Seitenleiste): erst A klicken, dann B; Fang an Standmitten und
+    Grundflächen-Ecken (Cmd/Strg aus), ein Klick auf A selbst zählt nicht, Esc bricht ab. Zusätzlich Felder A X/Y und
+    B X/Y. Beides ist ein Undo-Schritt.
+  - Anzeige: Solange der Modus aktiv ist, zeigt die Zeichenfläche einen Pfeil A → B mit den Marken „1“ an A und „→“
+    an B (nicht im PDF). Das Auswahlwerkzeug zieht A und B (Fang wie beim Setzen, ein Undo-Schritt, Esc bricht ab).
+  - Erstes Umschalten: A und B laufen waagrecht durch die Mitte aller Stände (vom linken bis zum rechten Rand ihrer
+    Hülle; ohne Stände der Grundflächen), nummeriert also wie links → rechts.
+  - Verschieben oder Drehen einer Page im Verbund (#15) bewegt A und B noch nicht mit; das kommt mit #15.
+  - Formatversion 12 (Page `numberingMode` zusätzlich `rightToLeft`, `topToBottom`, `bottomToTop`, `direction`,
+    `counterClockwise`; Page `direction` mit `from` und `to` in Metern). `frontLtr` bleibt der Name für links → rechts.
 - **Uhrzeigersinn:** um einen pro Festplatz gesetzten Mittelpunkt (Klick auf die Zeichenfläche nach „Mittelpunkt
   setzen“ oder Felder X/Y; beim ersten Umschalten die Mitte aller Grundflächen und Stände). Startrichtung in Grad
   im Uhrzeigersinn relativ zum Norden des Plans (Nordrichtung der Page), Standard 0° = Norden. Sortiert wird nach
@@ -332,6 +362,10 @@ Entscheidungen 2026-10-12 (M5-Planung).
   dem kleineren, auf 0,01 m gerundeten Abstand zum Mittelpunkt zuerst, danach nach ID. Es zählen alle Stände der
   Page. Mittelpunkt und Startrichtung sind auf der Zeichenfläche als Fadenkreuz
   mit Strahl sichtbar, solange der Modus aktiv ist (nicht im PDF).
+- **Gegen den Uhrzeigersinn** (#12): wie „Uhrzeigersinn“ (derselbe Mittelpunkt, dieselbe Startrichtung, Fadenkreuz
+  mit Drehpfeil im Drehsinn), nur mit absteigendem Winkel ab dem Startstrahl. Gerechnet wird mit demselben auf 0,1°
+  gerundeten Winkel, gespiegelt (360° − Winkel); bei gleichem Winkel zuerst der Stand näher am Mittelpunkt, danach nach
+  ID.
 - **Manuell:** Die Automatik lässt die Page aus.
 - **Format:** Präfix der Page + Zahl, aufgefüllt auf die Stellenzahl (z. B. Präfix „A-“, 2 Stellen → „A-01“).
   Präfix pro Festplatz (Seitenleiste); Startnummer und Stellenzahl (1–4, Standard 1 = ohne führende Nullen)

@@ -1,6 +1,6 @@
 import { normAngle } from '../core/geometry/rect';
-import type { Id, NumberingMode, NumberingScope, Vec } from '../core/model/types';
-import { clampDigits, clampStart, defaultClockwiseCenter, nrLockTargets, type RenumberPlan } from '../core/numbering';
+import type { Id, NumberingDirection, NumberingMode, NumberingScope, Vec } from '../core/model/types';
+import { clampDigits, clampStart, defaultClockwiseCenter, defaultDirection, isCircularMode, nrLockTargets, type RenumberPlan } from '../core/numbering';
 import { updatePage } from './pageSettings';
 import { useStore } from './store';
 
@@ -12,11 +12,34 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 export function setNumberingMode(pageId: Id, mode: NumberingMode) {
   updatePage(pageId, 'Nummerierungsmodus ändern', (page) => {
     page.numberingMode = mode;
-    // Beim ersten Umschalten auf „Uhrzeigersinn“: Mittelpunkt = Mitte aller Grundflächen und Stände
-    if (mode === 'clockwise' && !page.clockwise) {
+    // Beim ersten Umschalten auf einen Kreis-Modus: Mittelpunkt = Mitte aller Grundflächen und Stände
+    if (isCircularMode(mode) && !page.clockwise) {
       const center = defaultClockwiseCenter(page);
       if (center) page.clockwise = { center, startAngle: 0 };
     }
+    // Beim ersten Umschalten auf „eigene Richtung“: waagrecht durch die Mitte aller Stände (wie links → rechts, #12)
+    if (mode === 'direction' && !page.direction) {
+      const dir = defaultDirection(page);
+      if (dir) page.direction = dir;
+    }
+  });
+}
+
+const roundVec = (v: Vec): Vec => ({ x: round2(v.x), y: round2(v.y) });
+
+/** Start- und Zielpunkt der eigenen Richtung auf einmal setzen (Werkzeug „Richtung setzen“, Ziehen; ein Undo-Schritt). */
+export function setNumberingDirection(pageId: Id, dir: NumberingDirection, label = 'Richtung setzen') {
+  updatePage(pageId, label, (page) => {
+    page.direction = { from: roundVec(dir.from), to: roundVec(dir.to) };
+  });
+}
+
+/** Einzelne Koordinate von A (`from`) oder B (`to`) ändern (Felder der Seitenleiste). */
+export function setDirectionPoint(pageId: Id, end: keyof NumberingDirection, p: Partial<Vec>, label = 'Richtung ändern') {
+  updatePage(pageId, label, (page) => {
+    const old = page.direction ?? defaultDirection(page) ?? { from: { x: 0, y: 0 }, to: { x: 10, y: 0 } };
+    const q = { x: p.x ?? old[end].x, y: p.y ?? old[end].y };
+    page.direction = { ...old, [end]: roundVec(q) };
   });
 }
 

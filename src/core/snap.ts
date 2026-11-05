@@ -12,7 +12,8 @@ import { rectCorners } from './geometry/rect';
 import { add, dot, len, mul, sub } from './geometry/vec';
 import type { Rect, Vec } from './model/types';
 
-export type SnapKind = 'corner' | 'edge';
+/** Ecke, Kante oder Mittelpunkt eines Objekts (Mittelpunkt seit #12, Werkzeug „Richtung setzen“). */
+export type SnapKind = 'corner' | 'center' | 'edge';
 
 export interface SnapCandidate {
   point: Vec;
@@ -26,7 +27,7 @@ export interface SnapResult extends SnapCandidate {
 /** Liefert Kandidaten in der Nähe von `p` (darf auch mehr liefern; gefiltert wird in findSnap). */
 export type SnapSource = (p: Vec, tolerance: number) => SnapCandidate[];
 
-const PRIORITY: Record<SnapKind, number> = { corner: 0, edge: 1 };
+const PRIORITY: Record<SnapKind, number> = { corner: 0, center: 0, edge: 1 };
 
 /** Nächster Punkt auf der Strecke a–b zu p. */
 export function closestPointOnSegment(p: Vec, a: Vec, b: Vec): Vec {
@@ -52,6 +53,22 @@ export function rectSnapSource(rects: readonly Rect[]): SnapSource {
         out.push({ point: closestPointOnSegment(p, a, b), kind: 'edge' });
       }
     }
+    return out;
+  };
+}
+
+/**
+ * Nur Ecken und Mitten (ohne Kanten): Werkzeug „Richtung setzen“ der Nummerierung (#12) fängt an Standmitten und
+ * Grundflächen-Ecken.
+ */
+export function pointSnapSource(corners: readonly Rect[], centers: readonly Rect[]): SnapSource {
+  return (p, tolerance) => {
+    const out: SnapCandidate[] = [];
+    for (const r of corners) {
+      if (len(sub(p, { x: r.cx, y: r.cy })) > Math.hypot(r.w, r.d) / 2 + tolerance) continue;
+      for (const c of rectCorners(r)) out.push({ point: c, kind: 'corner' });
+    }
+    for (const r of centers) out.push({ point: { x: r.cx, y: r.cy }, kind: 'center' });
     return out;
   };
 }

@@ -236,13 +236,24 @@ export interface View {
 }
 
 export type NumberingScope = 'global' | 'perPage';
-/** `frontLtr` = links → rechts über den ganzen Festplatz (Name aus der Planung, im Dateiformat beibehalten). */
-export type NumberingMode = 'frontLtr' | 'clockwise' | 'manual';
+/**
+ * Nummerierungsmodus der Page (spec.md §5). Linear: `frontLtr` = links → rechts über den ganzen Festplatz (Name aus
+ * der Planung, im Dateiformat beibehalten), `rightToLeft`, `topToBottom`, `bottomToTop` (Achsen der Zeichenfläche)
+ * und `direction` = eigene Richtung über zwei Punkte (`FestplatzPage.direction`, seit #12). Kreis: `clockwise` und
+ * `counterClockwise` um den Mittelpunkt aus `FestplatzPage.clockwise`.
+ */
+export type NumberingMode = 'frontLtr' | 'rightToLeft' | 'topToBottom' | 'bottomToTop' | 'direction' | 'clockwise' | 'counterClockwise' | 'manual';
 
 /** Nummerierung im Uhrzeigersinn: Mittelpunkt und Startrichtung (Grad im Uhrzeigersinn ab Norden der Page). */
 export interface ClockwiseSettings {
   center: Vec;
   startAngle: number;
+}
+
+/** Eigene Richtung der Nummerierung (#12): Startpunkt A (`from`) und Zielpunkt B (`to`) auf dem Plan, in Metern. */
+export interface NumberingDirection {
+  from: Vec;
+  to: Vec;
 }
 
 /** Ausgeblendete Freifläche: Schlüssel und Lage auf der Achse der Grundfläche (auf 0,01 m gerundet). */
@@ -257,7 +268,10 @@ export interface FestplatzPage {
   name: string;
   prefix: string;
   numberingMode: NumberingMode;
+  /** Mittelpunkt und Startrichtung für „Uhrzeigersinn“ und „gegen den Uhrzeigersinn“. */
   clockwise?: ClockwiseSettings;
+  /** Eigene Richtung A → B für den Modus `direction` (seit #12, Formatversion 12). */
+  direction?: NumberingDirection;
   powerLimitKw: number | null;
   blockOverLimit: boolean;
   northAngle: number;

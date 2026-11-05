@@ -746,6 +746,7 @@ kbd {
 .fp-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; flex: 1; }
 .seg button { height: 22px; border: 1px solid var(--border-soft); border-radius: 3px; background: var(--panel-sunken); }
+.seg.seg-direction { grid-template-columns: repeat(4, 1fr) 2fr; }
 .seg button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--front); color: var(--text-strong); }
 
 /* ---------- Freiflächen, Warnungen, Fang (M4) ---------- */
@@ -872,6 +873,10 @@ kbd {
 .clockwise-marker circle, .clockwise-marker path { fill: none; stroke: var(--accent); stroke-width: 2; }
 .clockwise-marker .ray { stroke-dasharray: 6 4; }
 .clockwise-marker .arc { stroke-width: 1.5; }
+.direction-marker path, .direction-marker circle { fill: none; stroke: var(--accent); stroke-width: 2; }
+.direction-marker .shaft { stroke-dasharray: 6 4; }
+.direction-marker .end { fill: var(--accent); fill-opacity: 0.25; }
+.direction-marker text { fill: var(--accent); font: 600 13px var(--f-num); text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; }
 .dialog.renumber { width: min(560px, calc(100vw - 32px)); }
 
 /* Kategorieliste wählen (#1) */
