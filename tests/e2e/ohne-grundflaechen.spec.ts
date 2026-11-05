@@ -18,6 +18,7 @@ const activePage = async (page: Page) => {
 const badge = (page: Page) => pageTabs(page).nth(1).getByTestId('warn-badge');
 const areasPanel = (page: Page) => page.getByRole('region', { name: 'Grundflächen' });
 const useAreas = (page: Page) => areasPanel(page).getByTestId('use-areas');
+// Mit vorhandenen Grundflächen bleibt die Checkbox bis zur Antwort im Dialog gesetzt: dort click() statt uncheck()
 const dialog = (page: Page) => page.getByRole('alertdialog', { name: 'Ohne Grundflächen planen' });
 const areaTool = (page: Page) => page.getByRole('navigation', { name: 'Werkzeuge' }).getByRole('button', { name: 'Grundfläche erstellen' });
 const layerNames = (page: Page) => page.getByRole('region', { name: 'Ebenen' }).locator('.layer-name');
@@ -89,7 +90,7 @@ test.describe('#17 Festplatz ohne Grundflächen', () => {
     const n0 = (await st(page)).history.past.length;
 
     // Abbrechen: nichts ändert sich
-    await useAreas(page).uncheck();
+    await useAreas(page).click();
     await expect(dialog(page)).toContainText('„Festplatz 1“ hat eine Grundfläche');
     await dialog(page).getByRole('button', { name: 'Abbrechen' }).click();
     await expect(dialog(page)).toHaveCount(0);
@@ -97,7 +98,7 @@ test.describe('#17 Festplatz ohne Grundflächen', () => {
     expect((await st(page)).history.past.length).toBe(n0);
 
     // Behalten: Grundfläche gespeichert, aber ausgeblendet; keine Freiflächen, keine Warnung „außerhalb“
-    await useAreas(page).uncheck();
+    await useAreas(page).click();
     await dialog(page).getByRole('button', { name: 'Grundflächen behalten' }).click();
     await expect(useAreas(page)).not.toBeChecked();
     await expect(areasPanel(page).getByTestId('use-areas-hint')).toContainText('Eine Grundfläche ist ausgeblendet und wirkt nicht.');
@@ -114,7 +115,9 @@ test.describe('#17 Festplatz ohne Grundflächen', () => {
     // Mitten in der ausgeblendeten Grundfläche, abseits von Ständen und Papier-Elementen
     const empty = await w2s(page, { x: -10, y: -5 });
     await page.mouse.click(empty.x, empty.y);
-    expect((await st(page)).ui.selection).toBeNull();
+    // Die Grundfläche wird nicht getroffen (je nach Blattlage kann dort der Blattrand liegen)
+    const sel = (await st(page)).ui.selection;
+    expect(sel?.kind === 'objects' ? sel.ids : []).not.toContain('G');
     await pointerOnCanvas(page, empty.x, empty.y);
     await page.keyboard.press(`${MOD}+a`);
     expect((await st(page)).ui.selection.ids.toSorted()).toEqual(['s1', 's2']);
@@ -138,7 +141,7 @@ test.describe('#17 Festplatz ohne Grundflächen', () => {
     await expect(areaTool(page)).toBeEnabled();
 
     // Löschen: Grundfläche entfernt, ein Undo-Schritt
-    await useAreas(page).uncheck();
+    await useAreas(page).click();
     await dialog(page).getByRole('button', { name: 'Grundflächen löschen' }).click();
     await expect(useAreas(page)).not.toBeChecked();
     expect((await activePage(page)).areas).toEqual([]);
@@ -167,7 +170,7 @@ test.describe('#17 Festplatz ohne Grundflächen', () => {
     await seed(page);
     await tabbar(page).getByRole('button', { name: 'Festplatz-Tab hinzufügen' }).click();
     await seed(page, [{ id: 't1', cx: 0, cy: 0, w: 4 }]);
-    await useAreas(page).uncheck();
+    await useAreas(page).click();
     await dialog(page).getByRole('button', { name: 'Grundflächen behalten' }).click();
     await tabbar(page).getByRole('tab', { name: 'Start-Page' }).click();
 
@@ -196,8 +199,10 @@ test.describe('#17 Festplatz ohne Grundflächen', () => {
     await expect(page.locator('[data-testid="snap-guides"] [data-kind="front"]')).toHaveCount(1);
     await page.keyboard.press('Escape');
     await page.mouse.up();
+    // Auswahl aufheben, damit die Seitenleiste wieder die Page zeigt
+    await page.keyboard.press('Escape');
 
-    await useAreas(page).uncheck();
+    await useAreas(page).click();
     await dialog(page).getByRole('button', { name: 'Grundflächen behalten' }).click();
     await drag(page, { x: -10, y: -7 }, { x: -10, y: -2 }, { keepDown: true });
     await expect(page.locator('[data-testid="snap-guides"] [data-kind="front"]')).toHaveCount(0);
@@ -210,6 +215,43 @@ test.describe('#17 Festplatz ohne Grundflächen', () => {
     await expect(page.locator('[data-testid="snap-guides"] [data-kind="contact"]')).toHaveCount(1);
     await page.mouse.up();
     expect((await activePage(page)).stands.find((x: any) => x.id === 'k')).toMatchObject({ cx: 6.7, cy: 20 });
+    expect(errors).toEqual([]);
+  });
+
+  test('„außerhalb ignorieren“ bleibt am Stand gespeichert, erscheint ohne Grundflächen nicht; Wiedereinschalten zeigt alles wieder', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page, [{ id: 's1', cx: -20, cy: -1.5 }, { id: 's2', cx: 0, cy: 25, suppressOutsideWarning: true }, { id: 's3', cx: 10, cy: 25 }]);
+    const selectStand = (id: string) => page.evaluate((x) => (window as any).__marktplanerStore.getState().setUi({ selection: { kind: 'objects', ids: [x] } }), id);
+    const deselect = () => page.evaluate(() => (window as any).__marktplanerStore.getState().setUi({ selection: null }));
+    // Mit Grundflächen: s2 ignoriert „außerhalb“ (Häkchen sichtbar), s3 warnt
+    await expect(badge(page)).toHaveText('1');
+    await selectStand('s2');
+    await expect(page.getByLabel('„außerhalb“ ignorieren')).toBeChecked();
+    await selectStand('s3');
+    await expect(page.getByTestId('warn-chip-outside')).toHaveText('Außerhalb jeder Grundfläche');
+
+    await deselect();
+    await useAreas(page).click();
+    await dialog(page).getByRole('button', { name: 'Grundflächen behalten' }).click();
+    await expect(badge(page)).toHaveCount(0);
+    await selectStand('s2');
+    await expect(page.getByRole('textbox', { name: 'X' }).first()).toHaveValue('0');
+    await expect(page.getByLabel('„außerhalb“ ignorieren')).toHaveCount(0);
+    await selectStand('s3');
+    await expect(page.getByRole('textbox', { name: 'X' }).first()).toHaveValue('10');
+    await expect(page.getByTestId('warn-chip-outside')).toHaveCount(0);
+    expect((await activePage(page)).stands.find((x: any) => x.id === 's2').suppressOutsideWarning).toBe(true);
+
+    // Wiedereinschalten (ohne Rückfrage, ein Undo-Schritt): Grundfläche, Freiflächen und Warnung sind wieder da
+    await deselect();
+    const n0 = (await st(page)).history.past.length;
+    await useAreas(page).check();
+    expect((await st(page)).history.past.length).toBe(n0 + 1);
+    await expect(page.locator('.area')).toHaveCount(1);
+    await expect(page.locator('.free-space')).toHaveCount(2);
+    await expect(badge(page)).toHaveText('1');
+    await expect(areaTool(page)).toBeEnabled();
     expect(errors).toEqual([]);
   });
 });
