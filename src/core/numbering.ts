@@ -246,3 +246,24 @@ export function planRenumber(project: Pick<Project, 'pages' | 'settings'>, pageI
   }
   return { scope, mode, pageIds: targets.map((p) => p.id), changes, fixed, unchanged, duplicates: findDuplicates(project.pages, scope, override) };
 }
+
+// ---------- Alle Fixierungen lösen / alle Nummern fixieren (#14) ----------
+
+/**
+ * Stände, deren Fixierung „Alle Fixierungen lösen“ (`locked = false`) bzw. „Alle Nummern fixieren“ (`locked = true`)
+ * ändert (spec.md §5). Es wirkt auf den Nummernkreis der Page `pageId` – bei „pro Festplatz“ die Page, bei „global“
+ * alle Pages –, mit `pageId = null` (Start-Page) auf alle Pages; Pages im Modus „manuell“ zählen mit.
+ * Fixiert werden nur Stände mit Nummer: fixiert und leer hieße, der Stand bliebe ohne Nummer.
+ */
+export function nrLockTargets(project: Pick<Project, 'pages' | 'settings'>, pageId: Id | null, locked: boolean): NrRef[] {
+  const pages = pageId === null ? project.pages : circleOf(project, pageId).circle;
+  const out: NrRef[] = [];
+  for (const page of pages) {
+    for (const s of page.stands) {
+      if (s.nrLocked === locked) continue;
+      if (locked && !s.nr.trim()) continue;
+      out.push({ pageId: page.id, standId: s.id });
+    }
+  }
+  return out;
+}

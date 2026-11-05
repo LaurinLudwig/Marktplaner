@@ -1,6 +1,6 @@
 import { normAngle } from '../core/geometry/rect';
 import type { Id, NumberingMode, NumberingScope, Vec } from '../core/model/types';
-import { clampDigits, clampStart, defaultClockwiseCenter, type RenumberPlan } from '../core/numbering';
+import { clampDigits, clampStart, defaultClockwiseCenter, nrLockTargets, type RenumberPlan } from '../core/numbering';
 import { updatePage } from './pageSettings';
 import { useStore } from './store';
 
@@ -74,6 +74,24 @@ export function setNrLocked(pageId: Id, ids: readonly Id[], locked: boolean) {
   updatePage(pageId, locked ? 'Nummer fixieren' : 'Fixierung lösen', (page) => {
     for (const s of page.stands) if (set.has(s.id)) s.nrLocked = locked;
   });
+}
+
+/**
+ * Alle Fixierungen im Nummernkreis der Page `pageId` lösen bzw. alle Nummern dort fixieren (#14, spec.md §5);
+ * `pageId = null` = alle Pages. Ein Undo-Schritt; die Nummern selbst bleiben. Liefert die Zahl der geänderten Stände.
+ */
+export function setAllNrLocked(pageId: Id | null, locked: boolean): number {
+  const targets = nrLockTargets(st().project, pageId, locked);
+  if (!targets.length) return 0;
+  const byPage = new Map<Id, Set<Id>>();
+  for (const t of targets) byPage.set(t.pageId, (byPage.get(t.pageId) ?? new Set()).add(t.standId));
+  st().change(locked ? 'Alle Nummern fixieren' : 'Alle Fixierungen lösen', (p) => {
+    for (const page of p.pages) {
+      const ids = byPage.get(page.id);
+      if (ids) for (const s of page.stands) if (ids.has(s.id)) s.nrLocked = locked;
+    }
+  });
+  return targets.length;
 }
 
 /** Plan aus `planRenumber` übernehmen: ein Undo-Schritt für alle Pages. */

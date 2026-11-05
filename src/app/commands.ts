@@ -6,6 +6,7 @@ import { importBackground } from './backgroundImport';
 import { confirm } from './dialogs';
 import { notify } from './notify';
 import { canRenumber, openRenumber } from './renumber';
+import { nrLockCount, setAllNrLocks } from './nrLock';
 import { newProject, openProject, saveProject } from './fileActions';
 import { fitView, visibleBounds, zoomBy } from './view';
 import { exportCurrentList } from './exportCsv';
@@ -135,6 +136,17 @@ export const COMMANDS: Record<string, Command> = {
     run: openRenumber,
     enabled: () => onDrawingPage() && canRenumber(),
     disabledMessage: 'Neu nummerieren: Diese Page wird manuell nummeriert (Seitenleiste, Bereich „Nummerierung“).',
+  },
+  // #14: auf der Festplatz-Page für deren Nummernkreis, auf der Start-Page für alle Pages (app/nrLock.ts)
+  'numbering.unlockAll': {
+    run: () => setAllNrLocks(false),
+    enabled: () => nrLockCount(false) > 0,
+    disabledMessage: 'Alle Fixierungen lösen: Im Nummernkreis ist keine Nummer fixiert.',
+  },
+  'numbering.lockAll': {
+    run: () => setAllNrLocks(true),
+    enabled: () => nrLockCount(true) > 0,
+    disabledMessage: 'Alle Nummern fixieren: Im Nummernkreis gibt es keine Nummer, die noch nicht fixiert ist.',
   },
   'view.grid': {
     run: () => {

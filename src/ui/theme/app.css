@@ -322,6 +322,8 @@ kbd {
 .startpage .muted { color: var(--muted); }
 .link-btn { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
 .link-btn:hover { text-decoration: underline; }
+.nr-lock-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.nr-lock-actions .link-btn { display: inline-flex; align-items: center; gap: 3px; }
 
 .sp-stats { display: flex; gap: 8px; padding: 0 20px 12px; overflow-x: auto; flex: none; }
 /* minmax(0, 1fr): lange Kategorienamen kürzen sich, statt die Spalte über den Kartenrand zu verbreitern */
@@ -375,6 +377,8 @@ kbd {
 .sp-toolbar .spacer ~ .popover .popover-body { left: auto; right: 0; }
 .popover-list { display: grid; gap: 5px; }
 .popover-list .check { white-space: nowrap; }
+.popover-list.nr-locks { width: 230px; }
+.popover-list.nr-locks .btn { justify-content: flex-start; }
 
 /* Virtualisierte Tabelle: Kopf fest oben, Zeilen absolut mit fester Höhe */
 .vt { flex: 1; min-height: 0; overflow: auto; position: relative; outline: none; background: var(--panel); }
@@ -597,6 +601,7 @@ kbd {
 }
 .toast.success { border-left: 3px solid var(--snap); }
 .toast.error { border-left: 3px solid var(--danger); }
+.toast-action { margin-left: 4px; font-weight: 600; white-space: nowrap; }
 .spinner {
   width: 14px;
   height: 14px;

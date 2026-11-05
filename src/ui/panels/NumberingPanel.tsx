@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { runCommand } from '../../app/commands';
+import { fmt } from '../../core/format';
 import type { FestplatzPage, NumberingMode } from '../../core/model/types';
-import { defaultClockwiseCenter, formatNr } from '../../core/numbering';
+import { defaultClockwiseCenter, formatNr, nrLockTargets } from '../../core/numbering';
 import { setClockwiseCenter, setClockwiseStart, setNumberingMode, setPrefix } from '../../state/numbering';
 import { openProjectSettings } from '../../app/startPageNav';
 import { useStore } from '../../state/store';
@@ -17,13 +19,18 @@ const MODES: { id: NumberingMode; label: string }[] = [
 
 /**
  * Nummerierung der Festplatz-Page (M5, spec.md §5): Modus, Präfix, im Uhrzeigersinn Mittelpunkt und
- * Startrichtung; Neu nummerieren. Den projektweiten Nummernkreis zeigt sie nur an (Einstellung seit M6 in den
+ * Startrichtung; Neu nummerieren; alle Fixierungen lösen bzw. alle Nummern fixieren (#14). Den projektweiten Nummernkreis zeigt sie nur an (Einstellung seit M6 in den
  * Projekteinstellungen der Start-Page).
  */
 export function NumberingPanel({ page }: { page: FestplatzPage }) {
   const numbering = useStore((s) => s.project.settings.numbering);
   const unnumbered = page.stands.filter((s) => !s.nr.trim()).length;
   const fixed = page.stands.filter((s) => s.nrLocked).length;
+  // #14: Zahl der Stände, die „Alle Fixierungen lösen“ bzw. „Alle Nummern fixieren“ im Nummernkreis ändern würde
+  // (am Projekt festgemacht, nicht an jeder Store-Änderung wie Zoomen oder Verschieben der Ansicht)
+  const project = useStore((s) => s.project);
+  const [toUnlock, toLock] = useMemo(() => [nrLockTargets(project, page.id, false).length, nrLockTargets(project, page.id, true).length], [project, page.id]);
+  const circleText = numbering.scope === 'global' ? 'Auf allen Festplätzen (Nummernkreis global durchgehend)' : 'Auf diesem Festplatz';
   const manual = page.numberingMode === 'manual';
   const canRun = numbering.scope === 'global' || !manual;
   const center = page.clockwise?.center ?? defaultClockwiseCenter(page);
@@ -71,6 +78,20 @@ export function NumberingPanel({ page }: { page: FestplatzPage }) {
           {unnumbered > 0 && `, ${unnumbered} ohne Nummer`}
           {fixed > 0 && `, ${fixed} fixiert`}
         </p>
+        {(toUnlock > 0 || toLock > 0) && (
+          <p className="hint nr-lock-actions" data-testid="nr-lock-actions">
+            {toUnlock > 0 && (
+              <button type="button" className="link-btn" onClick={() => runCommand('numbering.unlockAll')} {...tip({ label: 'Alle Fixierungen lösen', desc: `${circleText}; die Nummern bleiben. ${fmt(toUnlock, 0)} ${toUnlock === 1 ? 'Stand' : 'Stände'}.`, ariaLabel: false })}>
+                <Icon name="unlock" size={12} /> Alle Fixierungen lösen
+              </button>
+            )}
+            {toLock > 0 && (
+              <button type="button" className="link-btn" onClick={() => runCommand('numbering.lockAll')} {...tip({ label: 'Alle Nummern fixieren', desc: `${circleText}; Stände ohne Nummer bleiben offen. ${fmt(toLock, 0)} ${toLock === 1 ? 'Stand' : 'Stände'}.`, ariaLabel: false })}>
+                <Icon name="lock" size={12} /> Alle Nummern fixieren
+              </button>
+            )}
+          </p>
+        )}
         <button type="button" className="btn primary wide" disabled={!canRun} onClick={() => runCommand('numbering.renumber')} {...tip({ shortcut: 'numbering.renumber', desc: 'Vorschau alt → neu, dann übernehmen', ariaLabel: false })}>
           Neu nummerieren … {keyLabel('numbering.renumber') && <kbd>{keyLabel('numbering.renumber')}</kbd>}
         </button>

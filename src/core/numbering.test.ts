@@ -2,7 +2,7 @@ import * as fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { createPage, DEFAULT_SETTINGS } from './model/defaults';
 import type { Area, FestplatzPage, NumberingScope, Rect, Stand } from './model/types';
-import { cachedDuplicates, defaultClockwiseCenter, defaultRenumberMode, findDuplicates, formatNr, nrKey, nrNumber, orderClockwise, orderLeftToRight, orderStands, planRenumber, sameNr } from './numbering';
+import { cachedDuplicates, defaultClockwiseCenter, defaultRenumberMode, findDuplicates, formatNr, nrKey, nrLockTargets, nrNumber, orderClockwise, orderLeftToRight, orderStands, planRenumber, sameNr } from './numbering';
 import { createStand } from './objects';
 
 /**
@@ -305,5 +305,43 @@ describe('M5 Doppelte Nummern', () => {
     const a = cachedDuplicates(pages, 'perPage');
     expect(cachedDuplicates(pages, 'perPage')).toBe(a);
     expect(cachedDuplicates(pages, 'global')).not.toBe(a);
+  });
+});
+
+describe('#14 Alle Fixierungen lösen / alle Nummern fixieren', () => {
+  const pages = () => [
+    page('A', { stands: [st('a1', 0, -1.5, { nr: '1', nrLocked: true }), st('a2', 5, -1.5, { nr: '2' }), st('a3', 10, -1.5, { nr: '', nrLocked: true }), st('a4', 15)] }),
+    page('B', { numberingMode: 'manual', stands: [st('b1', 0, -1.5, { nr: '7', nrLocked: true }), st('b2', 5, -1.5, { nr: '8' })] }),
+  ];
+  const refs = (r: { pageId: string; standId: string }[]) => r.map((x) => `${x.pageId}/${x.standId}`);
+
+  it('pro Festplatz: nur die Page; auch im Modus „manuell“', () => {
+    const p = project(pages());
+    expect(refs(nrLockTargets(p, 'A', false))).toEqual(['A/a1', 'A/a3']);
+    expect(refs(nrLockTargets(p, 'B', false))).toEqual(['B/b1']);
+    expect(refs(nrLockTargets(p, 'B', true))).toEqual(['B/b2']);
+  });
+
+  it('global: alle Pages, auch manuelle (anders als „Neu nummerieren“)', () => {
+    const p = project(pages(), { scope: 'global' });
+    expect(refs(nrLockTargets(p, 'A', false))).toEqual(['A/a1', 'A/a3', 'B/b1']);
+    expect(refs(nrLockTargets(p, 'B', true))).toEqual(['A/a2', 'B/b2']);
+  });
+
+  it('ohne Page (Start-Page): alle Pages, unabhängig vom Nummernkreis', () => {
+    const p = project(pages(), { scope: 'perPage' });
+    expect(refs(nrLockTargets(p, null, false))).toEqual(['A/a1', 'A/a3', 'B/b1']);
+  });
+
+  it('fixieren lässt Stände ohne Nummer (auch nur Leerzeichen) aus; fixiert und leer wird trotzdem gelöst', () => {
+    const p = project([page('A', { stands: [st('x', 0, -1.5, { nr: '  ' }), st('y', 5, -1.5, { nr: '', nrLocked: true }), st('z', 10, -1.5, { nr: 'A-1' })] })]);
+    expect(refs(nrLockTargets(p, 'A', true))).toEqual(['A/z']);
+    expect(refs(nrLockTargets(p, 'A', false))).toEqual(['A/y']);
+  });
+
+  it('nichts zu tun: leere Liste; unbekannte Page bei „pro Festplatz“ ebenso', () => {
+    const p = project([page('A', { stands: [st('a', 0, -1.5, { nr: '1', nrLocked: true })] })]);
+    expect(nrLockTargets(p, 'A', true)).toEqual([]);
+    expect(nrLockTargets(p, 'X', false)).toEqual([]);
   });
 });
