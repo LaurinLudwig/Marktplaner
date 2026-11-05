@@ -26,6 +26,7 @@ import { SnapMarker } from './SnapMarker';
 import { SNAP_PX, type ToolContext, type ToolHandlers, type ToolPointer } from './types';
 import { directionHandleAt } from '../DirectionMarker';
 import { directionSnap } from './useDirectionTool';
+import { directionOf } from '../../../core/numbering';
 import { setDirectionPoint } from '../../../state/numbering';
 
 /** Ab dieser Mausbewegung (px) wird aus einem Klick ein Ziehen. */
@@ -56,7 +57,7 @@ type Gesture =
   /** Ausgelagerte Standbeschriftung von Hand verschieben (#9). */
   | { kind: 'label'; id: Id; startWorld: Vec; start: Vec; box0: Bounds; moved: boolean; delta: Vec }
   /** Start- oder Zielpunkt der eigenen Nummerierungsrichtung ziehen (#12): eine Transaktion, ein Undo-Schritt. */
-  | { kind: 'direction'; end: 'from' | 'to'; start: Vec; moved: boolean };
+  | { kind: 'direction'; end: 'from' | 'to'; start: Vec; moved: boolean; offset: Vec };
 
 const LABEL = { move: 'Verschieben', rotate: 'Drehen', resize: 'Größe ändern', end: 'Länge ändern' } as const;
 /** Trefferabstand für Linien ohne Fläche in Bildschirmpixeln (M7). */
@@ -306,8 +307,11 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
 
       // Start- und Zielpunkt der eigenen Nummerierungsrichtung (#12) liegen über allen Objekten
       const dirHit = !handle ? directionHandleAt(ctx.page, ctx.toScreen, p.screen) : null;
-      if (dirHit) {
-        startGesture({ kind: 'direction', end: dirHit, start: p.screen, moved: false });
+      const dir0 = dirHit ? directionOf(ctx.page) : null;
+      if (dirHit && dir0) {
+        // Griffabstand merken: Der Punkt bleibt beim Ziehen um diesen Abstand neben der Maus (springt nicht)
+        const q = dir0[dirHit];
+        startGesture({ kind: 'direction', end: dirHit, start: p.screen, moved: false, offset: { x: q.x - p.world.x, y: q.y - p.world.y } });
         return true;
       }
 
@@ -494,10 +498,11 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
           if (!g.moved && Math.hypot(p.screen.x - g.start.x, p.screen.y - g.start.y) < DRAG_PX) return;
           if (!g.moved) useStore.getState().beginTransaction('Richtung verschieben');
           g.moved = true;
-          // Fang an Standmitten und Grundflächen-Ecken wie beim Setzen; Cmd/Strg aus
-          const s = p.modKey ? null : directionSnap(ctx, p.world);
+          // Punkt = Maus + Griffabstand; Fang an Standmitten und Grundflächen-Ecken wie beim Setzen, Cmd/Strg aus
+          const q = { x: p.world.x + g.offset.x, y: p.world.y + g.offset.y };
+          const s = p.modKey ? null : directionSnap(ctx, q);
           setEndSnap(s);
-          setDirectionPoint(pageId, g.end, s?.point ?? p.world, 'Richtung verschieben');
+          setDirectionPoint(pageId, g.end, s?.point ?? q, 'Richtung verschieben');
           return;
         }
         case 'background':

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createProject } from '../core/model/defaults';
 import type { FestplatzPage } from '../core/model/types';
 import { createStand } from '../core/objects';
-import { setDirectionPoint, setNumberingDirection, setNumberingMode } from './numbering';
+import { setDirectionPoint, setNumberingDirection, setNumberingMode, toolFitsMode } from './numbering';
 import { useStore } from './store';
 
 /** #12: Nummerierung in weiteren Richtungen – Einstellungen der Page im Store (Undo-Schritte, Vorgaben, Rundung). */
@@ -73,5 +73,38 @@ describe('#12 Nummerierungsmodus und eigene Richtung im Store', () => {
     useStore.getState().abortTransaction();
     expect(pg().direction).toEqual({ from: { x: 5, y: 1.67 }, to: { x: 10, y: 0 } });
     expect(past()).toBe(before + 1);
+  });
+});
+
+describe('#12 Werkzeuge beim Wechsel des Nummerierungsmodus', () => {
+  const tool = () => useStore.getState().ui.tool;
+
+  it('„Richtung setzen“ endet, sobald die Page den Modus „eigene Richtung“ verlässt', () => {
+    setNumberingMode(pg().id, 'direction');
+    useStore.getState().setUi({ tool: 'numberDirection' });
+    // erneut „eigene Richtung“ lässt das Werkzeug aktiv
+    setNumberingMode(pg().id, 'direction');
+    expect(tool()).toBe('numberDirection');
+    setNumberingMode(pg().id, 'topToBottom');
+    expect(tool()).toBe('select');
+  });
+
+  it('„Mittelpunkt setzen“ bleibt beim Wechsel des Drehsinns, endet beim Verlassen des Kreises; andere Werkzeuge bleiben', () => {
+    setNumberingMode(pg().id, 'clockwise');
+    useStore.getState().setUi({ tool: 'numberCenter' });
+    setNumberingMode(pg().id, 'counterClockwise');
+    expect(tool()).toBe('numberCenter');
+    setNumberingMode(pg().id, 'manual');
+    expect(tool()).toBe('select');
+    useStore.getState().setUi({ tool: 'measure' });
+    setNumberingMode(pg().id, 'direction');
+    expect(tool()).toBe('measure');
+  });
+
+  it('toolFitsMode: welches Werkzeug zu welchem Modus passt (auch für die Prüfung der Zeichenfläche nach Undo)', () => {
+    expect(toolFitsMode('numberDirection', 'direction')).toBe(true);
+    for (const m of ['frontLtr', 'rightToLeft', 'topToBottom', 'bottomToTop', 'clockwise', 'counterClockwise', 'manual'] as const) expect(toolFitsMode('numberDirection', m)).toBe(false);
+    expect([toolFitsMode('numberCenter', 'clockwise'), toolFitsMode('numberCenter', 'counterClockwise'), toolFitsMode('numberCenter', 'direction')]).toEqual([true, true, false]);
+    expect(toolFitsMode('select', 'manual')).toBe(true);
   });
 });

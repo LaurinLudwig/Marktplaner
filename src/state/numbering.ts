@@ -2,7 +2,7 @@ import { normAngle } from '../core/geometry/rect';
 import type { Id, NumberingDirection, NumberingMode, NumberingScope, Vec } from '../core/model/types';
 import { clampDigits, clampStart, defaultClockwiseCenter, defaultDirection, isCircularMode, nrLockTargets, type RenumberPlan } from '../core/numbering';
 import { updatePage } from './pageSettings';
-import { useStore } from './store';
+import { useStore, type ToolId } from './store';
 
 /** Befehle der Nummerierung (M5, spec.md §5). Jede Änderung ist genau ein Undo-Schritt. */
 
@@ -10,6 +10,7 @@ const st = () => useStore.getState();
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 export function setNumberingMode(pageId: Id, mode: NumberingMode) {
+  leaveModeTool(mode);
   updatePage(pageId, 'Nummerierungsmodus ändern', (page) => {
     page.numberingMode = mode;
     // Beim ersten Umschalten auf einen Kreis-Modus: Mittelpunkt = Mitte aller Grundflächen und Stände
@@ -23,6 +24,21 @@ export function setNumberingMode(pageId: Id, mode: NumberingMode) {
       if (dir) page.direction = dir;
     }
   });
+}
+
+/**
+ * Werkzeug, das nur in einem Modus etwas setzt („Richtung setzen“ nur bei eigener Richtung, „Mittelpunkt setzen“ nur
+ * im Kreis): Passt es nicht mehr zum Modus, zurück zum Auswahlwerkzeug, damit es nicht still in eine Page schreibt,
+ * die den Wert gar nicht nutzt. Auch die Zeichenfläche prüft das (z. B. nach Undo).
+ */
+export function toolFitsMode(tool: ToolId, mode: NumberingMode): boolean {
+  if (tool === 'numberDirection') return mode === 'direction';
+  if (tool === 'numberCenter') return isCircularMode(mode);
+  return true;
+}
+
+function leaveModeTool(mode: NumberingMode) {
+  if (!toolFitsMode(st().ui.tool, mode)) st().setUi({ tool: 'select' });
 }
 
 const roundVec = (v: Vec): Vec => ({ x: round2(v.x), y: round2(v.y) });

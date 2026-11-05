@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Vec } from '../../../core/model/types';
 import { findSnap, pointSnapSource, type SnapResult } from '../../../core/snap';
-import { setNumberingDirection } from '../../../state/numbering';
+import { setNumberingDirection, toolFitsMode } from '../../../state/numbering';
 import { useStore } from '../../../state/store';
 import { SnapMarker } from './SnapMarker';
 import { SNAP_PX, type ToolContext, type ToolHandlers } from './types';
@@ -40,6 +40,11 @@ export function useDirectionTool(ctx: ToolContext, active: boolean): ToolHandler
     setHover(null);
     useStore.getState().setUi({ tool: 'select' });
   };
+  // Page nicht (mehr) im Modus „eigene Richtung“ (Moduswechsel, Undo, andere Page): zurück zum Auswahlwerkzeug
+  const fits = toolFitsMode('numberDirection', ctx.page.numberingMode);
+  useEffect(() => {
+    if (selected && !fits) useStore.getState().setUi({ tool: 'select' });
+  }, [selected, fits]);
   const pointAt = (world: Vec, modKey: boolean) => {
     const s = modKey ? null : directionSnap(ctx, world);
     return { snap: s, point: s?.point ?? world };
@@ -50,6 +55,10 @@ export function useDirectionTool(ctx: ToolContext, active: boolean): ToolHandler
   return {
     onPointerDown(p) {
       if (!active) return false;
+      if (!fits) {
+        done();
+        return true;
+      }
       const { point } = pointAt(p.world, p.modKey);
       if (!from) {
         setFrom(point);

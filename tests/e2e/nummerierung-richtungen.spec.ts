@@ -227,6 +227,14 @@ test.describe('#12: Nummerierung in weiteren Richtungen', () => {
     await page.mouse.up();
     expect(await direction(page)).toEqual(d);
     expect(await pastLen(page)).toBe(n1);
+
+    // Griffabstand bleibt: 6 px neben B greifen und 100 px nach unten ziehen → B wandert um 10 m, springt nicht zur Maus
+    const k = await scale(page);
+    await page.mouse.move(b.x + 6, b.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x + 6, b.y + 100, { steps: 8 });
+    await page.mouse.up();
+    expect(near((await direction(page))!.to, { x: d.to.x, y: d.to.y + 100 / k })).toBe(true);
   });
 
   test('Eigene Richtung mit A = B: Hinweis, Neu nummerieren gesperrt (Knopf und Kurzbefehl)', async ({ page }) => {
