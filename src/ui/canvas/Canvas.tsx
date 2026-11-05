@@ -13,6 +13,7 @@ import type { FestplatzPage, Id, Rect, Vec, View } from '../../core/model/types'
 import { findSnap, rectSnapSource } from '../../core/snap';
 import { defaultView, fitBounds, focusBounds, screenToWorld, worldToScreen, zoomAt, type Bounds } from '../../core/viewport';
 import { cachedDuplicates } from '../../core/numbering';
+import { activeAreas, outsideRef, usesAreas } from '../../core/pageAreas';
 import { activeNarrow, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings } from '../../core/warnings';
 import { hideFreeSpace } from '../../state/freeSpaces';
 import { useStore } from '../../state/store';
@@ -152,12 +153,13 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const minFreeWidth = useStore((s) => s.project.settings.minFreeWidth);
   // Platz der Standbeschriftungen (#9) aus der gespeicherten Page: Während einer Geste bleibt er stehen, die bewegten
   // Beschriftungen folgen ihrem Stand starr (ObjectsLayer); neu platziert wird nach dem Loslassen
+  // Ohne Grundflächen (#17) wirken gespeicherte Grundflächen nicht (core/pageAreas.ts)
+  const storedAreas = activeAreas(storedPage);
   const areasLabelled = storedPage.layers.areas.visible;
-  const areaLabelBoxes = useMemo(() => (areasLabelled ? storedPage.areas.map((a) => areaLabelBounds(a, labelFontSize)) : []), [areasLabelled, storedPage.areas, labelFontSize]);
+  const areaLabelBoxes = useMemo(() => (areasLabelled ? storedAreas.map((a) => areaLabelBounds(a, labelFontSize)) : []), [areasLabelled, storedAreas, labelFontSize]);
   const standLabels = useMemo(
-    () =>
-      cachedStandLabels({ stands: storedPage.stands, areas: storedPage.areas, infra: storedPage.infra, template: labelTemplate, fontSize: labelFontSize, categories, blocked: areaLabelBoxes }),
-    [storedPage.stands, storedPage.areas, storedPage.infra, labelTemplate, labelFontSize, categories, areaLabelBoxes],
+    () => cachedStandLabels({ stands: storedPage.stands, areas: storedAreas, infra: storedPage.infra, template: labelTemplate, fontSize: labelFontSize, categories, blocked: areaLabelBoxes }),
+    [storedPage.stands, storedAreas, storedPage.infra, labelTemplate, labelFontSize, categories, areaLabelBoxes],
   );
   const warnOutside = useStore((s) => s.project.settings.warnOutside);
   const warnOverlap = useStore((s) => s.project.settings.warnOverlap);
@@ -180,8 +182,11 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   // Belegende Infrastruktur-Objekte (M7-05) zählen wie Stände
   const occupants = useMemo(() => pageOccupants(page, infraTypes), [page, infraTypes]);
   // Ausgeblendete Freiflächen (#8) fallen weg; während einer Geste passt ihr Intervall nicht mehr, sie erscheinen live
-  const free = useMemo(() => applyHidden(pageFreeSpaces(page.areas, occupants, minFreeWidth, freeCache), page.hiddenFree), [page.areas, occupants, minFreeWidth, freeCache, page.hiddenFree]);
-  const warnings = useMemo(() => cachedPageWarnings(page.areas, page.stands), [page.areas, page.stands]);
+  // Ohne Grundflächen (#17) keine Freiflächen und keine Warnung „außerhalb“
+  const areas = activeAreas(page);
+  const outside = outsideRef(page);
+  const free = useMemo(() => applyHidden(pageFreeSpaces(areas, occupants, minFreeWidth, freeCache), page.hiddenFree), [areas, occupants, minFreeWidth, freeCache, page.hiddenFree]);
+  const warnings = useMemo(() => cachedPageWarnings(outside, page.stands), [outside, page.stands]);
   const infraWarnings = useMemo(() => cachedInfraWarnings(page, infraTypes, minPassageWidth), [page, infraTypes, minPassageWidth]);
   const infraWarnStands = useMemo(() => new Set(infraWarnings.byStand.keys()), [infraWarnings]);
   // Konkurrenzschutz (#3) live aus der Page mit Vorschau: Warnung und Linien folgen dem gezogenen Stand
@@ -249,11 +254,11 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   // Fang nur an sichtbaren Ebenen (M3-18); Quelle einmal pro Objektänderung aufbauen
   const snapSource = useMemo(() => {
     const rects: Rect[] = [];
-    if (page.layers.areas.visible) rects.push(...page.areas);
+    if (page.layers.areas.visible) rects.push(...areas);
     if (page.layers.stands.visible) rects.push(...page.stands);
     if (page.layers.infra.visible) rects.push(...page.infra);
     return rectSnapSource(rects);
-  }, [page.areas, page.stands, page.infra, page.layers]);
+  }, [areas, page.stands, page.infra, page.layers]);
   const ctx: ToolContext = {
     page,
     view,
@@ -268,7 +273,12 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const measureTool = useMeasureTool(ctx, tool === 'measure');
   const calibrateTool = useCalibrateTool(ctx, tool === 'calibrate');
   const selectTool = useSelectTool(ctx, tool === 'select' && !spaceDown);
-  const areaTool = useCreateTool(ctx, 'area', tool === 'area' && !spaceDown);
+  // Werkzeug „Grundfläche“ ist ohne Grundflächen gesperrt (#17); beim Umschalten oder Seitenwechsel gilt die Auswahl
+  const areasOff = !usesAreas(storedPage);
+  useEffect(() => {
+    if (areasOff && tool === 'area') setUi({ tool: 'select' });
+  }, [areasOff, tool, setUi]);
+  const areaTool = useCreateTool(ctx, 'area', tool === 'area' && !areasOff && !spaceDown);
   const standTool = useCreateTool(ctx, 'stand', tool === 'stand' && !spaceDown);
   const infraTool = useInfraTool(ctx, tool === 'infra' && !spaceDown);
   const titleBlockTool = useTitleBlockTool(ctx, tool === 'titleBlock' && !spaceDown);
@@ -615,7 +625,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
 /** Fangquelle ohne ein Objekt (Endpunkt-Griffe einer Linie fangen nicht an der Linie selbst). */
 function snapSourceWithout(page: FestplatzPage, exclude: Id) {
   const rects: Rect[] = [];
-  if (page.layers.areas.visible) rects.push(...page.areas);
+  if (page.layers.areas.visible) rects.push(...activeAreas(page));
   if (page.layers.stands.visible) rects.push(...page.stands);
   if (page.layers.infra.visible) rects.push(...page.infra.filter((o) => o.id !== exclude));
   return rectSnapSource(rects.filter((r) => (r as Rect & { id?: Id }).id !== exclude));

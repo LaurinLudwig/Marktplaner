@@ -98,3 +98,17 @@ export function setBlockOverLimit(pageId: Id, on: boolean) {
     page.blockOverLimit = on;
   });
 }
+
+/**
+ * „Grundflächen verwenden“ (#17), ein Undo-Schritt. Beim Abschalten mit `deleteAreas` werden die Grundflächen der
+ * Page gelöscht (samt ausgeblendeter Freiflächen); sonst bleiben sie gespeichert, ausgeblendet und ohne Wirkung.
+ */
+export function setUseAreas(pageId: Id, on: boolean, deleteAreas = false) {
+  updatePage(pageId, on ? 'Grundflächen verwenden' : deleteAreas ? 'Grundflächen löschen' : 'Ohne Grundflächen planen', (page) => {
+    page.useAreas = on;
+    if (!on && deleteAreas) {
+      page.areas = [];
+      page.hiddenFree = [];
+    }
+  });
+}

@@ -7,6 +7,7 @@ import { cachedDuplicates } from '../../core/numbering';
 import { SHAPE_LABEL } from '../../core/shape';
 import { feesOf, fmtEuro, hasPricing, sumFees, type Fee } from '../../core/fee';
 import { fmt, fmtInput } from '../../core/format';
+import { outsideRef, usesAreas } from '../../core/pageAreas';
 import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, fmtGap } from '../../core/warnings';
 import { Icon } from '../icons/Icon';
 import { tip } from '../shortcuts/tip';
@@ -135,7 +136,7 @@ const SUPPRESS: Record<WarningKind, 'suppressOutsideWarning' | 'suppressOverlapW
 function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] }) {
   const settings = useStore((s) => s.project.settings);
   const pages = useStore((s) => s.project.pages);
-  const w = cachedPageWarnings(page.areas, page.stands);
+  const w = cachedPageWarnings(outsideRef(page), page.stands);
   const infraTypes = useStore((s) => s.project.infraTypes);
   const iw = cachedInfraWarnings(page, infraTypes, settings.minPassageWidth);
   const dups = cachedDuplicates(pages, settings.numbering.scope);
@@ -171,7 +172,8 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
     { kind: 'duplicate', label: 'doppelte Nummer ignorieren', hit: duplicate, ignored: stands.every((s) => s.suppressDuplicateWarning), enabled: settings.warnDuplicateNr },
     { kind: 'distance', label: 'Abstand ignorieren', hit: tooClose, ignored: stands.every((s) => s.suppressDistanceWarning), enabled: settings.warnDistance },
   ];
-  const visible = rows.filter((r) => r.hit.length || stands.some((s) => s[SUPPRESS[r.kind]]));
+  // Ohne Grundflächen (#17) gibt es kein „außerhalb“; das Häkchen am Stand bleibt gespeichert, erscheint aber nicht
+  const visible = rows.filter((r) => (r.kind !== 'outside' || usesAreas(page)) && (r.hit.length || stands.some((s) => s[SUPPRESS[r.kind]])));
   /** „Stand X (Festplatz 2)“ für die anderen Stände mit derselben Nummer. */
   const dupText = (s: Stand) =>
     dups

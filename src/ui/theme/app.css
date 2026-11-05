@@ -336,6 +336,8 @@ kbd {
 .stat-card.add:hover { color: var(--text); border-color: var(--accent); }
 .stat-figures { display: flex; gap: 12px; margin: 0; }
 .stat-figures dd.free { color: var(--ok); }
+/* Festplatz ohne Grundflächen (#17): Hinweis unter dem Namen, freie Frontmeter „–“ */
+.stat-no-areas { font-size: 11px; color: var(--faint); }
 .stat-figures dt { color: var(--muted); font-size: 10.5px; }
 .stat-figures dd { margin: 0; font: 600 15px var(--f-num); color: var(--text-strong); }
 .stat-power { display: flex; align-items: center; gap: 4px; font: 11px var(--f-num); }

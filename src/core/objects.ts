@@ -82,8 +82,12 @@ export function findObjects(page: FestplatzPage, ids: readonly Id[]): PageObject
   return ids.map((id) => findObject(page, id)).filter((o): o is PageObject => !!o);
 }
 
-/** Darf ein Objekt dieser Art ausgewählt werden (Ebene sichtbar und nicht gesperrt)? */
+/**
+ * Darf ein Objekt dieser Art ausgewählt werden (Ebene sichtbar und nicht gesperrt)? Grundflächen einer Page ohne
+ * Grundflächen (#17) sind ausgeblendet und nie auswählbar.
+ */
 export const selectable = (page: FestplatzPage, kind: ObjectKind) => {
+  if (kind === 'area' && page.useAreas === false) return false;
   const l = page.layers[LAYER_OF[kind]];
   return l.visible && !l.locked;
 };

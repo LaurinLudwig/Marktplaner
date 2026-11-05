@@ -24,7 +24,14 @@ export const TOOL_GROUPS: ToolbarItem[][] = [
     { shortcut: 'tool.zoom', icon: 'zoom', kind: 'tool', tool: 'zoom', description: 'Klicken vergrößert, mit Alt verkleinert' },
   ],
   [
-    { shortcut: 'tool.area', icon: 'area', kind: 'tool', tool: 'area', description: 'Grundfläche als Rechteck aufziehen' },
+    {
+      shortcut: 'tool.area',
+      icon: 'area',
+      kind: 'tool',
+      tool: 'area',
+      description: 'Grundfläche als Rechteck aufziehen',
+      disabledHint: 'Gesperrt: Dieser Festplatz verwendet keine Grundflächen (Seitenleiste, Bereich „Grundflächen“)',
+    },
     { shortcut: 'tool.stand', icon: 'stand', kind: 'tool', tool: 'stand', description: 'Neuen Stand auf der Zeichenfläche aufziehen' },
     { shortcut: 'tool.infra', icon: 'infra', kind: 'tool', tool: 'infra', flyout: true, description: 'Sperren, Sanität, Toiletten und weitere Objekte platzieren. Dreieck, Rechtsklick oder langes Drücken: Typ wählen' },
   ],

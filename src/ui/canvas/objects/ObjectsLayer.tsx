@@ -8,6 +8,7 @@ import { areaLabelPrim, areaPrims, freeLabelPrim, freePrims, overlapPrim, standH
 import { dilateRect } from '../../../core/geometry/polygon';
 import { formatLabel } from '../../../core/label';
 import { layoutStandLabels, movedPlacement, type LabelPlacement } from '../../../core/labelLayout';
+import { activeAreas, usesAreas } from '../../../core/pageAreas';
 import { activeWarnings, type DistanceWarnings, type PageWarnings, type WarnSettings } from '../../../core/warnings';
 import { CM, PrimView, Prims } from '../scene/Prim';
 import { InfraLabelList, InfraList } from './InfraLayer';
@@ -123,7 +124,10 @@ export const ObjectsLayer = memo(function ObjectsLayer({
   }, [staticStands, kindsKey]);
   const movingKinds = new Map(movingStands.map((s) => [s.id, kindOf(s)]));
   const warnKinds = movingStands.length ? new Map([...staticKinds, ...movingKinds]) : staticKinds;
-  const freeVisible = L.free.visible && L.areas.visible;
+  // Ohne Grundflächen (#17) erscheinen weder Grundflächen noch Freiflächen (core/pageAreas.ts)
+  const areasOn = usesAreas(page);
+  const areas = activeAreas(page);
+  const freeVisible = areasOn && L.free.visible && L.areas.visible;
   // Beschriftung bewegter Stände: starr mit dem Stand verschoben (#9); Kopien (Alt+Ziehen) ohne Nachbarn platziert
   const baseById = useMemo(() => new Map(baseStands.map((s) => [s.id, s])), [baseStands]);
   const movingLabels = new Map<Id, LabelPlacement>();
@@ -132,7 +136,7 @@ export const ObjectsLayer = memo(function ObjectsLayer({
     const p = base && labels.get(s.id);
     if (p) movingLabels.set(s.id, movedPlacement(p, s.cx - base.cx, s.cy - base.cy));
     else if (!base) {
-      const own = layoutStandLabels({ stands: [s], areas: page.areas, infra: [], fontSize, linesOf: (x) => formatLabel(template, x, (x.categoryId && catById.get(x.categoryId)?.name) || '') }).get(s.id);
+      const own = layoutStandLabels({ stands: [s], areas, infra: [], fontSize, linesOf: (x) => formatLabel(template, x, (x.categoryId && catById.get(x.categoryId)?.name) || '') }).get(s.id);
       if (own) movingLabels.set(s.id, own);
     }
   }
@@ -141,9 +145,9 @@ export const ObjectsLayer = memo(function ObjectsLayer({
   // neu, nicht 500 Stände.
   return (
     <>
-      {L.areas.visible && (
+      {areasOn && L.areas.visible && (
         <g className={`layer-areas${L.areas.locked ? ' locked' : ''}`}>
-          <AreaList areas={page.areas} selected={selected} />
+          <AreaList areas={areas} selected={selected} />
         </g>
       )}
       {freeVisible && (
@@ -170,7 +174,7 @@ export const ObjectsLayer = memo(function ObjectsLayer({
       </g>
       {L.labels.visible && (
         <g className={`layer-labels${labelsTiny ? ' tiny' : ''}${labelHalo ? ' halo' : ''}`} transform={`scale(${1 / CM})`} fontSize={fontSize * CM} strokeWidth={fontSize * CM * 0.22}>
-          {L.areas.visible && <AreaLabelList areas={page.areas} fontSize={fontSize} />}
+          {areasOn && L.areas.visible && <AreaLabelList areas={areas} fontSize={fontSize} />}
           {freeVisible && !freeLabelsTiny && <FreeLabelList free={free} fontSize={fontSize} window={freeLabelWindow} />}
           {L.stands.visible && <StandLabelList stands={staticStands} labels={labels} fontSize={fontSize} />}
           {L.stands.visible && movingStands.length > 0 && <StandLabelList stands={movingStands} labels={movingLabels} fontSize={fontSize} />}
@@ -202,7 +206,7 @@ function DistanceZones({ stands, selected, catById, conflicts }: { stands: Stand
   });
 }
 
-const AreaList = memo(function AreaList({ areas, selected }: { areas: Area[]; selected: ReadonlySet<Id> }) {
+const AreaList = memo(function AreaList({ areas, selected }: { areas: readonly Area[]; selected: ReadonlySet<Id> }) {
   return areas.map((a) => <AreaShape key={a.id} area={a} selected={selected.has(a.id)} />);
 });
 
@@ -243,7 +247,7 @@ const WarnIcons = memo(function WarnIcons({ stands, warnKinds, size }: { stands:
   return stands.filter((s) => warnKinds.get(s.id)).map((s) => <WarnIcon key={s.id} stand={s} kind={warnKinds.get(s.id)!} size={size} />);
 });
 
-const AreaLabelList = memo(function AreaLabelList({ areas, fontSize }: { areas: Area[]; fontSize: number }) {
+const AreaLabelList = memo(function AreaLabelList({ areas, fontSize }: { areas: readonly Area[]; fontSize: number }) {
   return areas.map((a) => <AreaLabel key={a.id} area={a} fontSize={fontSize} />);
 });
 

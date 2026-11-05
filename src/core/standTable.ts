@@ -6,6 +6,7 @@ import { feesOf, sumFees, type Fee, type FeeSum } from './fee';
 import { sumWidths } from './stats';
 import { cachedDuplicates, nrKey, type NrRef } from './numbering';
 import { CONNECTION_KEYS, sumPower, type ConnectionKey } from './power';
+import { outsideRef } from './pageAreas';
 import { activeWarnings, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, NO_INFRA_WARNINGS, type ActiveWarnings, type DistanceConflict } from './warnings';
 import type { Id, Project, Stand } from './model/types';
 
@@ -30,7 +31,7 @@ export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categor
   const dups = cachedDuplicates(project.pages, project.settings.numbering.scope);
   const rows: StandRow[] = [];
   project.pages.forEach((page, pageIndex) => {
-    const w = cachedPageWarnings(page.areas, page.stands);
+    const w = cachedPageWarnings(outsideRef(page), page.stands);
     const iw = project.infraTypes ? cachedInfraWarnings(page, project.infraTypes, project.settings.minPassageWidth) : NO_INFRA_WARNINGS;
     const dw = cachedDistanceWarnings(page.stands, project.categories);
     const fees = feesOf(page.stands, project.categories, project.settings.pricing);

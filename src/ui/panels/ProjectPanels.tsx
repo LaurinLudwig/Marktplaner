@@ -6,6 +6,7 @@ import { LABEL_PLACEHOLDERS } from '../../core/label';
 import { MIN_FREE_WIDTH } from '../../core/freeSpace';
 import type { Category, CategoryPrice, FestplatzPage, Id, LayerId } from '../../core/model/types';
 import { MIN_DISTANCE_LIMITS, PRICE_LIMITS, SNAP_GAP_LIMITS, VAT_LIMITS } from '../../core/model/schema';
+import { activeAreas } from '../../core/pageAreas';
 import { DEFAULT_STAND_COLOR } from '../../core/objects';
 import {
   addCategory,
@@ -371,15 +372,19 @@ const LAYER_LABEL: Record<LayerId, string> = {
   sheet: 'Blatt',
 };
 
-/** Ebenen der Page: ein-/ausblenden und sperren (Ansichtseinstellung; Hintergrund-Sperre wie in §1). */
+/**
+ * Ebenen der Page: ein-/ausblenden und sperren (Ansichtseinstellung; Hintergrund-Sperre wie in §1). Ohne
+ * Grundflächen (#17) fehlen „Grundflächen“ und „Freiflächen“.
+ */
 export function LayersPanel({ page }: { page: FestplatzPage }) {
   const present: LayerId[] = [];
+  const areas = activeAreas(page).length > 0;
   if (page.background) present.push('background');
-  if (page.areas.length) present.push('areas');
-  if (page.areas.length) present.push('free');
+  if (areas) present.push('areas');
+  if (areas) present.push('free');
   if (page.stands.length) present.push('stands');
   if (page.infra.length) present.push('infra');
-  if (page.areas.length || page.stands.length || page.infra.length) present.push('labels');
+  if (areas || page.stands.length || page.infra.length) present.push('labels');
   // Das Blatt (M7) gibt es auf jeder Page; die Liste erscheint ab dem ersten Objekt
   if (present.length) present.push('sheet');
   return (

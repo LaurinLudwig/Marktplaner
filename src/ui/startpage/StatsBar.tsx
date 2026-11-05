@@ -50,6 +50,11 @@ export function StatsBar() {
               {p.name}
             </button>
           </h2>
+          {p.freeFrontM === null && (
+            <div className="stat-no-areas" data-testid="stat-no-areas" title="Für diesen Festplatz ist „Grundflächen verwenden“ aus: keine Freiflächen, keine Warnung „außerhalb“">
+              ohne Grundflächen
+            </div>
+          )}
           <Figures stands={p.stands} frontM={p.frontM} freeFrontM={p.freeFrontM} />
           {p.power.limitKw === null ? (
             <div className="stat-power">
@@ -72,7 +77,8 @@ export function StatsBar() {
   );
 }
 
-function Figures({ stands, frontM, freeFrontM }: { stands: number; frontM: number; freeFrontM: number }) {
+/** `freeFrontM` = null: ohne Grundflächen (#17), „–“ statt 0. */
+function Figures({ stands, frontM, freeFrontM }: { stands: number; frontM: number; freeFrontM: number | null }) {
   return (
     <dl className="stat-figures">
       <div>
@@ -83,10 +89,10 @@ function Figures({ stands, frontM, freeFrontM }: { stands: number; frontM: numbe
         <dt>Frontmeter</dt>
         <dd data-testid="stat-front">{fmt(frontM)} m</dd>
       </div>
-      <div title="Summe der Breiten aller Freiflächen ab der Mindestbreite">
+      <div title={freeFrontM === null ? 'Ohne Grundflächen gibt es keine Freiflächen' : 'Summe der Breiten aller Freiflächen ab der Mindestbreite (ohne Festplätze ohne Grundflächen)'}>
         <dt>frei</dt>
         <dd data-testid="stat-free" className="free">
-          {fmt(freeFrontM)} m
+          {freeFrontM === null ? '–' : `${fmt(freeFrontM)} m`}
         </dd>
       </div>
     </dl>

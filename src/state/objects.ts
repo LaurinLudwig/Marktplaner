@@ -289,12 +289,14 @@ function insertObjects(pageId: Id, objs: ObjectLists, label: string) {
   const ok = changeWithPowerCheck(label, (p) => {
     const page = pageOf(p, pageId);
     if (!page) return;
-    page.areas.push(...objs.areas.map((a) => roundRect(a)));
+    // Auf einer Page ohne Grundflächen (#17) werden mitkopierte Grundflächen nicht eingefügt
+    if (page.useAreas) page.areas.push(...objs.areas.map((a) => roundRect(a)));
     page.stands.push(...objs.stands.map((s) => roundRect(s)));
     // Objekte unbekannter Typen (z. B. aus einem anderen Projektstand) nicht einfügen
     page.infra.push(...objs.infra.filter((o) => p.infraTypes.some((t) => t.id === o.typeId)).map((o) => ({ ...o, ...fitRect(geometryOf(p, o), o) })));
   });
-  if (ok) select([...objs.areas, ...objs.stands, ...objs.infra].map((o) => o.id));
+  const areasOn = pageOf(st().project, pageId)?.useAreas ?? true;
+  if (ok) select([...(areasOn ? objs.areas : []), ...objs.stands, ...objs.infra].map((o) => o.id));
 }
 
 /**

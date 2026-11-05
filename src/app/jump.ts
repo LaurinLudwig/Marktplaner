@@ -2,6 +2,7 @@ import { resolveFreeSpace, type FreeSpaceRef } from '../core/freeSpace';
 import { pageFree } from '../core/hiddenFree';
 import { rectGeo } from '../core/geometry/polygon';
 import type { Id, Vec } from '../core/model/types';
+import { activeAreas } from '../core/pageAreas';
 import type { Bounds } from '../core/viewport';
 import { useStore } from '../state/store';
 import { notify } from './notify';
@@ -57,8 +58,10 @@ export function jumpToInfra(pageId: Id, objId: Id): boolean {
   return true;
 }
 
+/** Ausgeblendete Grundflächen einer Page ohne Grundflächen (#17) sind kein Sprungziel. */
 export function jumpToArea(pageId: Id, areaId: Id): boolean {
-  const area = useStore.getState().project.pages.find((p) => p.id === pageId)?.areas.find((a) => a.id === areaId);
+  const page = useStore.getState().project.pages.find((p) => p.id === pageId);
+  const area = page && activeAreas(page).find((a) => a.id === areaId);
   if (!area) return false;
   go(pageId, [rectGeo(area).poly], null);
   return true;

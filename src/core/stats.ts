@@ -2,7 +2,8 @@
  * Kennzahlen der Start-Page (M6, spec.md §7): je Festplatz und gesamt Anzahl Geschäfte, Frontmeter (Summe der
  * Breiten; das ist die „belegte Fläche“), freie Frontmeter (Summe der Breiten der angezeigten Freiflächen, M6-11),
  * Strom (§6) und Warnzahl; seit M7 Anzahl je Infrastruktur-Typ, Strom der Infrastruktur und deren Warnungen;
- * seit M11 (#7) Anzahl, Frontmeter und Strom je Kategorie.
+ * seit M11 (#7) Anzahl, Frontmeter und Strom je Kategorie. Pages ohne Grundflächen (#17) haben keine freien
+ * Frontmeter (null, Anzeige „–“) und zählen in deren Summe nicht mit.
  * Warnungen und doppelte Nummern kommen aus den
  * vorhandenen Zwischenspeichern, unveränderte Pages kosten nichts.
  */
@@ -10,6 +11,7 @@ import { feesOf, NO_FEE_SUM, sumFees, type FeeSum } from './fee';
 import type { AreaFreeSpaces } from './freeSpace';
 import { cachedDuplicates, type NrRef } from './numbering';
 import { CONNECTION_KEYS, pagePower, type ConnectionKey, type PowerSummary } from './power';
+import { outsideRef, usesAreas } from './pageAreas';
 import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, countWarnings, NO_WARNINGS, type WarningCount, type WarnSettings } from './warnings';
 import type { FestplatzPage, Id, Project, ProjectSettings, Stand } from './model/types';
 
@@ -55,7 +57,8 @@ export interface PageStats {
   name: string;
   stands: number;
   frontM: number;
-  freeFrontM: number;
+  /** null: Page ohne Grundflächen (#17), es gibt keine Freiflächen. */
+  freeFrontM: number | null;
   power: PowerSummary;
   warnings: WarningCount;
   /** Anzahl Infrastruktur-Objekte je Typ-ID (nur vorkommende Typen). */
@@ -70,7 +73,8 @@ export interface ProjectStats {
   total: {
     stands: number;
     frontM: number;
-    freeFrontM: number;
+    /** Summe über die Pages mit Grundflächen; null, wenn keine Page Grundflächen verwendet (#17). */
+    freeFrontM: number | null;
     sumKw: number;
     byConnection: Record<ConnectionKey, { count: number; kw: number }>;
     warnings: WarningCount;
@@ -93,9 +97,9 @@ export function pageStats(page: FestplatzPage, project: Omit<StatsProject, 'page
     name: page.name,
     stands: page.stands.length,
     frontM: sumWidths(page.stands),
-    freeFrontM: freeFrontMeters(freeOf(page)),
+    freeFrontM: usesAreas(page) ? freeFrontMeters(freeOf(page)) : null,
     power: pagePower(page),
-    warnings: countWarnings(cachedPageWarnings(page.areas, page.stands), page.stands, settings, duplicates, {
+    warnings: countWarnings(cachedPageWarnings(outsideRef(page), page.stands), page.stands, settings, duplicates, {
       warnings: cachedInfraWarnings(page, project.infraTypes, settings.minPassageWidth),
       objects: page.infra,
     }, cachedDistanceWarnings(page.stands, project.categories)),
@@ -118,12 +122,16 @@ export function projectStats(project: StatsProject, freeOf: FreeOf): ProjectStat
   const warnings: WarningCount = { ...NO_WARNINGS };
   let frontCm = 0;
   let freeCm = 0;
+  let withAreas = 0;
   let kw = 0;
   let fee: FeeSum = NO_FEE_SUM;
   for (const p of pages) {
     fee = { net: (Math.round(fee.net * 100) + Math.round(p.fee.net * 100)) / 100, gross: (Math.round(fee.gross * 100) + Math.round(p.fee.gross * 100)) / 100, count: fee.count + p.fee.count };
     frontCm += Math.round(p.frontM * 100);
-    freeCm += Math.round(p.freeFrontM * 100);
+    if (p.freeFrontM !== null) {
+      freeCm += Math.round(p.freeFrontM * 100);
+      withAreas++;
+    }
     kw += p.power.sumKw;
     for (const k of CONNECTION_KEYS) {
       byConnection[k].count += p.power.byConnection[k].count;
@@ -142,6 +150,6 @@ export function projectStats(project: StatsProject, freeOf: FreeOf): ProjectStat
   for (const k of CONNECTION_KEYS) byConnection[k].kw = round3(byConnection[k].kw);
   return {
     pages,
-    total: { stands: pages.reduce((n, p) => n + p.stands, 0), frontM: frontCm / 100, freeFrontM: freeCm / 100, sumKw: round3(kw), byConnection, warnings, infraByType, infraKw: round3(infraKw), byCategory, fee },
+    total: { stands: pages.reduce((n, p) => n + p.stands, 0), frontM: frontCm / 100, freeFrontM: withAreas || !pages.length ? freeCm / 100 : null, sumKw: round3(kw), byConnection, warnings, infraByType, infraKw: round3(infraKw), byCategory, fee },
   };
 }

@@ -132,7 +132,7 @@ describe('Migration 1 → 2 (M4: Warnungen)', () => {
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressOverlapWarning');
     expect(raw.project.settings).not.toHaveProperty('warnOverlap');
 
-    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
     expect(project.settings.warnOverlap).toBe(true);
     expect(project.settings.warnOutside).toBe(raw.project.settings.warnOutside);
     expect(project.categories).toEqual(raw.project.categories);
@@ -173,7 +173,7 @@ describe('Migration 2 → 3 (M5: Nummerierung)', () => {
     expect(raw.project.settings).not.toHaveProperty('warnDuplicateNr');
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressDuplicateWarning');
 
-    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
     expect(project.settings.numbering).toEqual({ ...raw.project.settings.numbering, digits: 1 });
     expect(project.settings.warnDuplicateNr).toBe(true);
     expect(project.settings.warnOverlap).toBe(raw.project.settings.warnOverlap ?? true);
@@ -239,7 +239,7 @@ describe('Migration 3 → 4 (M7: Infrastruktur, Blatt, Schriftfeld, Legende)', (
     expect(raw.project.pages[0]).toHaveProperty('titleBlockPos');
     expect(raw.project.infraTypes[0]).toHaveProperty('type');
 
-    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
     // snapGap, defaultStandColor: spätere Migration 5 → 6
     const { warnInfra, warnPassageWidth, minPassageWidth, snapGap: _g, defaultStandColor: _c, ...settings } = project.settings;
     expect(settings).toEqual(raw.project.settings);
@@ -291,7 +291,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.project.exportProfiles).toEqual([]);
     expect(raw.project.pages[0]).not.toHaveProperty('scaleBar');
 
-    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
     expect(project).not.toHaveProperty('exportProfiles');
     const { exportProfiles: _p, pages: _pages, ...rawRest } = raw.project;
     // snapGap, defaultStandColor: spätere Migration 5 → 6
@@ -329,7 +329,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.project.settings).not.toHaveProperty('snapGap');
     expect(raw.project.settings).not.toHaveProperty('defaultStandColor');
 
-    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
     const { settings: rawSettings, pages: rawPages, ...rawRest } = raw.project;
     const { settings, pages, ...rest } = project;
     expect(rest).toEqual(rawRest);
@@ -355,7 +355,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.schemaVersion).toBe(6);
     expect(raw.project.pages[0]).not.toHaveProperty('hiddenFree');
 
-    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
     const { pages: rawPages, ...rawRest } = raw.project;
     const { pages, ...rest } = project;
     expect(rest).toEqual(rawRest);
@@ -385,7 +385,7 @@ describe('Migration 7 → 8 (M12: Geschäftsformen)', () => {
     expect(raw.project).not.toHaveProperty('shapeTemplates');
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('shape');
 
-    const project = withoutV10(withoutLabelOffset(decodeProjectFile(bytes).project));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
     expect(project).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren
     expect(project.name).toBe('Formatversion 7 (M11)');
@@ -439,7 +439,7 @@ describe('Migration 8 → 9 (#3: Abstandsprüfung)', () => {
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressDistanceWarning');
     expect(raw.project.settings).not.toHaveProperty('warnDistance');
 
-    const { settings: { pricing: _p, ...v9Settings }, categories: v10Categories, ...v10Rest } = withoutLabelOffset(decodeProjectFile(bytes).project);
+    const { settings: { pricing: _p, ...v9Settings }, categories: v10Categories, ...v10Rest } = withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project));
     const project = { ...v10Rest, settings: v9Settings, categories: v10Categories.map(({ price: _price, ...c }) => c) };
     expect(project.settings.warnDistance).toBe(true);
     expect(project.categories.every((c) => c.minDistance === null)).toBe(true);
@@ -488,7 +488,7 @@ describe('Migration 9 → 10 (#5: Standgeld)', () => {
     expect(raw.project.settings).not.toHaveProperty('pricing');
     expect(raw.project.categories[0]).not.toHaveProperty('price');
 
-    const project = withoutLabelOffset(decodeProjectFile(bytes).project);
+    const project = withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project));
     expect(project.settings.pricing).toEqual({ perMeter: null, roundUpMeters: false, vatRate: 19 });
     const { settings: { pricing: _p, ...settings }, categories, ...rest } = project;
     const { settings: rawSettings, categories: rawCategories, ...rawRest } = raw.project;
@@ -542,7 +542,7 @@ describe('Migration 10 → 11 (#9: Beschriftung)', () => {
     expect(raw.schemaVersion).toBe(10);
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('labelOffset');
 
-    const project = decodeProjectFile(bytes).project;
+    const project = withoutUseAreas(decodeProjectFile(bytes).project);
     const { pages, ...rest } = withoutLabelOffset(project);
     const { pages: rawPages, ...rawRest } = raw.project;
     expect(rest).toEqual(rawRest);
@@ -551,6 +551,56 @@ describe('Migration 10 → 11 (#9: Beschriftung)', () => {
     expect(project.name).toBe('Formatversion 10 (#5)');
     expect(project.settings.pricing).toEqual({ perMeter: 25, roundUpMeters: true, vatRate: 7 });
     expect(project.categories[4]!.price).toEqual({ kind: 'flat', amount: 500 });
+    expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
+  });
+});
+
+/**
+ * Feld aus Formatversion 12 (#17) prüfen und entfernen, damit die Tests älterer Migrationen ihre Version vergleichen:
+ * Nach der Migration verwendet jede Page Grundflächen.
+ */
+function withoutUseAreas(project: Project): Project {
+  return {
+    ...project,
+    pages: project.pages.map(({ useAreas, ...pg }) => {
+      expect(useAreas).toBe(true);
+      return pg;
+    }),
+  } as unknown as Project;
+}
+
+describe('Migration 11 → 12 (#17: ohne Grundflächen)', () => {
+  it('ergänzt useAreas = true, auch ohne Grundflächen; vorhandene Werte bleiben; Ungültiges wird true', () => {
+    const v12 = MIGRATIONS[11]!({ id: 'x', pages: [{ id: 'p', areas: [] }, { id: 'q', useAreas: false }, 'kaputt'] }) as any;
+    expect(v12.pages).toEqual([{ id: 'p', areas: [], useAreas: true }, { id: 'q', useAreas: false }, 'kaputt']);
+    const file = (useAreas: unknown) => ({
+      format: 'schelmeplaner',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      project: { id: 'x', pages: [{ id: 'p', name: 'P', useAreas, areas: [{ id: 'a', cx: 0, cy: 0, w: 20, d: 8, rot: 0 }] }] },
+    });
+    const ua = (v: unknown) => parseProjectFile(file(v)).pages[0]!;
+    expect(ua(false).useAreas).toBe(false);
+    // Ausgeschaltet bleiben die Grundflächen gespeichert
+    expect(ua(false).areas).toHaveLength(1);
+    expect([ua(true), ua(undefined), ua('nein'), ua(0)].map((p) => p.useAreas)).toEqual([true, true, true, true]);
+  });
+
+  it('echte Datei aus #9 (Version 11, tests/fixtures/format-v11-beschriftung.mplan) wird vollständig migriert', () => {
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v11-beschriftung.mplan')));
+    const raw = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
+    expect(raw.schemaVersion).toBe(11);
+    expect(raw.project.pages[0]).not.toHaveProperty('useAreas');
+
+    const project = decodeProjectFile(bytes).project;
+    expect(project.pages.map((p) => p.useAreas)).toEqual([true, true, true, true]);
+    expect(withoutUseAreas(project)).toEqual(raw.project);
+    // Werte, die in der Datei gezielt gesetzt waren
+    expect(project.name).toBe('Formatversion 11 (#9)');
+    const ober = project.pages.find((p) => p.name === 'Obermarkt')!;
+    expect(ober.areas[0]!.name).toBe('Brunnenseite');
+    expect(ober.stands[0]!.labelOffset).toEqual({ x: 2.5, y: -4 });
+    // Page ohne eine einzige Grundfläche: verwendet nach der Migration trotzdem Grundflächen (nichts ändert sich)
+    expect(project.pages.find((p) => p.name === 'Schifftor')!.areas).toEqual([]);
     expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
   });
 });

@@ -68,6 +68,7 @@ export function createPage(name: string): FestplatzPage {
     grid: { size: 1, visible: true },
     layers: defaultLayers(),
     background: null,
+    useAreas: true,
     areas: [],
     stands: [],
     infra: [],

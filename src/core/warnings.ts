@@ -1,6 +1,7 @@
 /**
  * Warnungen für Geschäfte (M4, spec.md §3):
- * - außerhalb: Ein Teil des Stands liegt mehr als TOL außerhalb der Vereinigung aller Grundflächen.
+ * - außerhalb: Ein Teil des Stands liegt mehr als TOL außerhalb der Vereinigung aller Grundflächen; auf einer Page
+ *   ohne Grundflächen (#17, `areas` = null, siehe pageAreas.ts `outsideRef`) nie.
  * - Überlappung: Zwei Stände dringen mehr als TOL ineinander ein.
  * - doppelte Nummer (M5): berechnet in numbering.ts (`cachedDuplicates`), hier nur angezeigt und gezählt.
  * - Infrastruktur (M7): Stand in einem Objekt mit „freihalten“ (core/infra.ts, `infraConflicts`).
@@ -37,8 +38,10 @@ export interface PageWarnings {
  * 1. Alle Ecken höchstens TOL von derselben Grundfläche entfernt → innerhalb (Rechteck aufgeweitet ist konvex).
  * 2. Eine Ecke mehr als TOL von allen Grundflächen entfernt → außerhalb.
  * 3. Sonst genau: Stand minus alle um TOL aufgeweiteten Grundflächen; bleibt etwas übrig → außerhalb.
+ * `areas` = null: Page ohne Grundflächen (#17), kein Stand ist außerhalb.
  */
-export function isOutside(stand: Stand, areas: readonly Area[]): boolean {
+export function isOutside(stand: Stand, areas: readonly Area[] | null): boolean {
+  if (areas === null) return false;
   const { poly, bounds } = rectGeo(stand);
   const near = areas.filter((a) => boundsTouch(bounds, rectGeo(a).bounds, TOL));
   if (!near.length) return true;
@@ -67,9 +70,10 @@ export function overlappingPairs(stands: readonly Stand[]): OverlapRegion[] {
 }
 
 /** „außerhalb“ je Stand zwischenspeichern: hängt nur vom Stand und der Liste der Grundflächen ab. */
-const outsideCache = new WeakMap<Stand, { areas: readonly Area[]; outside: boolean }>();
+const outsideCache = new WeakMap<Stand, { areas: readonly Area[] | null; outside: boolean }>();
 
-export function pageWarnings(areas: readonly Area[], stands: readonly Stand[]): PageWarnings {
+/** `areas` = null: Page ohne Grundflächen (#17), siehe `isOutside`. */
+export function pageWarnings(areas: readonly Area[] | null, stands: readonly Stand[]): PageWarnings {
   const byStand = new Map<Id, StandWarning>();
   for (const s of stands) {
     let c = outsideCache.get(s);
@@ -262,8 +266,8 @@ export const warningSevere = (n: WarningCount) => n.overlap > 0 || n.infra > 0 |
  * Warnungen einer Page, zwischengespeichert je Liste der Stände (Immer liefert bei unveränderter Page
  * dieselbe Liste). Für die Zähler an den Page-Tabs, die alle Pages betrachten.
  */
-const pageCache = new WeakMap<readonly Stand[], { areas: readonly Area[]; result: PageWarnings }>();
-export function cachedPageWarnings(areas: readonly Area[], stands: readonly Stand[]): PageWarnings {
+const pageCache = new WeakMap<readonly Stand[], { areas: readonly Area[] | null; result: PageWarnings }>();
+export function cachedPageWarnings(areas: readonly Area[] | null, stands: readonly Stand[]): PageWarnings {
   const hit = pageCache.get(stands);
   if (hit && hit.areas === areas) return hit.result;
   const result = pageWarnings(areas, stands);

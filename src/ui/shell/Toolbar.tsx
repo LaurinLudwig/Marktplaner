@@ -14,6 +14,7 @@ export function Toolbar() {
   const snap = useStore((s) => s.project.settings.snap);
   // Neu rendern, wenn sich die Verfügbarkeit ändern kann (z. B. Hintergrund importiert)
   useStore((s) => s.project.pages.find((p) => p.id === s.ui.activePage)?.background?.assetId);
+  useStore((s) => s.project.pages.find((p) => p.id === s.ui.activePage)?.useAreas);
   return (
     <nav className="toolbar" aria-label="Werkzeuge">
       {TOOL_GROUPS.map((group, gi) => (

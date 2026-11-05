@@ -160,6 +160,7 @@ function normalizePage(
     grid: { size: num(grid.size, base.grid.size), visible: bool(grid.visible, base.grid.visible) },
     layers,
     background,
+    useAreas: bool(raw.useAreas, true),
     areas: arr(raw.areas).map((a) => normalizeArea(a, objectIds)).filter((a): a is Area => !!a),
     stands: arr(raw.stands).map((st) => normalizeStand(st, objectIds, categoryIds, templateIds)).filter((st): st is Stand => !!st),
     infra: arr(raw.infra).map((o) => normalizeInfra(o, objectIds, types)).filter((o): o is InfraObject => !!o),
