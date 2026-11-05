@@ -85,6 +85,21 @@ test.describe('#13: Blatt „Plan“', () => {
     await expect(page.getByTestId('sheet-print-hint')).toContainText('Druck auf DIN-Papier');
   });
 
+  test('Zielbreite kleiner als das Schriftfeld: Hinweis, Blatt so schmal wie möglich statt 1:100.000', async ({ page }) => {
+    await openApp(page);
+    await seedWide(page);
+    const panel = page.getByRole('region', { name: 'Blatt' });
+    for (const name of [/^Legende/, /^Maßstabsbalken/, /^Nordpfeil/]) await panel.getByRole('checkbox', { name }).uncheck();
+    const target = page.locator('#sheet-target-width');
+    await target.fill('100');
+    await target.press('Enter');
+    await expect(page.getByTestId('sheet-target-too-narrow')).toBeVisible();
+    // Schriftfeld 180 mm + 10 mm Abstand: 190 mm breit, Inhalt füllt die Breite (1:1.180)
+    await expect(page.getByTestId('sheet-label')).toHaveText(/^190 × \d+ mm · 1:1\.180$/);
+    await panel.getByRole('checkbox', { name: /^Schriftfeld/ }).uncheck();
+    await expect(page.getByTestId('sheet-target-too-narrow')).toHaveCount(0);
+  });
+
   test('über 5.080 mm je Seite: Warnung in der Seitenleiste und im Export-Dialog', async ({ page }) => {
     await openApp(page);
     await seedWide(page, 1200);
@@ -177,6 +192,19 @@ test.describe('#13: Export-Dialog', () => {
     await expect(dialog(page).getByLabel('Format Festplatz 1')).toHaveValue('plan');
     await expect(dialog(page).getByTestId('export-page-size')).toHaveText('1.060 × 310 mm');
     await expect(dialog(page).getByTestId('export-preview-size')).toContainText('1.060 × 310 mm · 1:200');
+    // freies Blatt: Feld „Zielbreite“ (mm) und Häkchen „über Zielbreite“, eindeutig benannt
+    const auto = dialog(page).getByRole('checkbox', { name: 'Festplatz 1: Maßstab über Zielbreite' });
+    await expect(auto).not.toBeChecked();
+    await expect(dialog(page).getByLabel('Zielbreite', { exact: true })).toBeDisabled();
+    await auto.check();
+    await expect(dialog(page).getByLabel('Zielbreite', { exact: true })).toBeEnabled();
+    await expect(dialog(page).getByLabel('Zielbreite', { exact: true })).toHaveValue('841');
+    expect((await sheet(page)).scale).toBeNull();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press(`${MOD}+z`);
+    expect((await sheet(page)).scale).toBe(200);
+    await page.keyboard.press(`${MOD}+p`);
+    await expect(page.getByTestId('export-preview')).toHaveAttribute('data-state', 'ok', { timeout: 30_000 });
     // Format im Dialog ändern: A3 quer, Maß folgt; zurück auf „Plan“ (Maßstab bleibt 1:200)
     await dialog(page).getByLabel('Format Festplatz 1').selectOption('A3');
     await expect(dialog(page).getByTestId('export-page-size')).toHaveText('420 × 297 mm');

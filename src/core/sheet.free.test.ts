@@ -16,6 +16,7 @@ import {
   planPaper,
   regionOf,
   resizeBounds,
+  scaleForWidth,
   sheetFrame,
   sheetLabel,
   shownOnPaper,
@@ -72,6 +73,25 @@ describe('Plan: Papiermaß aus Inhalt × Maßstab', () => {
     expect(f.fit).toBe(true);
     expect(planPaper(content, 250, null).w).toBeGreaterThan(841);
     expect(sheetFrame(page({ scale: null, targetWidth: 2000 }, { areas: wide }), null).paper.w).toBeLessThanOrEqual(2000);
+    expect(f.targetTooNarrow).toBeUndefined();
+  });
+
+  it('Zielbreite kleiner als die Papier-Elemente: schmalstes Blatt, Inhalt füllt die Breite neben ihnen, Hinweis', () => {
+    // Schriftfeld 180 mm unten rechts, 10 mm Abstand: Das Blatt ist mindestens 190 mm breit, Zielbreite 100 mm
+    const tb: SheetElement = { corner: 'br', dx: 10, dy: 10, w: 180, h: 25 };
+    const f = sheetFrame(page({ scale: null, targetWidth: 100 }, { areas: wide }), null, [tb]);
+    // nicht still 1:100.000: Inhalt 200 m füllt 190 − 2 × 10 mm → n = 1176,5 → 1:1.180 (169,5 mm + 20 mm → 190 mm)
+    expect(f.scale).toBe(1180);
+    expect(f.paper.w).toBe(190);
+    expect(f.targetTooNarrow).toBe(true);
+    expect(planPaper(content, 1170, null, [tb]).w).toBeGreaterThan(190);
+    // ohne das Schriftfeld reicht die Zielbreite: kein Hinweis
+    const g = sheetFrame(page({ scale: null, targetWidth: 100 }, { areas: wide }), null);
+    expect(g.paper.w).toBeLessThanOrEqual(100);
+    expect(g.targetTooNarrow).toBeUndefined();
+    // direkt: erreichbare Breite ist das Ziel, kleinstes n dafür
+    expect(scaleForWidth((n) => Math.max(300, 100_000 / n), 100)).toEqual({ scale: 340, tooNarrow: true });
+    expect(scaleForWidth((n) => 100_000 / n, 100)).toEqual({ scale: 1000, tooNarrow: false });
   });
 
   it('ohne Inhalt gilt der Hintergrund, sonst 100 × 100 m um den Ursprung', () => {

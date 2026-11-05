@@ -534,7 +534,10 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
   Export-Dialog, Vorschau, Schriftfeld).
   - **Maßstab:** fest 1:n (10 bis 100.000) oder „über Zielbreite“: das kleinste n auf volle 10, bei dem das Papier
     höchstens so breit ist wie die Zielbreite (100–20.000 mm). Beim Abschalten der Zielbreite wird das aktuelle n
-    übernommen.
+    übernommen. Brauchen die eingeblendeten Papier-Elemente eines Plans mit Abstand und Rand mehr Platz als die
+    Zielbreite (z. B. Schriftfeld 180 mm bei 100 mm), wird das Blatt so schmal wie möglich: das kleinste n, bei dem
+    der Inhalt die neben den Elementen verbleibende Breite füllt. Die Seitenleiste weist darauf hin („Zielbreite …
+    ist kleiner als Schriftfeld, Legende …“).
   - **„Plan“:** Das Blatt umfasst den Inhalt (wie bei „an Seite anpassen“: Grundflächen, Geschäfte, Infrastruktur,
     ohne sie der Hintergrund, sonst 100 × 100 m) plus Rand. Der Rahmen folgt dem Inhalt und lässt sich nicht ziehen.
     - Rand in mm auf dem Papier, einstellbar (10–500 mm). Vorbelegung („automatisch“, solange kein Wert eingetragen
@@ -664,8 +667,8 @@ Schrift.
   Warnung, §8).
 - Der Export-Dialog zeigt je Page das Papiermaß in mm („1.060 × 310 mm“) und gegebenenfalls die Warnung über
   5.080 mm; der Kopf der Vorschau zeigt Format bzw. Maß und Maßstab wie die Marke („1.060 × 310 mm · 1:200“). Für ein
-  freies Blatt stehen dort statt der Ausrichtung die Zielbreite und statt „anpassen“ „Breite“ (Maßstab über
-  Zielbreite).
+  freies Blatt stehen dort statt der Ausrichtung das Feld „Zielbreite“ (mm) und statt „anpassen“ das Häkchen „über
+  Zielbreite“ (Maßstab über Zielbreite).
 - Inhalt außerhalb des Blatts wird abgeschnitten.
 
 **Inhalt einer Seite** in dieser Reihenfolge, jeweils gemäß Export-Profil: Hintergrund, Raster, Grundflächen,

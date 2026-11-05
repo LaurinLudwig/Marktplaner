@@ -120,6 +120,11 @@ export function SheetPanel({ page }: { page: FestplatzPage }) {
                 ? 'Das Blatt umschließt den Inhalt mit 10 mm Rand und lässt Platz für die eingeblendeten Papier-Elemente. Ein fester Maßstab lässt das Blatt per Ziehen am Rahmen verschieben.'
                 : 'Blatt verschieben: Rahmen oder Marke mit dem Auswahlwerkzeug ziehen.'}
         </p>
+        {frame.targetTooNarrow && (
+          <p className="warn-chip" data-testid="sheet-target-too-narrow">
+            Zielbreite {fmt(s.targetWidth, 0)} mm ist kleiner als Schriftfeld, Legende und die anderen eingeblendeten Papier-Elemente mit Rand – das Blatt wird {fmt(frame.paper.w, 0)} mm breit.
+          </p>
+        )}
         <SheetLimitHint paper={frame.paper} />
         {free && <DinPrintHint paper={frame.paper} scale={frame.scale} />}
         <label className="check">

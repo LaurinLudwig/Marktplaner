@@ -209,7 +209,7 @@ function PageRow({ page, checked, disabled, previewed, profile, onToggle }: { pa
       {free ? (
         <NumberField
           id={`ex-width-${page.id}`}
-          label="Breite"
+          label="Zielbreite"
           unit="mm"
           value={s.targetWidth}
           min={TARGET_WIDTH_LIMITS.min}
@@ -232,7 +232,7 @@ function PageRow({ page, checked, disabled, previewed, profile, onToggle }: { pa
           checked={auto}
           onChange={(e) => (e.target.checked ? setSheet(page.id, { scale: null }) : fixSheetScale(page.id))}
         />
-        {free ? 'Breite' : 'anpassen'}
+        {free ? 'über Zielbreite' : 'anpassen'}
       </label>
       <NumberField
         id={`ex-scale-${page.id}`}

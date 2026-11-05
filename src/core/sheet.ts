@@ -60,6 +60,11 @@ export interface SheetFrame {
   layoutHeight: number;
   /** Plan: wirksamer Rand in mm; sonst null. */
   margin: number | null;
+  /**
+   * Plan mit Zielbreite: Die Papier-Elemente (mit Abstand und Rand) sind breiter als die Zielbreite; das Blatt wird
+   * so schmal wie möglich, aber breiter als die Zielbreite (#13). Sonst nicht gesetzt.
+   */
+  targetTooNarrow?: boolean;
 }
 
 /** mm auf dem Papier → Meter auf dem Plan. */
@@ -258,23 +263,43 @@ function overlapping(els: readonly SheetElement[], paper: { w: number; h: number
   );
 }
 
-/** Kleinster Maßstab (volle 10), bei dem das Papier höchstens `targetWidth` mm breit ist. */
-function scaleForWidth(width: (n: number) => number, targetWidth: number): number {
+/**
+ * Kleinster Maßstab (volle 10), bei dem das Papier höchstens `targetWidth` mm breit ist. Die Breite fällt mit n,
+ * bis die Papier-Elemente sie bestimmen; dort ist sie nicht mehr sicher monoton (die Bänder werden nach der kleinsten
+ * Fläche verteilt). Ist das Papier dann selbst bei 1:100.000 breiter als das Ziel, wird über ein geometrisches Raster
+ * von n gesucht. Reicht keine Breite an die Zielbreite heran (die Elemente mit Abstand und Rand sind breiter), gilt
+ * die kleinste erreichbare Breite als Ziel: der kleinste Maßstab, bei dem der Inhalt die neben den Elementen
+ * verbleibende Breite füllt, statt still 1:100.000 (`tooNarrow`).
+ */
+export function scaleForWidth(width: (n: number) => number, targetWidth: number): { scale: number; tooNarrow: boolean } {
   const step = 10;
-  let lo = SCALE_LIMITS.min / step;
-  let hi = SCALE_LIMITS.max / step;
-  if (width(lo * step) <= targetWidth) return lo * step;
-  if (width(hi * step) > targetWidth) return hi * step;
-  while (hi - lo > 1) {
-    const mid = Math.floor((lo + hi) / 2);
-    if (width(mid * step) <= targetWidth) hi = mid;
-    else lo = mid;
-  }
-  return hi * step;
+  const kMin = SCALE_LIMITS.min / step;
+  const kMax = SCALE_LIMITS.max / step;
+  /** Kleinstes k in (lo, hi] mit width(k · 10) ≤ goal; width(hi · 10) ≤ goal ist bekannt. */
+  const search = (lo: number, hi: number, goal: number) => {
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (width(mid * step) <= goal) hi = mid;
+      else lo = mid;
+    }
+    return hi;
+  };
+  if (width(kMin * step) <= targetWidth) return { scale: kMin * step, tooNarrow: false };
+  if (width(kMax * step) <= targetWidth) return { scale: search(kMin, kMax, targetWidth) * step, tooNarrow: false };
+  const grid: number[] = [];
+  for (let k = kMin; k < kMax; k = Math.max(k + 1, Math.round(k * 1.05))) grid.push(k);
+  grid.push(kMax);
+  const widths = grid.map((k) => width(k * step));
+  const narrowest = Math.min(...widths);
+  const tooNarrow = narrowest > targetWidth;
+  const goal = tooNarrow ? narrowest : targetWidth;
+  const i = widths.findIndex((w) => w <= goal);
+  return { scale: (i > 0 ? search(grid[i - 1]!, grid[i]!, goal) : grid[i]!) * step, tooNarrow };
 }
 
 function planFrame(s: Sheet, content: Bounds, elements: SheetElements): SheetFrame {
-  const scale = s.scale ?? scaleForWidth((n) => planPaper(content, n, s.margin, elements).w, s.targetWidth);
+  const auto = s.scale === null ? scaleForWidth((n) => planPaper(content, n, s.margin, elements).w, s.targetWidth) : null;
+  const scale = s.scale ?? auto!.scale;
   const p = planPaper(content, scale, s.margin, elements);
   const bounds = {
     minX: content.minX - mmToM(p.left, scale),
@@ -282,7 +307,9 @@ function planFrame(s: Sheet, content: Bounds, elements: SheetElements): SheetFra
     maxX: content.maxX + mmToM(p.right, scale),
     maxY: content.maxY + mmToM(p.bottom, scale),
   };
-  return { scale, paper: { w: p.w, h: p.h }, bounds, fit: s.scale === null, kind: 'plan', movable: false, layoutHeight: p.layoutHeight, margin: p.margin };
+  const frame: SheetFrame = { scale, paper: { w: p.w, h: p.h }, bounds, fit: s.scale === null, kind: 'plan', movable: false, layoutHeight: p.layoutHeight, margin: p.margin };
+  if (auto?.tooNarrow) frame.targetTooNarrow = true;
+  return frame;
 }
 
 /** Kleinster Ausschnitt in Metern. */
