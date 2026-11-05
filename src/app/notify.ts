@@ -42,6 +42,7 @@ export function notifyUndoable(text: string, ms = 8000): () => void {
     run: () => {
       const s = useStore.getState();
       if (!s.history.open && headId(s.history) === step) s.undo();
+      else if (s.history.future.some((e) => e.id === step)) notify('Schon rückgängig gemacht.');
       else notify('Rückgängig hier nicht mehr möglich: Danach wurde weiter geändert. Strg/Cmd+Z nimmt Schritt für Schritt zurück.');
     },
   });

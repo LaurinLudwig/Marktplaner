@@ -113,6 +113,22 @@ describe('#14 setAllNrLocks (Befehl mit Hinweis)', () => {
     expect(toasts().at(-1)!.text).toMatch(/^Rückgängig hier nicht mehr möglich/);
   });
 
+  it('„Rückgängig“ nach Strg/Cmd+Z: nichts weiter zurücknehmen, sondern sagen, dass es schon geschehen ist', () => {
+    s().setUi({ activePage: 'A' });
+    s().change('Vorher', (p) => {
+      p.name = 'Vorher';
+    });
+    setAllNrLocks(false);
+    const action = toasts()[0]!.action!;
+    s().undo();
+    const after = snapshot();
+    action.run();
+    expect(snapshot()).toEqual(after);
+    expect(s().project.name).toBe('Vorher');
+    expect(s().history.past.length).toBe(1);
+    expect(toasts().at(-1)!.text).toBe('Schon rückgängig gemacht.');
+  });
+
   it('nichts zu tun: Hinweis ohne Rückgängig und ohne Undo-Schritt', () => {
     s().setUi({ activePage: START_PAGE });
     setAllNrLocks(false);

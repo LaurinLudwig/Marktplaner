@@ -149,6 +149,49 @@ test.describe('#14: Alle Fixierungen lösen / alle Nummern fixieren', () => {
     expect(errors).toEqual([]);
   });
 
+  test('ohne Fixierungen und ohne Nummern: keine Knöpfe in der Seitenleiste, Menüeinträge gesperrt', async ({ page }) => {
+    await openApp(page);
+    await expect(panel(page).getByTestId('nr-status')).toBeVisible();
+    await expect(panel(page).getByTestId('nr-lock-actions')).toHaveCount(0);
+    await page.locator('.menu-btn').click();
+    await expect(page.getByRole('menu').getByRole('menuitem', { name: /^Alle Fixierungen lösen/ })).toBeDisabled();
+    await expect(page.getByRole('menu').getByRole('menuitem', { name: /^Alle Nummern fixieren/ })).toBeDisabled();
+  });
+
+  test('„Rückgängig“ im Hinweis nach einer weiteren Änderung nimmt nichts zurück, sondern sagt es', async ({ page }) => {
+    await openApp(page);
+    await seed(page);
+    await panel(page).getByRole('button', { name: 'Alle Fixierungen lösen' }).click();
+    const first = toast(page, '2 Fixierungen gelöst');
+    await expect(first).toBeVisible();
+    await panel(page).getByRole('button', { name: 'Alle Nummern fixieren' }).click();
+    await expect(toast(page, '2 Nummern fixiert')).toBeVisible();
+    const after = await locked(page);
+    expect(after).toEqual(['a', 'b', 'd']);
+    const n = await pastLen(page);
+    await first.getByRole('button', { name: 'Rückgängig' }).click();
+    await expect(toast(page, 'Rückgängig hier nicht mehr möglich')).toBeVisible();
+    expect(await locked(page)).toEqual(after);
+    expect(await pastLen(page)).toBe(n);
+  });
+
+  test('Start-Page: Menü „Fixierungen“ wirkt unabhängig von Suche und Filter auf alle Stände', async ({ page }) => {
+    await openApp(page);
+    await seed(page);
+    await page.evaluate(() => (window as any).__marktplanerStore.getState().change('Name', (p: any) => {
+        p.pages[0].stands.find((x: any) => x.id === 'a').name = 'Bratwurst';
+      }));
+    await tabbar(page).getByRole('tab', { name: 'Start-Page' }).click();
+    await page.getByLabel('Geschäfte suchen').fill('bratwurst');
+    await expect(page.getByTestId('stand-row')).toHaveCount(1);
+    await page.getByTestId('nr-locks').click();
+    const box = page.getByRole('group', { name: 'Fixierungen' });
+    await expect(box.getByTestId('nr-locks-status')).toHaveText('3 Nummern fixiert');
+    await box.getByRole('button', { name: 'Alle Fixierungen lösen' }).click();
+    await expect(toast(page, '3 Fixierungen gelöst')).toBeVisible();
+    expect(await locked(page)).toEqual([]);
+  });
+
   test('App-Menü auf einer Festplatz-Page: Nummernkreis dieser Page', async ({ page }) => {
     await openApp(page);
     await seed(page);

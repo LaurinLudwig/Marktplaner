@@ -1,10 +1,21 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../icons/Icon';
 
 /** Knopf mit aufklappendem Bereich (Filter, Spalten); schließt bei Klick daneben und mit Esc. */
 export function Popover({ label, active, children, testId }: { label: ReactNode; active?: boolean; children: ReactNode; testId?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Bricht die Werkzeugleiste um, steht ein rechts ausgerichteter Bereich (z. B. „Spalten“) plötzlich links und
+  // ragte aus dem Fenster: dann zur anderen Seite ausrichten (umgekehrt ebenso).
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!open || !el) return;
+    const r = el.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    if (r.left < 0) Object.assign(el.style, { left: '0', right: 'auto' });
+    else if (r.right > vw) Object.assign(el.style, { left: 'auto', right: '0' });
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
@@ -29,7 +40,11 @@ export function Popover({ label, active, children, testId }: { label: ReactNode;
       <button type="button" className={`btn filter-btn${active ? ' active' : ''}`} aria-expanded={open} onClick={() => setOpen(!open)} data-testid={testId}>
         {label} <Icon name="down" size={14} />
       </button>
-      {open && <div className="popover-body">{children}</div>}
+      {open && (
+        <div className="popover-body" ref={bodyRef}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
