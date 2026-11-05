@@ -322,6 +322,15 @@ Entscheidungen 2026-10-12 (M5-Planung).
   fixierte Stände und vergibt keine Nummer, die einer fixierten im selben Nummernkreis gleicht (Vergleich wie bei
   der Warnung „doppelte Nummer“, §3). Eine fixierte Nummer bleibt von Hand änderbar; fixiert und leer = der Stand
   bleibt ohne Nummer.
+- **Alle Fixierungen lösen / Alle Nummern fixieren** (Entscheidung 2026-11-05, #14): Knöpfe im Seitenleisten-Bereich
+  „Nummerierung“ unter der Anzeige „…, n fixiert“, sichtbar nur, wenn sie etwas ändern würden. Sie wirken auf den
+  Nummernkreis wie „Neu nummerieren“: bei „pro Festplatz“ die aktive Page, bei „global“ alle Pages – hier aber
+  auch Pages im Modus „manuell“. Für alle Pages zusätzlich auf der Start-Page über der Geschäftstabelle (Menü
+  „Fixierungen“) und im App-Menü (☰; dort auf einer Festplatz-Page für deren Nummernkreis, auf der Start-Page für
+  alle Pages). Ohne Nachfrage, ein Undo-Schritt, danach der Hinweis „n Fixierungen gelöst“ bzw. „n Nummern fixiert“
+  mit „Rückgängig“ (nimmt genau diesen Schritt zurück, solange danach nichts geändert wurde). Die Nummern selbst
+  ändern sich nicht; erst „Neu nummerieren“ vergibt sie neu. „Alle Nummern fixieren“ lässt Stände ohne Nummer aus
+  (fixiert und leer hieße, sie blieben ohne Nummer).
 - **Neue Stände** und Kopien bekommen keine Nummer, bis neu nummeriert wird. Der Bereich „Nummerierung“ zeigt die
   Zahl der Stände ohne Nummer.
 - **Neu nummerieren** nur per Button bzw. Kurzbefehl, damit vergebene Nummern nicht unbemerkt springen. Bei „pro
@@ -388,6 +397,8 @@ Entscheidungen 2026-10-12 (M6-Planung).
   - Freitextsuche in Name, Eigentümer und Ware (ohne Groß-/Kleinschreibung und Akzente). Filter nach Festplatz,
     Kategorie und Anschlussart (jeweils auch „ohne“), „mit Warnung“, „ohne Nummer“. Suche, Filter und Sortierung
     gelten nur für die Sitzung, werden nicht im Projekt gespeichert (Entscheidung 2026-10-12) und bleiben beim Wechsel der Page erhalten.
+  - Menü „Fixierungen“ über der Tabelle: Zahl der fixierten Nummern, „Alle Fixierungen lösen“ und „Alle Nummern
+    fixieren“ für alle Pages, unabhängig von Suche und Filter (#14, §5).
   - Summenzeile über die gefilterten Zeilen: Anzahl, Frontmeter, Strom, Standgeld netto und brutto (#5), Anzahl je
     Anschlussart.
   - Direkt editierbar: Nummer, Schloss, Name, Eigentümer, Ware, Kategorie, Breite, Tiefe, Strom, Anschlussart,

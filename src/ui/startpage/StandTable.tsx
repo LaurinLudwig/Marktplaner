@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { exportCurrentList, visibleStandColumns } from '../../app/exportCsv';
 import { jumpToStand } from '../../app/jump';
+import { setAllNrLocks } from '../../app/nrLock';
 import { connectionText, displayedStandRows } from '../../app/startPageData';
 import { fmtEuro, fmtMoney, hasPricing } from '../../core/fee';
 import { fmt, fmtInput, parseNum } from '../../core/format';
@@ -9,6 +10,7 @@ import { CONNECTION_LABEL } from '../../core/label';
 import type { Connection, FestplatzPage, Stand } from '../../core/model/types';
 import { LIMITS } from '../../core/objects';
 import { CONNECTION_KEYS, type ConnectionKey } from '../../core/power';
+import { nrLockTargets } from '../../core/numbering';
 import { isFilterActive, sumRows, toggleSort, EMPTY_STAND_FILTER, type StandRow, type StandSortColumn } from '../../core/standTable';
 import { setNrLocked } from '../../state/numbering';
 import { setRectField, updateStands } from '../../state/objects';
@@ -601,7 +603,29 @@ function CellEditor({ row, col, editing, onEnd, onCommitted }: { row: StandRow; 
   );
 }
 
-// ---------- Werkzeugleiste: Suche, Filter, Spalten, Export ----------
+// ---------- Werkzeugleiste: Suche, Filter, Fixierungen, Spalten, Export ----------
+
+/** „Alle Fixierungen lösen“ / „Alle Nummern fixieren“ für alle Pages (#14, spec.md §5); ohne Nachfrage, mit Undo. */
+function NrLockMenu() {
+  const fixed = useStore((s) => s.project.pages.reduce((n, p) => n + p.stands.filter((x) => x.nrLocked).length, 0));
+  const toLock = useStore((s) => nrLockTargets(s.project, null, true).length);
+  return (
+    <Popover testId="nr-locks" label={<><Icon name="lock" size={14} /> Fixierungen</>}>
+      <div className="popover-list nr-locks" role="group" aria-label="Fixierungen">
+        <p className="hint" data-testid="nr-locks-status">
+          {fmt(fixed, 0)} {fixed === 1 ? 'Nummer' : 'Nummern'} fixiert
+        </p>
+        <button type="button" className="btn" disabled={fixed === 0} onClick={() => setAllNrLocks(false, null)}>
+          <Icon name="unlock" size={14} /> Alle Fixierungen lösen
+        </button>
+        <button type="button" className="btn" disabled={toLock === 0} onClick={() => setAllNrLocks(true, null)}>
+          <Icon name="lock" size={14} /> Alle Nummern fixieren
+        </button>
+        <p className="hint">Auf allen Festplätzen; die Nummern selbst bleiben. Stände ohne Nummer werden nicht fixiert.</p>
+      </div>
+    </Popover>
+  );
+}
 
 function StandToolbar({ total, shown, stale }: { total: number; shown: number; stale: boolean }) {
   const sp = useStartPage();
@@ -669,6 +693,7 @@ function StandToolbar({ total, shown, stale }: { total: number; shown: number; s
         </button>
       )}
       <div className="spacer" />
+      <NrLockMenu />
       <Popover testId="columns" label={<><Icon name="columns" size={14} /> Spalten</>}>
         <div className="popover-list" role="group" aria-label="Spalten">
           {HIDEABLE_COLUMNS.filter((c) => withFee || !FEE_COLUMNS.includes(c)).map((c) => (

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { confirmDeletePage, runCommand } from '../../app/commands';
 import { openRecent } from '../../app/fileActions';
+import { nrLockCount, nrLockPage } from '../../app/nrLock';
 import type { Id } from '../../core/model/types';
 import { fmt } from '../../core/format';
 import { cachedDuplicates } from '../../core/numbering';
@@ -87,6 +88,7 @@ export function TabBar() {
     void checkRecent();
     const r = e.currentTarget.getBoundingClientRect();
     const cmd = (id: string) => () => runCommand(id);
+    const lockScope = nrLockPage() === null || useStore.getState().project.settings.numbering.scope === 'global' ? 'alle Festplätze' : 'dieser Festplatz';
     setMenu({
       x: r.left,
       y: r.bottom,
@@ -100,6 +102,10 @@ export function TabBar() {
         'separator',
         { label: 'Rückgängig', shortcut: 'edit.undo', onSelect: cmd('edit.undo'), disabled: !canUndo },
         { label: 'Wiederholen', shortcut: 'edit.redo', onSelect: cmd('edit.redo'), disabled: !canRedo },
+        'separator',
+        // #14: wirken auf den Nummernkreis der aktiven Page, auf der Start-Page auf alle Pages
+        { label: 'Alle Fixierungen lösen', detail: lockScope, onSelect: cmd('numbering.unlockAll'), disabled: nrLockCount(false) === 0 },
+        { label: 'Alle Nummern fixieren', detail: lockScope, onSelect: cmd('numbering.lockAll'), disabled: nrLockCount(true) === 0 },
         'separator',
         { label: theme === 'dark' ? 'Helles Design' : 'Dunkles Design', shortcut: 'ui.theme', onSelect: cmd('ui.theme') },
         { label: 'Wischrichtung umkehren', checked: invertPan, onSelect: cmd('ui.invertPan') },
