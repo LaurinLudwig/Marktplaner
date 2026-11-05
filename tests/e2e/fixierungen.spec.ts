@@ -119,10 +119,10 @@ test.describe('#14: Alle Fixierungen lösen / alle Nummern fixieren', () => {
 
     await page.getByTestId('nr-locks').click();
     const box = page.getByRole('group', { name: 'Fixierungen' });
-    await expect(box.getByTestId('nr-locks-status')).toHaveText('3 Nummern fixiert');
+    await expect(box.getByTestId('nr-locks-status')).toHaveText('3 Stände fixiert');
     await box.getByRole('button', { name: 'Alle Fixierungen lösen' }).click();
     await expect(toast(page, '3 Fixierungen gelöst')).toBeVisible();
-    await expect(box.getByTestId('nr-locks-status')).toHaveText('0 Nummern fixiert');
+    await expect(box.getByTestId('nr-locks-status')).toHaveText('0 Stände fixiert');
     await expect(box.getByRole('button', { name: 'Alle Fixierungen lösen' })).toBeDisabled();
     expect(await locked(page)).toEqual([]);
     expect(await nrs(page)).toEqual(before);
@@ -186,7 +186,7 @@ test.describe('#14: Alle Fixierungen lösen / alle Nummern fixieren', () => {
     await expect(page.getByTestId('stand-row')).toHaveCount(1);
     await page.getByTestId('nr-locks').click();
     const box = page.getByRole('group', { name: 'Fixierungen' });
-    await expect(box.getByTestId('nr-locks-status')).toHaveText('3 Nummern fixiert');
+    await expect(box.getByTestId('nr-locks-status')).toHaveText('3 Stände fixiert');
     await box.getByRole('button', { name: 'Alle Fixierungen lösen' }).click();
     await expect(toast(page, '3 Fixierungen gelöst')).toBeVisible();
     expect(await locked(page)).toEqual([]);

@@ -397,7 +397,7 @@ Entscheidungen 2026-10-12 (M6-Planung).
   - Freitextsuche in Name, Eigentümer und Ware (ohne Groß-/Kleinschreibung und Akzente). Filter nach Festplatz,
     Kategorie und Anschlussart (jeweils auch „ohne“), „mit Warnung“, „ohne Nummer“. Suche, Filter und Sortierung
     gelten nur für die Sitzung, werden nicht im Projekt gespeichert (Entscheidung 2026-10-12) und bleiben beim Wechsel der Page erhalten.
-  - Menü „Fixierungen“ über der Tabelle: Zahl der fixierten Nummern, „Alle Fixierungen lösen“ und „Alle Nummern
+  - Menü „Fixierungen“ über der Tabelle: Zahl der fixierten Stände, „Alle Fixierungen lösen“ und „Alle Nummern
     fixieren“ für alle Pages, unabhängig von Suche und Filter (#14, §5).
   - Summenzeile über die gefilterten Zeilen: Anzahl, Frontmeter, Strom, Standgeld netto und brutto (#5), Anzahl je
     Anschlussart.

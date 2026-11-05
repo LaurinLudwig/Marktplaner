@@ -613,7 +613,7 @@ function NrLockMenu() {
     <Popover testId="nr-locks" label={<><Icon name="lock" size={14} /> Fixierungen</>}>
       <div className="popover-list nr-locks" role="group" aria-label="Fixierungen">
         <p className="hint" data-testid="nr-locks-status">
-          {fmt(fixed, 0)} {fixed === 1 ? 'Nummer' : 'Nummern'} fixiert
+          {fmt(fixed, 0)} {fixed === 1 ? 'Stand' : 'Stände'} fixiert
         </p>
         <button type="button" className="btn" disabled={fixed === 0} onClick={() => setAllNrLocks(false, null)}>
           <Icon name="unlock" size={14} /> Alle Fixierungen lösen
