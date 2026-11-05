@@ -13,6 +13,7 @@
 import { rectGeo } from './geometry/polygon';
 import { normAngle } from './geometry/rect';
 import type { ClockwiseSettings, FestplatzPage, Id, NumberingScope, Project, Stand, Vec } from './model/types';
+import { activeAreas, type AreasOf } from './pageAreas';
 
 /** Grenzen der Einstellungen. */
 export const NUMBERING_LIMITS = { start: { min: 0, max: 99_999 }, digits: { min: 1, max: 4 } };
@@ -77,9 +78,9 @@ export function orderClockwise(stands: readonly Stand[], cw: ClockwiseSettings, 
   return keyed.map((k) => k.s);
 }
 
-/** Mitte des Hüllrechtecks aller Grundflächen und Stände (Vorgabe für den Mittelpunkt), sonst null. */
-export function defaultClockwiseCenter(page: Pick<FestplatzPage, 'areas' | 'stands'>): Vec | null {
-  const all = [...page.areas, ...page.stands];
+/** Mitte des Hüllrechtecks aller (wirkenden, #17) Grundflächen und Stände (Vorgabe für den Mittelpunkt), sonst null. */
+export function defaultClockwiseCenter(page: AreasOf & Pick<FestplatzPage, 'stands'>): Vec | null {
+  const all = [...activeAreas(page), ...page.stands];
   if (!all.length) return null;
   let minX = Infinity;
   let minY = Infinity;

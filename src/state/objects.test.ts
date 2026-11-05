@@ -21,7 +21,7 @@ import {
   updateStands,
 } from './objects';
 import { addPage } from './pages';
-import { setLayer } from './pageSettings';
+import { setLayer, setUseAreas } from './pageSettings';
 import { deleteShapeTemplate, saveShapeTemplate, setStandShape, shapeTemplateUsage } from './shapes';
 import { selectDirty, useStore } from './store';
 
@@ -312,3 +312,38 @@ describe('Geschäftsformen (M12, #9)', () => {
   });
 });
 
+
+describe('#17 Grundflächen verwenden', () => {
+  it('Abschalten behält oder löscht die Grundflächen, je ein Undo-Schritt; Auswahl verliert die Grundflächen', () => {
+    const a = addArea(page().id, { cx: 0, cy: 0, w: 20, d: 8, rot: 0 });
+    const st = addStand(page().id, { cx: 50, cy: 0, w: 3, d: 3, rot: 0 });
+    select([a, st]);
+    const n = past();
+    setUseAreas(page().id, false);
+    expect(page()).toMatchObject({ useAreas: false });
+    expect(page().areas.map((x) => x.id)).toEqual([a]);
+    expect(s().ui.selection).toEqual({ kind: 'objects', ids: [st] });
+    expect(past()).toBe(n + 1);
+    s().undo();
+    expect(page().useAreas).toBe(true);
+    setUseAreas(page().id, false, true);
+    expect(page()).toMatchObject({ useAreas: false, areas: [], hiddenFree: [] });
+    expect(past()).toBe(n + 1);
+    s().undo();
+    expect(page()).toMatchObject({ useAreas: true });
+    expect(page().areas).toHaveLength(1);
+  });
+
+  it('mitkopierte Grundflächen werden auf einer Page ohne Grundflächen nicht eingefügt', () => {
+    const a = addArea(page().id, { cx: 0, cy: 0, w: 20, d: 8, rot: 0 });
+    const st = addStand(page().id, { cx: 50, cy: 0, w: 3, d: 3, rot: 0 });
+    select([a, st]);
+    copySelection();
+    addPage();
+    setUseAreas(page().id, false);
+    paste(null);
+    expect(page().areas).toEqual([]);
+    expect(page().stands).toHaveLength(1);
+    expect(s().ui.selection).toEqual({ kind: 'objects', ids: [page().stands[0]!.id] });
+  });
+});

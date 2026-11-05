@@ -4,6 +4,7 @@ import type { Preview } from '../core/derive';
 import type { Assets, ProjectBundle } from '../core/fileFormat';
 import { expiredHiddenFree } from '../core/hiddenFree';
 import { createProject } from '../core/model/defaults';
+import { activeAreas } from '../core/pageAreas';
 import type { Id, Project, Vec, View } from '../core/model/types';
 import type { PaperKind } from '../core/paper';
 import type { Bounds } from '../core/viewport';
@@ -157,7 +158,8 @@ function validSelection(project: Project, active: PageRef, sel: Selection): Sele
   if (!page) return null;
   if (sel.kind === 'background') return page.background ? sel : null;
   if (sel.kind === 'paper') return sel;
-  const exists = new Set([...page.areas.map((a) => a.id), ...page.stands.map((st) => st.id), ...page.infra.map((o) => o.id)]);
+  // Grundflächen einer Page ohne Grundflächen (#17) sind ausgeblendet und nicht auswählbar
+  const exists = new Set([...activeAreas(page).map((a) => a.id), ...page.stands.map((st) => st.id), ...page.infra.map((o) => o.id)]);
   const ids = sel.ids.filter((id) => exists.has(id));
   if (!ids.length) return null;
   return ids.length === sel.ids.length ? sel : { kind: 'objects', ids };

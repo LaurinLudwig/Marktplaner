@@ -119,7 +119,12 @@ export const COMMANDS: Record<string, Command> = {
   'tool.select': { run: setTool('select'), enabled: onDrawingPage },
   'tool.hand': { run: setTool('hand'), enabled: onDrawingPage },
   'tool.zoom': { run: setTool('zoom'), enabled: onDrawingPage },
-  'tool.area': { run: setTool('area'), enabled: onDrawingPage },
+  'tool.area': {
+    run: setTool('area'),
+    // Ohne Grundflächen gesperrt (#17)
+    enabled: () => onDrawingPage() && activePage()?.useAreas !== false,
+    disabledMessage: 'Grundfläche: Dieser Festplatz verwendet keine Grundflächen (Seitenleiste, Bereich „Grundflächen“).',
+  },
   'tool.stand': { run: setTool('stand'), enabled: onDrawingPage },
   'tool.infra': { run: setTool('infra'), enabled: onDrawingPage },
   'tool.infraNext': { run: nextInfraType, enabled: onDrawingPage },

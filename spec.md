@@ -90,6 +90,25 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 - Beschriftung automatisch mit Name und Maßen, z. B. „Grundfläche Nord · 50 × 10 m“: horizontal, feste
   Schriftgröße wie die Standbeschriftung, außerhalb der Fläche vor der Mitte der Vorderseite (kollidiert
   so nicht mit Ständen und Freiflächen).
+- **Ohne Grundflächen** (#17, Entscheidung Laurin 2026-11-05): Auf offenen Plätzen (z. B. Obermarkt: Stände frei
+  verteilt, im Kreis um den Brunnen) sind Grundflächen nicht sinnvoll. Schalter „Grundflächen verwenden“ je Page im
+  Seitenleisten-Bereich „Grundflächen“, Standard an; neue Pages starten mit Grundflächen (keine Nachfrage). Es gibt
+  keine Platzgrenze bzw. keinen Umriss und keinen „Modus je Platz“. Ist der Schalter aus:
+  - keine Warnung „außerhalb“ (§3) für Stände dieser Page; das Häkchen „außerhalb ignorieren“ am Stand bleibt
+    gespeichert, wirkt aber nicht und erscheint nicht in der Seitenleiste;
+  - das Werkzeug „Grundfläche“ ist auf dieser Page gesperrt (Tooltip nennt den Grund; die Taste meldet ihn);
+  - keine Freiflächen (§4); die Ebenen „Grundflächen“ und „Freiflächen“ und die Legenden-Einträge „Grundfläche“ und
+    „Freifläche“ erscheinen nicht, auch nicht im PDF;
+  - Start-Page: freie Frontmeter „–“ statt 0, sie zählen nicht in die Summe „Gesamt“ (verwendet keine Page
+    Grundflächen, auch dort „–“); die Karte des Festplatzes zeigt den Hinweis „ohne Grundflächen“ (§7);
+  - kein Fang der Vorderseite an Grundflächen (§3); Fang an Nachbarständen und Raster bleibt.
+  - Unverändert: Überlappung, Infrastruktur, Abstand, Nummerierung (§5), Strom, Standgeld (Frontmeter = Standbreite),
+    Export.
+  Abschalten bei vorhandenen Grundflächen fragt nach: „Grundflächen behalten“ (sie bleiben gespeichert, sind aber
+  ausgeblendet, nicht auswählbar und wirken nicht, auch nicht für „An Seite anpassen“, den Mittelpunkt der
+  Nummerierung und die Platzierung der Beschriftung; ausgeblendete Freiflächen bleiben erhalten) oder „Grundflächen
+  löschen“, dazu „Abbrechen“. Jede Variante und das Wiedereinschalten ist ein Undo-Schritt. Mitkopierte Grundflächen
+  werden auf einer solchen Page nicht eingefügt. Formatversion 12 (Page `useAreas`; ältere Dateien: an).
 
 ### 3. Geschäfte
 - Mit dem Geschäfts-Werkzeug anlegen (Klick: Standardmaß, anfangs 3 × 3 m, danach das zuletzt
@@ -106,7 +125,7 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
     der Stand übernimmt deren Drehung. Danach gleitet er entlang der Vorderseite; gelöst wird er erst
     bei mehr als 16 px Abstand, dann bekommt er seine ursprüngliche Drehung zurück. Eingerastet fängt er
     entlang der Vorderseite an deren Enden und (mit Nachbar-Fang) an den Kanten benachbarter Stände, dort mit
-    dem Fang-Abstand (siehe unten).
+    dem Fang-Abstand (siehe unten). Auf einer Page ohne Grundflächen (§2, #17) entfällt dieser Fang.
   - Nachbarstände: Ein Stand rastet mit dem Fang-Abstand neben einer Kante eines parallel stehenden Nachbarn
     ein (Anliegen) oder fluchtet mit dessen Kanten (Fluchten ohne Abstand).
   - Fang-Abstand (M10, #2): projektweit in den Projekteinstellungen, Standard 0,3 m, 0–10 m, mit Undo; 0 = bündig.
@@ -123,7 +142,7 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   Warnungen (Entscheidung 2026-10-11):
   - Außerhalb (orange): Ein Teil des Stands liegt mehr als 0,01 m außerhalb der Vereinigung aller
     Grundflächen, auch wenn er nur hinten herausragt. Ein Stand über zwei aneinanderliegenden
-    Grundflächen ist nicht außerhalb.
+    Grundflächen ist nicht außerhalb. Auf einer Page ohne Grundflächen (§2, #17) ist kein Stand außerhalb.
   - Überlappung (rot, Vorrang vor orange): zwei Stände dringen mehr als 0,01 m ineinander ein.
   - Doppelte Nummer (orange, Entscheidung 2026-10-12): zwei Stände im selben Nummernkreis (§5) haben dieselbe
     Platznummer („12“ = „012“, Groß-/Kleinschreibung und Leerzeichen am Rand egal). Das Präfix gehört zur Nummer:
@@ -246,6 +265,7 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
     Beschriftung relativ zur Standmitte in m, oder null).
 
 ### 4. Freiflächen-Logik (Kern)
+- Auf einer Page ohne Grundflächen (§2, #17) gibt es keine Freiflächen.
 - Jede Grundfläche hat eine Achse entlang ihrer Vorderseite, Bereich [0, Breite].
 - Jedes Geschäft, das die Grundfläche überlappt, belegt auf dieser Achse das Intervall seiner
   Projektion (Schnittmenge mit der Grundfläche).
@@ -374,7 +394,7 @@ Entscheidungen 2026-10-12 (M6-Planung).
 - **Kennzahlen** als Karten „Gesamt“ und je Festplatz (Reihenfolge der Tabs): Anzahl Geschäfte, Frontmeter
   (Summe der Breiten; das ist die belegte Fläche, eine m²-Angabe gibt es nicht), freie Frontmeter (Summe der Breiten
   aller angezeigten Freiflächen, also ab der Mindestbreite; bei angeschnittenen die Hüllbreite; Entscheidung
-  2026-10-12), Strom wie in §6 (Balken mit
+  2026-10-12; ohne Grundflächen „–“ mit Hinweis „ohne Grundflächen“ und nicht in der Summe, §2), Strom wie in §6 (Balken mit
   Limit je Festplatz, gesamt nur die Summe), Anzahl und kW je Anschlussart, Zahl der Stände mit aktiver Warnung
   (rot, sobald eine Überlappung dabei ist). Klick auf den Festplatz öffnet die Page; Klick auf die Warnzahl öffnet
   die Geschäftstabelle gefiltert auf diesen Festplatz und „mit Warnung“.
@@ -524,7 +544,7 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
 - Die Einträge entstehen automatisch aus dem, was auf der Page tatsächlich sichtbar vorkommt. Ausgeblendete Ebenen
   fehlen; ab M8 gilt das auch für die Ebenen des Export-Profils.
 - Reihenfolge der Einträge:
-  1. Grundfläche (wenn es eine gibt)
+  1. Grundfläche (wenn es eine gibt und die Page Grundflächen verwendet, §2)
   2. Freifläche (wenn mindestens eine angezeigt wird)
   3. Kategorien der Stände in Projektreihenfolge
   4. „Geschäft ohne Kategorie“ in der Standardfarbe des Projekts, wenn es Stände ohne Kategorie und ohne eigene
@@ -829,7 +849,7 @@ Löschen eines verwendeten Typs: Die App fragt nach und löscht seine Objekte mi
 - **Zuletzt geöffnet** im Menü links oben: Untermenü unter „Öffnen …“ mit Name und Ordner je Projekt, am Ende
   „Liste leeren“; ohne Einträge deaktiviert.
 - Ebenen (Hintergrund, Grundflächen, Freiflächen, Geschäfte, Infrastruktur, Beschriftung, Blatt; Blatt seit M7)
-  ein-/ausblendbar und sperrbar. Ein-/Ausblenden und Sperren sind Ansichtseinstellungen (kein
+  ein-/ausblendbar und sperrbar; Grundflächen und Freiflächen nur auf Pages mit Grundflächen (§2). Ein-/Ausblenden und Sperren sind Ansichtseinstellungen (kein
   Undo-Schritt). Gesperrte Ebenen sind sichtbar, aber nicht auswählbar; ausgeblendete fangen nicht.
   Die Sperre der Ebene „Hintergrund“ ist dieselbe wie die Hintergrund-Sperre aus §1 und bleibt wie
   dort rückgängig machbar (sie gehört mit zur Kalibrierung).

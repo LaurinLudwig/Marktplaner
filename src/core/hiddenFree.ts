@@ -11,6 +11,7 @@ import { createFreeSpaceCache, pageFreeSpaces, type AreaFreeSpaces, type FreeSpa
 import { withinTol } from './geometry/tolerance';
 import type { Polygon } from './geometry/polygon';
 import { pageOccupants } from './infra';
+import { activeAreas, usesAreas, type AreasOf } from './pageAreas';
 import type { FestplatzPage, HiddenFree, Id, InfraTypeDef, Project, Vec } from './model/types';
 
 /** Gehört die Ausblendung `h` zu dieser Freifläche? Gleicher Schlüssel, Intervallenden bis 0,01 m verschoben. */
@@ -45,10 +46,12 @@ export interface FreeContext {
 
 /**
  * Freiflächen einer Page mit allem, was sie bestimmt: Stände und belegende Infrastruktur (§4, §11), Mindestbreite
- * und Ausblendungen. Gemeinsamer Einstieg für Zeichenfläche, Kennzahlen, Listen, Legende und PDF.
+ * und Ausblendungen. Gemeinsamer Einstieg für Zeichenfläche, Kennzahlen, Listen, Legende und PDF. Auf einer Page
+ * ohne Grundflächen (#17) gibt es keine Freiflächen.
  */
-export function pageFree(page: Pick<FestplatzPage, 'areas' | 'stands' | 'infra' | 'hiddenFree'>, ctx: FreeContext, cache?: FreeSpaceCache): AreaFreeSpaces[] {
-  return applyHidden(pageFreeSpaces(page.areas, pageOccupants(page, ctx.infraTypes), ctx.minFreeWidth, cache), page.hiddenFree);
+export function pageFree(page: AreasOf & Pick<FestplatzPage, 'stands' | 'infra' | 'hiddenFree'>, ctx: FreeContext, cache?: FreeSpaceCache): AreaFreeSpaces[] {
+  if (!usesAreas(page)) return [];
+  return applyHidden(pageFreeSpaces(activeAreas(page), pageOccupants(page, ctx.infraTypes), ctx.minFreeWidth, cache), page.hiddenFree);
 }
 
 /**
@@ -68,7 +71,8 @@ const pruneCaches = new Map<Id, FreeSpaceCache>();
 /**
  * Pages, deren Ausblendungen nach einer Änderung von `before` auf `after` teilweise verfallen (#8, spec.md §4), mit
  * den verbleibenden Einträgen. Geprüft werden nur Pages mit Ausblendungen, deren Objekte, Mindestbreite oder
- * Infrastruktur-Typen sich geändert haben (Vergleich per Identität).
+ * Infrastruktur-Typen sich geändert haben (Vergleich per Identität). Pages ohne Grundflächen (#17) behalten ihre
+ * Ausblendungen unverändert: Die Grundflächen wirken dort nur nicht und kommen beim Wiedereinschalten zurück.
  */
 export function expiredHiddenFree(before: Project, after: Project): Map<Id, readonly HiddenFree[]> {
   const out = new Map<Id, readonly HiddenFree[]>();
@@ -76,9 +80,9 @@ export function expiredHiddenFree(before: Project, after: Project): Map<Id, read
   const ctxChanged = before.settings.minFreeWidth !== ctx.minFreeWidth || before.infraTypes !== ctx.infraTypes;
   const old = new Map(before.pages.map((p) => [p.id, p]));
   for (const page of after.pages) {
-    if (!page.hiddenFree.length) continue;
+    if (!page.hiddenFree.length || !usesAreas(page)) continue;
     const prev = old.get(page.id);
-    if (!ctxChanged && prev && prev.areas === page.areas && prev.stands === page.stands && prev.infra === page.infra && prev.hiddenFree === page.hiddenFree) continue;
+    if (!ctxChanged && prev && prev.useAreas === page.useAreas && prev.areas === page.areas && prev.stands === page.stands && prev.infra === page.infra && prev.hiddenFree === page.hiddenFree) continue;
     let c = pruneCaches.get(page.id);
     if (!c) pruneCaches.set(page.id, (c = createFreeSpaceCache()));
     const keep = pruneHiddenFree(page.hiddenFree, pageFree({ ...page, hiddenFree: [] }, ctx, c));

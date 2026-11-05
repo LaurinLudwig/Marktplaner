@@ -7,6 +7,7 @@ import { fmt } from '../../core/format';
 import { cachedDuplicates } from '../../core/numbering';
 import { folderOf } from '../../core/recentFiles';
 import { pageSumKw } from '../../core/power';
+import { outsideRef } from '../../core/pageAreas';
 import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, countWarnings, warningSevere, warningTotal } from '../../core/warnings';
 import { addPage, duplicatePage, movePage, renamePage } from '../../state/pages';
 import { checkRecent, clearRecent, useRecent } from '../../state/recent';
@@ -250,7 +251,7 @@ function WarnBadge({ pageId }: { pageId: Id }) {
     const page = s.project.pages.find((p) => p.id === pageId);
     if (!page || (!page.stands.length && !page.infra.length)) return '';
     const dups = cachedDuplicates(s.project.pages, s.project.settings.numbering.scope);
-    const n = countWarnings(cachedPageWarnings(page.areas, page.stands), page.stands, s.project.settings, dups, {
+    const n = countWarnings(cachedPageWarnings(outsideRef(page), page.stands), page.stands, s.project.settings, dups, {
       warnings: cachedInfraWarnings(page, s.project.infraTypes, s.project.settings.minPassageWidth),
       objects: page.infra,
     }, cachedDistanceWarnings(page.stands, s.project.categories));

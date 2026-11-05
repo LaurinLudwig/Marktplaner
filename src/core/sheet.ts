@@ -10,6 +10,7 @@ import { boundsOfRects } from './geometry/rect';
 import { fmt } from './format';
 import type { Corner, FestplatzPage, PaperAnchor, PaperFormat, Sheet, Vec } from './model/types';
 import { SCALE_LIMITS } from './model/schema';
+import { activeAreas, type AreasOf } from './pageAreas';
 import type { Bounds } from './viewport';
 
 /** Papiermaße in mm, hoch (Breite × Höhe). */
@@ -45,9 +46,12 @@ export interface SheetFrame {
 export const mmToM = (mm: number, scale: number) => (mm * scale) / 1000;
 export const mToMm = (m: number, scale: number) => (m * 1000) / scale;
 
-/** Hüllrechteck aller Grundflächen, Geschäfte und Infrastruktur-Objekte; ohne sie das des Hintergrunds. */
-export function contentBounds(page: Pick<FestplatzPage, 'areas' | 'stands' | 'infra'>, background: Bounds | null): Bounds | null {
-  return boundsOfRects([...page.areas, ...page.stands, ...page.infra]) ?? background;
+/**
+ * Hüllrechteck aller Grundflächen, Geschäfte und Infrastruktur-Objekte; ohne sie das des Hintergrunds. Ausgeblendete
+ * Grundflächen einer Page ohne Grundflächen (#17) zählen nicht.
+ */
+export function contentBounds(page: AreasOf & Pick<FestplatzPage, 'stands' | 'infra'>, background: Bounds | null): Bounds | null {
+  return boundsOfRects([...activeAreas(page), ...page.stands, ...page.infra]) ?? background;
 }
 
 /** Maßstab, bei dem `b` mit Papierrand auf das Papier passt, auf volle 10 aufgerundet (1:440). */

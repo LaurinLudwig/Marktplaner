@@ -8,6 +8,7 @@ import { computeMoveSnap, type Guide, type SnapState } from '../../../core/moveS
 import { lineFromEnds } from '../../../core/infra';
 import { constrainAngle } from '../../../core/measure';
 import { findObjects, LIMITS } from '../../../core/objects';
+import { frontSnapAreas } from '../../../core/pageAreas';
 import { paperElementBounds } from '../../../core/paper';
 import type { SnapResult } from '../../../core/snap';
 import { angleTo, rotateRects, snapAngle, type RectMap } from '../../../core/transform';
@@ -161,7 +162,7 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       delta: { x: p.world.x - g.startWorld.x, y: p.world.y - g.startWorld.y },
       grabbed: g.grabbed,
       standIds: new Set(stored.stands.filter((x) => movingIds.has(x.id)).map((x) => x.id)),
-      areas: page.layers.areas.visible ? page.areas.filter((a) => isTarget(a.id)) : [],
+      areas: frontSnapAreas(page).filter((a) => isTarget(a.id)),
       stands: page.layers.stands.visible ? page.stands.filter((x) => isTarget(x.id)) : [],
       options,
       tol: SNAP_PX / ctx.view.scale,

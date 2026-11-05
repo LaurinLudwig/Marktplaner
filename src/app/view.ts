@@ -1,5 +1,6 @@
 import { bgCorners } from '../core/background';
 import { boundsOfRects } from '../core/geometry/rect';
+import { activeAreas } from '../core/pageAreas';
 import type { FestplatzPage, Project, View } from '../core/model/types';
 import { pagePaper } from '../core/paper';
 import { mmToM } from '../core/sheet';
@@ -37,9 +38,9 @@ export function zoomBy(factor: number) {
   useStore.getState().setView(page.id, zoomAt(v, factor, { x: w / 2, y: h / 2 }));
 }
 
-/** Hüllrechteck aller Objekte und des Hintergrundplans (sichtbare Ebene) einer Page. */
+/** Hüllrechteck aller Objekte (ohne ausgeblendete Grundflächen, #17) und des Hintergrundplans (sichtbare Ebene) einer Page. */
 export function pageBounds(page: FestplatzPage): Bounds | null {
-  const objects = boundsOfRects([...page.areas, ...page.stands, ...page.infra]);
+  const objects = boundsOfRects([...activeAreas(page), ...page.stands, ...page.infra]);
   const bg = page.background && page.layers.background.visible ? bgCorners(page.background.transform, page.background.pxSize) : [];
   if (!bg.length) return objects;
   const xs = bg.map((p) => p.x);

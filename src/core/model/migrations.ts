@@ -25,10 +25,11 @@
  *   9  Konkurrenzschutz (#3): Kategorie `minDistance`, Geschäft `suppressDistanceWarning`, Einstellung `warnDistance`.
  *  10  Standgeld (#5): Einstellung `pricing` (Preis je Frontmeter, Rundung, MwSt-Satz), Kategorie `price`.
  *  11  Beschriftung (#9): Geschäft `labelOffset` (von Hand verschobene Beschriftung).
+ *  12  Ohne Grundflächen (#17): Page `useAreas` („Grundflächen verwenden“).
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 11;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -139,6 +140,11 @@ export const MIGRATIONS: Record<number, Migration> = {
   10: (p) => ({
     ...p,
     pages: mapList(p.pages, (pg) => (isObj(pg) ? { ...pg, stands: mapList(pg.stands, (s) => (isObj(s) ? { labelOffset: null, ...s } : s)) } : pg)),
+  }),
+  /** 11 → 12 (#17): Alle bisherigen Pages verwenden Grundflächen, auch solche ohne eine einzige. */
+  11: (p) => ({
+    ...p,
+    pages: mapList(p.pages, (pg) => (isObj(pg) ? { useAreas: true, ...pg } : pg)),
   }),
 };
 

@@ -4,6 +4,7 @@
  */
 import { approxTextWidth } from './label';
 import type { Category, FestplatzPage, InfraGeometry, InfraTypeDef, LayerId, LayerState } from './model/types';
+import { activeAreas, type AreasOf } from './pageAreas';
 
 export type LegendKind = 'area' | 'free' | 'category' | 'noCategory' | 'infra';
 
@@ -20,16 +21,17 @@ export interface LegendEntry {
 /**
  * Einträge in fester Reihenfolge: Grundfläche, Freifläche, Kategorien (Projektreihenfolge), „Geschäft ohne
  * Kategorie“, Infrastruktur-Typen (Reihenfolge der Typen). Ausgeblendete Ebenen fehlen. Kategorien zählen nur über
- * Stände ohne eigene Farbe (ein Stand mit eigener Farbe zeigt die Kategoriefarbe nicht).
+ * Stände ohne eigene Farbe (ein Stand mit eigener Farbe zeigt die Kategoriefarbe nicht). Ohne Grundflächen (#17)
+ * fehlen „Grundfläche“ und „Freifläche“, auch wenn ausgeblendete Grundflächen gespeichert sind.
  */
 export function legendEntries(
-  page: Pick<FestplatzPage, 'areas' | 'stands' | 'infra'>,
+  page: AreasOf & Pick<FestplatzPage, 'stands' | 'infra'>,
   project: { categories: readonly Category[]; infraTypes: readonly InfraTypeDef[]; settings: { defaultStandColor: string } },
   layers: Record<LayerId, LayerState>,
   freeShown: boolean,
 ): LegendEntry[] {
   const out: LegendEntry[] = [];
-  if (layers.areas.visible && page.areas.length) {
+  if (layers.areas.visible && activeAreas(page).length) {
     out.push({ key: 'area', kind: 'area', label: 'Grundfläche', color: '' });
     if (layers.free.visible && freeShown) out.push({ key: 'free', kind: 'free', label: 'Freifläche', color: '' });
   }

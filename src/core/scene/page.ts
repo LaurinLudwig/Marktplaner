@@ -12,6 +12,7 @@ import { pagePaper, type PaperKind } from '../paper';
 import { boundsOfRects } from '../geometry/rect';
 import { mmToM, shownOnPaper, type SheetFrame } from '../sheet';
 import type { Bounds } from '../viewport';
+import { activeAreas, outsideRef } from '../pageAreas';
 import { activeNarrow, activeWarnings, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings } from '../warnings';
 import { cachedStandLabels } from '../labelLayout';
 import { areaLabelBounds, areaLabelPrim, areaPrims, freeLabelPrim, freePrims, infraLabelPrim, infraPrims, overlapPrim, standLabelPrims, standPrims, warnIconPrims, warnKind, type WarnKind } from './objects';
@@ -65,13 +66,15 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
   const pad = fontSize * 8;
   const view: Bounds = { minX: frame.bounds.minX - pad, minY: frame.bounds.minY - pad, maxX: frame.bounds.maxX + pad, maxY: frame.bounds.maxY + pad };
   const onSheet = <T extends Rect>(r: T) => intersects(boundsOfRects([r])!, view);
-  const areas = page.areas.filter(onSheet);
+  // Ohne Grundflächen (#17) erscheinen gespeicherte Grundflächen nicht, auch nicht ihre Beschriftung
+  const pageAreas = activeAreas(page);
+  const areas = pageAreas.filter(onSheet);
   const stands = page.stands.filter(onSheet);
   const infra = page.infra.filter(onSheet);
 
   // Warnungen nach Profil: „alle“ wie auf der Zeichenfläche, „Rettungswege“ nur Freihaltefläche und Durchfahrt
   const mode = profile.warnings;
-  const pw = cachedPageWarnings(page.areas, page.stands);
+  const pw = cachedPageWarnings(outsideRef(page), page.stands);
   const iw = cachedInfraWarnings(page, project.infraTypes, settings.minPassageWidth);
   const dups = mode === 'all' ? cachedDuplicates(project.pages, settings.numbering.scope) : null;
   const dw = mode === 'all' ? cachedDistanceWarnings(page.stands, project.categories) : null;
@@ -120,8 +123,8 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
     if (L.areas && L.free) for (const r of free) labels.push(...r.free.map((f) => freeLabelPrim(f, fontSize)));
     if (L.stands) {
       // Platziert wird auf der ganzen Page, damit Beschriftungen am Blattrand denselben Platz haben wie auf der Zeichenfläche
-      const blocked = L.areas ? page.areas.map((a) => areaLabelBounds(a, fontSize)) : [];
-      const placed = cachedStandLabels({ stands: page.stands, areas: page.areas, infra: page.infra, template: settings.labelTemplate, fontSize, categories: project.categories, blank, blocked });
+      const blocked = L.areas ? pageAreas.map((a) => areaLabelBounds(a, fontSize)) : [];
+      const placed = cachedStandLabels({ stands: page.stands, areas: pageAreas, infra: page.infra, template: settings.labelTemplate, fontSize, categories: project.categories, blank, blocked });
       for (const s of stands) {
         const p = placed.get(s.id);
         if (p) labels.push(...standLabelPrims(p, fontSize));

@@ -264,6 +264,12 @@ export interface FestplatzPage {
   grid: { size: number; visible: boolean };
   layers: Record<LayerId, LayerState>;
   background: Background | null;
+  /**
+   * „Grundflächen verwenden“ (#17, Formatversion 12, Standard an). Aus: Die Grundflächen in `areas` bleiben
+   * gespeichert, sind aber ausgeblendet und wirken nicht (keine Warnung „außerhalb“, keine Freiflächen, kein Fang an
+   * der Vorderseite); siehe core/pageAreas.ts.
+   */
+  useAreas: boolean;
   /** Array-Reihenfolge der Grundflächen: Bei Überlappung gewinnt die frühere (spec.md §4). */
   areas: Area[];
   stands: Stand[];
