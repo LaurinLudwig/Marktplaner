@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { Vec } from '../../../core/model/types';
+import { activeAreas } from '../../../core/pageAreas';
 import { findSnap, pointSnapSource, type SnapResult } from '../../../core/snap';
 import { setNumberingDirection, toolFitsMode } from '../../../state/numbering';
 import { useStore } from '../../../state/store';
 import { SnapMarker } from './SnapMarker';
 import { SNAP_PX, type ToolContext, type ToolHandlers } from './types';
 
-/** Fang für Start- und Zielpunkt der eigenen Richtung (#12): Standmitten und Grundflächen-Ecken sichtbarer Ebenen. */
+/**
+ * Fang für Start- und Zielpunkt der eigenen Richtung (#12): Standmitten und Grundflächen-Ecken sichtbarer Ebenen; auf
+ * einer Page ohne Grundflächen (#17) nur Standmitten.
+ */
 export function directionSnap(ctx: ToolContext, p: Vec): SnapResult | null {
   const L = ctx.page.layers;
-  const source = pointSnapSource(L.areas.visible ? ctx.page.areas : [], L.stands.visible ? ctx.page.stands : []);
+  const source = pointSnapSource(L.areas.visible ? activeAreas(ctx.page) : [], L.stands.visible ? ctx.page.stands : []);
   return findSnap(p, [source], SNAP_PX / ctx.view.scale);
 }
 

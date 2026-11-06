@@ -260,4 +260,41 @@ test.describe('#12: Nummerierung in weiteren Richtungen', () => {
     await renumber(page);
     expect(await orderByNr(page)).toEqual(['a', 'b']);
   });
+
+  test('Richtung setzen: Fang an Grundflächen-Ecken nur, wenn die Page Grundflächen verwendet (#17)', async ({ page }) => {
+    await openApp(page);
+    await seed(page, [{ id: 's', cx: 20, cy: 10 }]);
+    // Grundfläche 20 × 10 m mit Mitte (0, 0): Ecke links oben bei (−10, −5)
+    await page.evaluate(() => {
+      const s = (window as any).__marktplanerStore.getState();
+      s.change('Testdaten', (p: any) => {
+        p.pages.find((x: any) => x.id === s.ui.activePage).areas.push({ id: 'g', name: 'G', cx: 0, cy: 0, w: 20, d: 10, rot: 0 });
+      });
+    });
+    await panel(page).getByRole('group', { name: 'Richtung' }).getByRole('button', { name: 'Eigene Richtung', exact: true }).click();
+    const setDirection = async () => {
+      await panel(page).getByRole('button', { name: /Richtung auf dem Plan setzen/ }).click();
+      // A knapp neben der Ecke, B knapp neben der Standmitte
+      const a = await w2s(page, { x: -10.4, y: -5.3 });
+      await page.mouse.move(a.x, a.y, { steps: 3 });
+      await page.mouse.click(a.x, a.y);
+      const b = await w2s(page, { x: 20.3, y: 10.2 });
+      await page.mouse.move(b.x, b.y, { steps: 3 });
+      await page.mouse.click(b.x, b.y);
+      return (await direction(page))!;
+    };
+    expect(await setDirection()).toEqual({ from: { x: -10, y: -5 }, to: { x: 20, y: 10 } });
+
+    // Ohne Grundflächen: die gespeicherte Grundfläche fängt nicht mehr, die Standmitte weiter
+    await page.evaluate(() => {
+      const s = (window as any).__marktplanerStore.getState();
+      s.change('Grundflächen aus', (p: any) => {
+        p.pages.find((x: any) => x.id === s.ui.activePage).useAreas = false;
+      });
+    });
+    const d = await setDirection();
+    expect(near(d.from, { x: -10.4, y: -5.3 })).toBe(true);
+    expect(d.from).not.toEqual({ x: -10, y: -5 });
+    expect(d.to).toEqual({ x: 20, y: 10 });
+  });
 });
