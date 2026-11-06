@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { decodeProjectFile, encodeProjectFile } from '../fileFormat';
 import { CURRENT_SCHEMA_VERSION, migrate, MIGRATIONS } from './migrations';
 import { parseProjectFile, ProjectFileError } from './schema';
-import type { Project } from './types';
+import { PAPER_FORMATS, type Project } from './types';
 
 /**
  * Felder aus Formatversion 8 (M12) prüfen und entfernen, damit die Tests älterer Migrationen ihre Version vergleichen:
@@ -65,6 +65,22 @@ function withoutLabelOffset(project: Project): Project {
 }
 
 /**
+ * Felder aus Formatversion 14 (#13) prüfen und entfernen: Nach der Migration bleibt jedes Blatt DIN, Rand automatisch,
+ * Zielbreite 841 mm, kein Ausschnitt.
+ */
+function withoutFreeSheet(project: Project): Project {
+  return {
+    ...project,
+    pages: project.pages.map((pg) => {
+      const { margin, targetWidth, region, ...sheet } = pg.sheet;
+      expect({ margin, targetWidth, region }).toEqual({ margin: null, targetWidth: 841, region: null });
+      expect(PAPER_FORMATS).toContain(sheet.format);
+      return { ...pg, sheet };
+    }),
+  } as unknown as Project;
+}
+
+/**
  * Felder aus Formatversion 10 (#5) prüfen und entfernen, danach die aus Version 9: Nach der Migration ist kein Preis
  * festgelegt, MwSt-Satz 19 %, Meter exakt.
  */
@@ -99,7 +115,7 @@ describe('Formatversionen', () => {
   });
 
   it('Speichern schreibt die aktuelle Version', () => {
-    const project = withoutV10(withoutLabelOffset(decodeProjectFile(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v1-m3.schelme'))).project));
+    const project = withoutV10(withoutLabelOffset(withoutFreeSheet(decodeProjectFile(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v1-m3.schelme'))).project)));
     const json = JSON.parse(strFromU8(unzipSync(encodeProjectFile({ project, assets: {} }))['project.json']!));
     expect(json.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
@@ -132,7 +148,7 @@ describe('Migration 1 → 2 (M4: Warnungen)', () => {
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressOverlapWarning');
     expect(raw.project.settings).not.toHaveProperty('warnOverlap');
 
-    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project))));
     expect(project.settings.warnOverlap).toBe(true);
     expect(project.settings.warnOutside).toBe(raw.project.settings.warnOutside);
     expect(project.categories).toEqual(raw.project.categories);
@@ -173,7 +189,7 @@ describe('Migration 2 → 3 (M5: Nummerierung)', () => {
     expect(raw.project.settings).not.toHaveProperty('warnDuplicateNr');
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressDuplicateWarning');
 
-    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project))));
     expect(project.settings.numbering).toEqual({ ...raw.project.settings.numbering, digits: 1 });
     expect(project.settings.warnDuplicateNr).toBe(true);
     expect(project.settings.warnOverlap).toBe(raw.project.settings.warnOverlap ?? true);
@@ -225,7 +241,8 @@ describe('Migration 3 → 4 (M7: Infrastruktur, Blatt, Schriftfeld, Legende)', (
     expect(project.pages[0]!.infra).toEqual([
       { id: 'i1', typeId: 'marker', label: 'Treffpunkt', note: '', powerKw: 0, connection: null, suppressWidthWarning: false, cx: 1, cy: 2, w: 0, d: 0, rot: 0 },
     ]);
-    expect(project.pages[0]!.sheet).toEqual({ format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0 });
+    // seit #13 mit Rand, Zielbreite und Ausschnitt; alte Blätter bleiben A3 quer (angepasst vom Entwickler)
+    expect(project.pages[0]!.sheet).toEqual({ format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null });
     expect(project.pages[0]!.titleBlock).toEqual({ visible: true, corner: 'br', dx: 10, dy: 10 });
     expect(project.pages[0]!.legend).toEqual({ visible: true, corner: 'bl', dx: 10, dy: 10 });
     expect(project.pages[0]!.layers.sheet).toEqual({ visible: true, locked: false });
@@ -239,7 +256,7 @@ describe('Migration 3 → 4 (M7: Infrastruktur, Blatt, Schriftfeld, Legende)', (
     expect(raw.project.pages[0]).toHaveProperty('titleBlockPos');
     expect(raw.project.infraTypes[0]).toHaveProperty('type');
 
-    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project))));
     // snapGap, defaultStandColor: spätere Migration 5 → 6
     const { warnInfra, warnPassageWidth, minPassageWidth, snapGap: _g, defaultStandColor: _c, ...settings } = project.settings;
     expect(settings).toEqual(raw.project.settings);
@@ -291,7 +308,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.project.exportProfiles).toEqual([]);
     expect(raw.project.pages[0]).not.toHaveProperty('scaleBar');
 
-    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project))));
     expect(project).not.toHaveProperty('exportProfiles');
     const { exportProfiles: _p, pages: _pages, ...rawRest } = raw.project;
     // snapGap, defaultStandColor: spätere Migration 5 → 6
@@ -329,7 +346,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.project.settings).not.toHaveProperty('snapGap');
     expect(raw.project.settings).not.toHaveProperty('defaultStandColor');
 
-    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project))));
     const { settings: rawSettings, pages: rawPages, ...rawRest } = raw.project;
     const { settings, pages, ...rest } = project;
     expect(rest).toEqual(rawRest);
@@ -355,7 +372,7 @@ describe('Migration 4 → 5 (M8: Maßstabsbalken, Nordpfeil, Export-Profile pro 
     expect(raw.schemaVersion).toBe(6);
     expect(raw.project.pages[0]).not.toHaveProperty('hiddenFree');
 
-    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project))));
     const { pages: rawPages, ...rawRest } = raw.project;
     const { pages, ...rest } = project;
     expect(rest).toEqual(rawRest);
@@ -385,7 +402,7 @@ describe('Migration 7 → 8 (M12: Geschäftsformen)', () => {
     expect(raw.project).not.toHaveProperty('shapeTemplates');
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('shape');
 
-    const project = withoutV10(withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project)));
+    const project = withoutV10(withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project))));
     expect(project).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren
     expect(project.name).toBe('Formatversion 7 (M11)');
@@ -439,7 +456,7 @@ describe('Migration 8 → 9 (#3: Abstandsprüfung)', () => {
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('suppressDistanceWarning');
     expect(raw.project.settings).not.toHaveProperty('warnDistance');
 
-    const { settings: { pricing: _p, ...v9Settings }, categories: v10Categories, ...v10Rest } = withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project));
+    const { settings: { pricing: _p, ...v9Settings }, categories: v10Categories, ...v10Rest } = withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project)));
     const project = { ...v10Rest, settings: v9Settings, categories: v10Categories.map(({ price: _price, ...c }) => c) };
     expect(project.settings.warnDistance).toBe(true);
     expect(project.categories.every((c) => c.minDistance === null)).toBe(true);
@@ -488,7 +505,7 @@ describe('Migration 9 → 10 (#5: Standgeld)', () => {
     expect(raw.project.settings).not.toHaveProperty('pricing');
     expect(raw.project.categories[0]).not.toHaveProperty('price');
 
-    const project = withoutLabelOffset(withoutUseAreas(decodeProjectFile(bytes).project));
+    const project = withoutLabelOffset(withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project)));
     expect(project.settings.pricing).toEqual({ perMeter: null, roundUpMeters: false, vatRate: 19 });
     const { settings: { pricing: _p, ...settings }, categories, ...rest } = project;
     const { settings: rawSettings, categories: rawCategories, ...rawRest } = raw.project;
@@ -542,7 +559,7 @@ describe('Migration 10 → 11 (#9: Beschriftung)', () => {
     expect(raw.schemaVersion).toBe(10);
     expect(raw.project.pages[0].stands[0]).not.toHaveProperty('labelOffset');
 
-    const project = withoutUseAreas(decodeProjectFile(bytes).project);
+    const project = withoutUseAreas(withoutFreeSheet(decodeProjectFile(bytes).project));
     const { pages, ...rest } = withoutLabelOffset(project);
     const { pages: rawPages, ...rawRest } = raw.project;
     expect(rest).toEqual(rawRest);
@@ -591,7 +608,7 @@ describe('Migration 11 → 12 (#17: ohne Grundflächen)', () => {
     expect(raw.schemaVersion).toBe(11);
     expect(raw.project.pages[0]).not.toHaveProperty('useAreas');
 
-    const project = decodeProjectFile(bytes).project;
+    const project = withoutFreeSheet(decodeProjectFile(bytes).project);
     expect(project.pages.map((p) => p.useAreas)).toEqual([true, true, true, true]);
     expect(withoutUseAreas(project)).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren
@@ -622,8 +639,8 @@ describe('Migration 12 → 13 (#12: Nummerierung in weiteren Richtungen)', () =>
     expect(raw.project.pages.map((p: { numberingMode: string }) => p.numberingMode)).toEqual(['frontLtr', 'clockwise', 'clockwise', 'manual']);
     for (const p of raw.project.pages) expect(p).not.toHaveProperty('direction');
 
-    // Version 13 ergänzt nichts: Nach dem Lesen ist das Projekt gleich dem Inhalt der Datei
-    const project = decodeProjectFile(bytes).project;
+    // Version 13 ergänzt nichts: Nach dem Lesen ist das Projekt gleich dem Inhalt der Datei (ohne die Felder aus 14)
+    const project = withoutFreeSheet(decodeProjectFile(bytes).project);
     expect(project).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren; die bisherigen Modi behalten ihre Bedeutung
     expect(project.name).toBe('Formatversion 12 (#17)');
@@ -668,5 +685,68 @@ describe('Migration 12 → 13 (#12: Nummerierung in weiteren Richtungen)', () =>
     });
     const again = decodeProjectFile(encodeProjectFile({ project, assets: {} })).project;
     expect(again.pages[0]).toMatchObject({ numberingMode: 'direction', direction: { from: { x: 0, y: 0 }, to: { x: 17.32, y: 10 } } });
+  });
+});
+
+describe('Migration 13 → 14 (#13: Blatt ohne festes Papierformat)', () => {
+  it('bestehende Blätter bleiben DIN; ohne Format gilt der alte Standard A3 quer; vorhandene Werte bleiben', () => {
+    const v13 = {
+      id: 'x',
+      pages: [
+        { id: 'a', sheet: { format: 'A1', orientation: 'portrait', scale: 500, cx: 3, cy: 4 } },
+        { id: 'b' },
+        { id: 'c', sheet: { format: 'plan', margin: 20, targetWidth: 1000, region: { cx: 1, cy: 2, w: 3, h: 4 } } },
+        'kaputt',
+        { id: 'd', sheet: { format: 'A5', orientation: 'portrait', scale: 250 } },
+      ],
+    };
+    const before = structuredClone(v13);
+    const v14 = MIGRATIONS[13]!(v13) as any;
+    expect(v13).toEqual(before);
+    expect(v14.pages[0].sheet).toEqual({ format: 'A1', orientation: 'portrait', scale: 500, cx: 3, cy: 4, margin: null, targetWidth: 841, region: null });
+    expect(v14.pages[1].sheet).toEqual({ format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null });
+    // Vor Version 14 gab es nur DIN: Ein anderes Format wird wie vor #13 zu A3 (nicht zum neuen Standard „Plan“; vom Tester)
+    expect(v14.pages[2].sheet).toMatchObject({ format: 'A3', margin: 20, targetWidth: 1000, region: { cx: 1, cy: 2, w: 3, h: 4 } });
+    expect(v14.pages[3]).toBe('kaputt');
+    expect(v14.pages[4].sheet).toEqual({ format: 'A3', orientation: 'portrait', scale: 250, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null });
+    const loaded = parseProjectFile({ format: 'schelmeplaner', schemaVersion: 13, project: { id: 'x', pages: [{ id: 'p', name: 'P', sheet: { format: 'A5', orientation: 'portrait', scale: 250, cx: 1, cy: 2 } }] } });
+    expect(loaded.pages[0]!.sheet).toEqual({ format: 'A3', orientation: 'portrait', scale: 250, cx: 1, cy: 2, margin: null, targetWidth: 841, region: null });
+    expect((MIGRATIONS[13]!({ id: 'x', pages: 'kaputt' }) as any).pages).toBe('kaputt');
+  });
+
+  it('echte Datei aus #12 (Version 13, tests/fixtures/format-v13-nummerierung.mplan) wird vollständig migriert', () => {
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v13-nummerierung.mplan')));
+    const raw = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
+    expect(raw.schemaVersion).toBe(13);
+    for (const p of raw.project.pages) for (const k of ['margin', 'targetWidth', 'region']) expect(p.sheet).not.toHaveProperty(k);
+
+    const project = decodeProjectFile(bytes).project;
+    // Blätter bleiben DIN, wie sie in der Datei standen; die neuen Felder sind ergänzt
+    expect(project.pages.map((p) => p.sheet)).toEqual(raw.project.pages.map((p: { sheet: object }) => ({ ...p.sheet, margin: null, targetWidth: 841, region: null })));
+    // alles andere unverändert
+    expect(withoutFreeSheet(project)).toEqual(raw.project);
+    // Werte, die in der Datei gezielt gesetzt waren
+    expect(project.name).toBe('Formatversion 13 (#12)');
+    expect(project.pages[0]!.sheet).toMatchObject({ format: 'A1', orientation: 'landscape', scale: 500, cx: 85, cy: 40 });
+    expect(project.pages[1]!.sheet).toMatchObject({ format: 'A2', orientation: 'portrait', scale: null });
+    expect(project.pages[2]!.useAreas).toBe(false);
+    expect(project.pages[2]!.areas).toHaveLength(6);
+    expect(project.pages[3]).toMatchObject({ numberingMode: 'direction', direction: { from: { x: 10, y: 5 }, to: { x: 150, y: 45 } } });
+    expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
+  });
+
+  it('Laden: Format, Rand, Zielbreite und Ausschnitt geprüft, begrenzt und gerundet; Ungültiges = Standard', () => {
+    const file = (sheet: unknown) => ({ format: 'schelmeplaner', schemaVersion: CURRENT_SCHEMA_VERSION, project: { id: 'x', pages: [{ id: 'p', name: 'P', sheet }] } });
+    const sh = (v: unknown) => parseProjectFile(file(v)).pages[0]!.sheet;
+    expect(sh({ format: 'region', margin: 12.4, targetWidth: 1000.6, region: { cx: 1.234, cy: -2, w: 50.006, h: 0.2 } })).toMatchObject({
+      format: 'region',
+      margin: 12,
+      targetWidth: 1001,
+      region: { cx: 1.23, cy: -2, w: 50.01, h: 1 },
+    });
+    expect(sh({ format: 'plan', margin: 2, targetWidth: 50 })).toMatchObject({ margin: 10, targetWidth: 100 });
+    expect(sh({ format: 'plan', margin: 9999, targetWidth: 1e9 })).toMatchObject({ margin: 500, targetWidth: 20000 });
+    expect(sh({ format: 'A5', margin: 'x', targetWidth: null, region: { cx: 0, cy: 0, w: -1, h: 3 } })).toMatchObject({ format: 'plan', margin: null, targetWidth: 841, region: null });
+    expect(sh(undefined)).toEqual({ format: 'plan', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null });
   });
 });

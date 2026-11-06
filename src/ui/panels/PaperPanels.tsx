@@ -1,9 +1,9 @@
 import { runCommand } from '../../app/commands';
 import { fmt } from '../../core/format';
-import { PAPER_FORMATS, type FestplatzPage, type PaperFormat } from '../../core/model/types';
-import { SCALE_LIMITS } from '../../core/model/schema';
+import { SHEET_FORMATS, type FestplatzPage, type SheetFormat } from '../../core/model/types';
+import { MARGIN_LIMITS, SCALE_LIMITS, TARGET_WIDTH_LIMITS } from '../../core/model/schema';
 import { PAPER_KIND_LABEL, pagePaper } from '../../core/paper';
-import { anchorToPaper, scaleText, shownOnPaper, TITLE_BLOCK_MAX_TEXT_LINES } from '../../core/sheet';
+import { anchorToPaper, dinPrintHint, exceedsPdfLimit, isFreeFormat, paperSizeText, PDF_MAX_MM, scaleText, SHEET_FORMAT_LABEL, shownOnPaper, TITLE_BLOCK_MAX_TEXT_LINES } from '../../core/sheet';
 import { fixSheetScale, setPaperVisible, setSheet, setTitleBlockField, setTitleBlockText, todayText } from '../../state/paper';
 import { useStore, type PaperElement } from '../../state/store';
 import { keyLabel, tip } from '../shortcuts/tip';
@@ -13,68 +13,120 @@ import { TextField } from './TextField';
 const CORNER_LABEL = { tl: 'oben links', tr: 'oben rechts', bl: 'unten links', br: 'unten rechts' } as const;
 
 /**
- * Bereich „Blatt“ der Festplatz-Page (M7, spec.md §8): Papierformat, Ausrichtung, Maßstab (fest oder an Seite
- * anpassen), Schriftfeld, Legende, Maßstabsbalken und Nordpfeil ein-/ausblenden. Jede Änderung ist ein Undo-Schritt.
+ * Bereich „Blatt“ der Festplatz-Page (M7, spec.md §8): Papierformat (A4–A0, „Plan“ oder „Ausschnitt“, #13),
+ * Ausrichtung, Maßstab (fest, an Seite anpassen bzw. über die Zielbreite), Rand, Schriftfeld, Legende, Maßstabsbalken
+ * und Nordpfeil ein-/ausblenden. Jede Änderung ist ein Undo-Schritt.
  */
 export function SheetPanel({ page }: { page: FestplatzPage }) {
   const project = useStore((s) => s.project);
   const selected = useStore((s) => (s.ui.selection?.kind === 'paper' ? s.ui.selection.element : null));
   const paper = pagePaper(page, project);
+  const { frame } = paper;
   const s = page.sheet;
-  const fit = s.scale === null;
+  const free = isFreeFormat(s.format);
+  const auto = s.scale === null;
   return (
     <section className="panel" aria-label="Blatt">
       <div className="panel-head">
         <span>Blatt</span>
         {selected === 'sheet' && <span className="panel-badge">ausgewählt</span>}
         <span className="panel-badge" data-testid="sheet-scale">
-          {s.format} · {scaleText(paper.frame.scale)}
+          {free ? paperSizeText(frame.paper) : s.format} · {scaleText(frame.scale)}
         </span>
       </div>
       <div className="panel-body form">
         <div className="fields-2">
           <div className="field">
             <label htmlFor="sheet-format">Format</label>
-            <select id="sheet-format" value={s.format} onChange={(e) => setSheet(page.id, { format: e.target.value as PaperFormat })}>
-              {PAPER_FORMATS.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
+            <SheetFormatSelect id="sheet-format" page={page} />
           </div>
-          <div className="field">
-            <label>Ausrichtung</label>
-            <div className="seg" role="group" aria-label="Ausrichtung">
-              <button type="button" aria-pressed={s.orientation === 'portrait'} onClick={() => setSheet(page.id, { orientation: 'portrait' })}>
-                hoch
-              </button>
-              <button type="button" aria-pressed={s.orientation === 'landscape'} onClick={() => setSheet(page.id, { orientation: 'landscape' })}>
-                quer
-              </button>
+          {!free && (
+            <div className="field">
+              <label>Ausrichtung</label>
+              <div className="seg" role="group" aria-label="Ausrichtung">
+                <button type="button" aria-pressed={s.orientation === 'portrait'} onClick={() => setSheet(page.id, { orientation: 'portrait' })}>
+                  hoch
+                </button>
+                <button type="button" aria-pressed={s.orientation === 'landscape'} onClick={() => setSheet(page.id, { orientation: 'landscape' })}>
+                  quer
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <label className="check">
-          <input type="checkbox" checked={fit} onChange={(e) => (e.target.checked ? setSheet(page.id, { scale: null }) : fixSheetScale(page.id))} />
-          An Seite anpassen
+          <input type="checkbox" checked={auto} onChange={(e) => (e.target.checked ? setSheet(page.id, { scale: null }) : fixSheetScale(page.id))} />
+          {free ? 'Maßstab über Zielbreite' : 'An Seite anpassen'}
         </label>
-        <NumberField
-          id="sheet-scale-input"
-          label="Maßstab 1:"
-          value={fit ? null : s.scale}
-          placeholder={fit ? `${fmt(paper.frame.scale, 0)} (angepasst)` : undefined}
-          min={SCALE_LIMITS.min}
-          max={SCALE_LIMITS.max}
-          step={50}
-          digits={0}
-          onCommit={(n) => setSheet(page.id, { scale: n })}
-        />
-        <p className="hint">
-          {fit
-            ? 'Das Blatt umschließt den Inhalt mit 10 mm Rand und lässt Platz für die eingeblendeten Papier-Elemente. Ein fester Maßstab lässt das Blatt per Ziehen am Rahmen verschieben.'
-            : 'Blatt verschieben: Rahmen oder Marke mit dem Auswahlwerkzeug ziehen.'}
+        <div className={free ? 'fields-2' : undefined}>
+          <NumberField
+            id="sheet-scale-input"
+            label="Maßstab 1:"
+            value={auto ? null : s.scale}
+            placeholder={auto ? `${fmt(frame.scale, 0)} (${free ? 'Zielbreite' : 'angepasst'})` : undefined}
+            min={SCALE_LIMITS.min}
+            max={SCALE_LIMITS.max}
+            step={50}
+            digits={0}
+            onCommit={(n) => setSheet(page.id, { scale: n })}
+          />
+          {free && (
+            <NumberField
+              id="sheet-target-width"
+              label="Zielbreite"
+              unit="mm"
+              value={s.targetWidth}
+              min={TARGET_WIDTH_LIMITS.min}
+              max={TARGET_WIDTH_LIMITS.max}
+              step={10}
+              digits={0}
+              disabled={!auto}
+              onCommit={(n) => setSheet(page.id, { targetWidth: n })}
+            />
+          )}
+        </div>
+        {s.format === 'plan' && (
+          <div className="nr-row">
+            <NumberField
+              id="sheet-margin"
+              className="grow"
+              label="Rand"
+              unit="mm"
+              value={s.margin}
+              placeholder={`${fmt(frame.margin ?? 0, 0)} (automatisch)`}
+              min={MARGIN_LIMITS.min}
+              max={MARGIN_LIMITS.max}
+              step={1}
+              digits={0}
+              onCommit={(n) => setSheet(page.id, { margin: n })}
+              onClear={() => setSheet(page.id, { margin: null })}
+            />
+            <button type="button" className="btn" disabled={s.margin === null} onClick={() => setSheet(page.id, { margin: null })}>
+              Automatisch
+            </button>
+          </div>
+        )}
+        {s.format === 'region' && (
+          <button type="button" className="btn wide" onClick={() => useStore.getState().setUi({ tool: 'sheetRegion', selection: null })}>
+            Ausschnitt aufziehen
+          </button>
+        )}
+        <p className="hint" data-testid="sheet-hint">
+          {s.format === 'plan'
+            ? `Das Blatt umfasst den Inhalt mit Rand (automatisch 3 % der längeren Seite, mindestens 10 mm) und wächst um die eingeblendeten Papier-Elemente. Papier ${paperSizeText(frame.paper)}.`
+            : s.format === 'region'
+              ? `Exportiert wird genau der Ausschnitt (${fmt(frame.bounds.maxX - frame.bounds.minX, 2)} × ${fmt(frame.bounds.maxY - frame.bounds.minY, 2)} m, Papier ${paperSizeText(frame.paper)}). Blatt auswählen, dann am Rahmen verschieben oder an den Griffen die Größe ändern.`
+              : auto
+                ? 'Das Blatt umschließt den Inhalt mit 10 mm Rand und lässt Platz für die eingeblendeten Papier-Elemente. Ein fester Maßstab lässt das Blatt per Ziehen am Rahmen verschieben.'
+                : 'Blatt verschieben: Rahmen oder Marke mit dem Auswahlwerkzeug ziehen.'}
         </p>
+        {frame.targetTooNarrow && (
+          <p className="warn-chip" data-testid="sheet-target-too-narrow">
+            Zielbreite {fmt(s.targetWidth, 0)} mm ist kleiner als Schriftfeld, Legende und die anderen eingeblendeten Papier-Elemente mit Rand – das Blatt wird {fmt(frame.paper.w, 0)} mm breit.
+          </p>
+        )}
+        <SheetLimitHint paper={frame.paper} />
+        {free && <DinPrintHint paper={frame.paper} scale={frame.scale} />}
         <label className="check">
           <input type="checkbox" checked={page.titleBlock.visible} onChange={(e) => setPaperVisible(page.id, 'titleBlock', e.target.checked)} />
           Schriftfeld
@@ -95,6 +147,44 @@ export function SheetPanel({ page }: { page: FestplatzPage }) {
         {!page.layers.sheet.visible && <p className="hint">Die Ebene „Blatt“ ist ausgeblendet.</p>}
       </div>
     </section>
+  );
+}
+
+/** Auswahl des Formats: „Plan“, „Ausschnitt“, A4–A0 (#13). Auch im Export-Dialog. */
+export function SheetFormatSelect({ id, page, ariaLabel }: { id?: string; page: FestplatzPage; ariaLabel?: string }) {
+  return (
+    <select id={id} aria-label={ariaLabel} value={page.sheet.format} onChange={(e) => setSheet(page.id, { format: e.target.value as SheetFormat })}>
+      {SHEET_FORMATS.map((f) => (
+        <option key={f} value={f}>
+          {SHEET_FORMAT_LABEL[f]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Warnung, wenn eine Seite länger ist als 5 080 mm (200 Zoll): Dort schneiden PDF-Reader ab (#13). */
+export function SheetLimitHint({ paper }: { paper: { w: number; h: number } }) {
+  if (!exceedsPdfLimit(paper)) return null;
+  return (
+    <p className="warn-chip" data-testid="sheet-too-large">
+      Das Blatt ist länger als {fmt(PDF_MAX_MM, 0)} mm. Viele PDF-Programme zeigen und drucken so große Seiten nicht vollständig; einen größeren Maßstab oder eine kleinere Zielbreite wählen.
+    </p>
+  );
+}
+
+/** Druck-Hinweis für freie Blätter (#13): passendes DIN-Format in Originalgröße und verkleinert. */
+function DinPrintHint({ paper, scale }: { paper: { w: number; h: number }; scale: number }) {
+  const { fits, reduced } = dinPrintHint(paper);
+  const name = (c: { format: string; orientation: string }) => `${c.format} ${c.orientation === 'landscape' ? 'quer' : 'hoch'}`;
+  const parts = [
+    fits && `in Originalgröße auf ${name(fits)}`,
+    reduced && `verkleinert auf ${name(reduced)} (${fmt(reduced.factor * 100, 0)} %, dann etwa ${scaleText(Math.round(scale / reduced.factor))})`,
+  ].filter(Boolean);
+  return (
+    <p className="hint" data-testid="sheet-print-hint">
+      Druck auf DIN-Papier: {parts.join(', ')}.
+    </p>
   );
 }
 

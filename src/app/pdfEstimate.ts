@@ -13,7 +13,7 @@
 import { mimeForAsset } from '../core/assets';
 import { rasterQuality, type AppendixPart, type ExportDpi, type ExportProfile } from '../core/exportProfiles';
 import type { Id, Project } from '../core/model/types';
-import { pagePaper } from '../core/paper';
+import { exportFrame } from '../core/paper';
 import { dqtLumaSum, ijgLumaSum, outputFormat, rasterPlan } from './pdfBackground';
 
 const FONTS = 120_000;
@@ -77,7 +77,7 @@ export function estimateExportBytes(
       pdfAssets.add(bg.assetId);
       continue;
     }
-    const frame = pagePaper(page, project).frame;
+    const frame = exportFrame(page, project, profile);
     const plan = rasterPlan(bg, frame, quality);
     if (!plan) continue;
     const format = outputFormat(bg, quality);

@@ -7,7 +7,7 @@ import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 import { clampDigits, clampStart } from '../numbering';
 import {
   LAYER_IDS,
-  PAPER_FORMATS,
+  SHEET_FORMATS,
   type Area,
   type Background,
   type Category,
@@ -21,13 +21,14 @@ import {
   type InfraTypeDef,
   type NumberingMode,
   type PaperAnchor,
-  type PaperFormat,
   type Project,
   type PricingSettings,
   type ProjectFile,
   type ShapePart,
   type ShapeTemplate,
   type Sheet,
+  type SheetFormat,
+  type SheetRegion,
   type Stand,
   type StandShape,
   type Vec,
@@ -445,16 +446,35 @@ function normalizeInfra(raw: unknown, ids: Set<string>, types: readonly InfraTyp
 }
 
 export const SCALE_LIMITS = { min: 10, max: 100000 } as const;
+/** Rand eines Plan-Blatts in mm (#13); mindestens 10 mm wie der Rand der DIN-Blätter (Vermerk, Druckränder). */
+export const MARGIN_LIMITS = { min: 10, max: 500 } as const;
+/** Zielbreite eines freien Blatts in mm (#13). */
+export const TARGET_WIDTH_LIMITS = { min: 100, max: 20000 } as const;
+/** Breite und Höhe eines Ausschnitts in Metern (#13). */
+export const REGION_LIMITS = { min: 1, max: 100000 } as const;
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Ausschnitt prüfen: Mitte und Maße endlich, Maße begrenzt, auf 0,01 m gerundet; sonst null. */
+export function normalizeRegion(raw: unknown): SheetRegion | null {
+  if (!isObj(raw)) return null;
+  const [cx, cy, w, h] = [raw.cx, raw.cy, raw.w, raw.h].map((v) => num(v, NaN)) as [number, number, number, number];
+  if (![cx, cy, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
+  return { cx: round2(cx), cy: round2(cy), w: round2(clampToLimits(w, REGION_LIMITS)), h: round2(clampToLimits(h, REGION_LIMITS)) };
+}
 
 function normalizeSheet(raw: unknown): Sheet {
   const s = isObj(raw) ? raw : {};
   const scale = typeof s.scale === 'number' && Number.isFinite(s.scale) ? Math.round(clampToLimits(s.scale, SCALE_LIMITS)) : null;
   return {
-    format: PAPER_FORMATS.includes(s.format as PaperFormat) ? (s.format as PaperFormat) : DEFAULT_SHEET.format,
+    format: SHEET_FORMATS.includes(s.format as SheetFormat) ? (s.format as SheetFormat) : DEFAULT_SHEET.format,
     orientation: s.orientation === 'portrait' || s.orientation === 'landscape' ? s.orientation : DEFAULT_SHEET.orientation,
     scale,
     cx: num(s.cx, DEFAULT_SHEET.cx),
     cy: num(s.cy, DEFAULT_SHEET.cy),
+    margin: typeof s.margin === 'number' && Number.isFinite(s.margin) ? Math.round(clampToLimits(s.margin, MARGIN_LIMITS)) : null,
+    targetWidth: Math.round(clampToLimits(num(s.targetWidth, DEFAULT_SHEET.targetWidth), TARGET_WIDTH_LIMITS)),
+    region: normalizeRegion(s.region),
   };
 }
 

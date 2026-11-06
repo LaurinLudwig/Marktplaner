@@ -28,16 +28,19 @@
  *  12  Ohne Grundflächen (#17): Page `useAreas` („Grundflächen verwenden“).
  *  13  Nummerierung (#12): Page `numberingMode` auch `rightToLeft`, `topToBottom`, `bottomToTop`, `direction`,
  *      `counterClockwise`; Page `direction` (Start- und Zielpunkt der eigenen Richtung).
+ *  14  Freies Blatt (#13): Blatt `format` auch 'plan' und 'region', dazu `margin`, `targetWidth`, `region`.
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 13;
+export const CURRENT_SCHEMA_VERSION = 14;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
 
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 /** Wendet `fn` auf jedes Element an; alles andere als ein Array bleibt unverändert (die Prüfung macht schema.ts). */
+/** DIN-Formate bis Formatversion 13 (#13). */
+const DIN_FORMATS = ['A4', 'A3', 'A2', 'A1', 'A0'];
 const mapList = (v: unknown, fn: (x: unknown) => unknown) => (Array.isArray(v) ? v.map(fn) : v);
 
 /** MIGRATIONS[n] hebt ein Projekt von Version n auf n+1. */
@@ -154,6 +157,21 @@ export const MIGRATIONS: Record<number, Migration> = {
    * ältere Programmversionen die neuen Modi nicht stillschweigend als „links → rechts“ lesen.
    */
   12: (p) => ({ ...p }),
+  /**
+   * 13 → 14 (#13): Bestehende Blätter bleiben DIN. Neue Pages haben seit #13 das Format „Plan“; damit ein Blatt ohne
+   * Format (Dateien vor M7) nicht zum Plan wird, gilt dort der bisherige Standard A3 quer, an Seite anpassen. Rand
+   * automatisch, Zielbreite 841 mm, kein Ausschnitt.
+   */
+  13: (p) => ({
+    ...p,
+    pages: mapList(p.pages, (pg) => {
+      if (!isObj(pg)) return pg;
+      const sheet = isObj(pg.sheet) ? pg.sheet : {};
+      // Ungültiges Format: wie vor #13 A3 (beim Laden würde es sonst zum neuen Standard „Plan“)
+      const format = typeof sheet.format === 'string' && DIN_FORMATS.includes(sheet.format) ? sheet.format : 'A3';
+      return { ...pg, sheet: { orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null, ...sheet, format } };
+    }),
+  }),
 };
 
 export function migrate(project: unknown, fromVersion: number): unknown {

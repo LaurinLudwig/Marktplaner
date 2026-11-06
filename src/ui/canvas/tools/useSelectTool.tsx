@@ -15,9 +15,9 @@ import { angleTo, rotateRects, snapAngle, type RectMap } from '../../../core/tra
 import { cloneForDrag, commitDuplicateDrag, commitRects, select, setAreaFront, setLabelOffset } from '../../../state/objects';
 import { updateBackground } from '../../../state/pageSettings';
 import { useStore, type PaperElement } from '../../../state/store';
-import { mmToM, mToMm, paperToAnchor, paperToWorld, snapToPaperCorners, worldToPaper } from '../../../core/sheet';
+import { boundsHandle, mmToM, mToMm, paperToAnchor, paperToWorld, resizeBounds, snapToPaperCorners, worldToPaper } from '../../../core/sheet';
 import type { Bounds } from '../../../core/viewport';
-import { setPaperAnchor, setSheet } from '../../../state/paper';
+import { moveSheetTo, setPaperAnchor, setSheetRegion } from '../../../state/paper';
 import { IS_MAC } from '../../shortcuts/keys';
 import { tip } from '../../shortcuts/tip';
 import { hitHandle, resizeCursor, selectionGeometry, type HandleHit } from './selectionGeometry';
@@ -53,6 +53,8 @@ type Gesture =
   | { kind: 'marquee'; start: Vec; cur: Vec; base: Id[] }
   /** Blatt, Schriftfeld oder Legende ziehen (M7): Vorschau als Umriss, beim Loslassen ein Undo-Schritt. */
   | { kind: 'paper'; element: PaperElement; startWorld: Vec; box0: Bounds; start: Vec; moved: boolean; delta: Vec; target: Vec | null }
+  /** Ausschnitt des Blatts an einem Griff in der Größe ändern (#13); die Gegenseite bleibt fest. */
+  | { kind: 'sheetResize'; hx: -1 | 0 | 1; hy: -1 | 0 | 1; box0: Bounds; box: Bounds; start: Vec; moved: boolean }
   | { kind: 'background'; start: Vec; transform0: BgTransform }
   /** Ausgelagerte Standbeschriftung von Hand verschieben (#9). */
   | { kind: 'label'; id: Id; startWorld: Vec; start: Vec; box0: Bounds; moved: boolean; delta: Vec }
@@ -66,6 +68,10 @@ const LINE_HIT_PX = 5;
 const RELEASE_PX = 2 * SNAP_PX;
 const MODIFIER_KEYS = new Set(['Shift', 'Alt', 'Meta', 'Control']);
 const EDGE_OF_HANDLE: Record<string, EdgeIndex> = { '0,-1': 0, '1,0': 1, '0,1': 2, '-1,0': 3 };
+/** Griffe des Ausschnitts (#13): Ecken und Kantenmitten. */
+const SHEET_HANDLES = ([-1, 0, 1] as const).flatMap((hx) => ([-1, 0, 1] as const).filter((hy) => hx || hy).map((hy) => ({ hx, hy })));
+/** Trefferabstand der Griffe in Bildschirmpixeln. */
+const SHEET_HANDLE_PX = 6;
 
 /**
  * Auswahlwerkzeug (V): Objekte auswählen (Klick, Shift+Klick, Auswahlrechteck), verschieben,
@@ -76,7 +82,7 @@ const EDGE_OF_HANDLE: Record<string, EdgeIndex> = { '0,-1': 0, '1,0': 1, '0,1': 
 export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
   const gesture = useRef<Gesture | null>(null);
   const [marquee, setMarquee] = useState<{ a: Vec; b: Vec } | null>(null);
-  const [hover, setHover] = useState<{ handle: HandleHit | null; object: boolean; alt: boolean } | null>(null);
+  const [hover, setHover] = useState<{ handle: HandleHit | null; object: boolean; alt: boolean; sheet?: string | null } | null>(null);
   const [moving, setMoving] = useState<false | 'move' | 'copy'>(false);
   const [guides, setGuides] = useState<Guide[]>([]);
   const [endSnap, setEndSnap] = useState<SnapResult | null>(null);
@@ -138,6 +144,14 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
     const onLabel = inside({ minX: f.minX, minY: f.minY - 7 * k, maxX: f.minX + 70 * k, maxY: f.minY });
     return onEdge || onLabel ? 'sheet' : null;
   };
+
+  /** Griffe des Ausschnitts, wenn das Blatt ausgewählt ist (#13). */
+  const sheetSelected = selection?.kind === 'paper' && selection.element === 'sheet';
+  const sheetHandles =
+    active && sheetSelected && ctx.paper.frame.kind === 'region' && ctx.page.layers.sheet.visible && !ctx.page.layers.sheet.locked
+      ? SHEET_HANDLES.map((h) => ({ ...h, p: ctx.toScreen(boundsHandle(ctx.paper.frame.bounds, h.hx, h.hy)) }))
+      : [];
+  const hitSheetHandle = (screen: Vec) => sheetHandles.find((h) => Math.abs(h.p.x - screen.x) <= SHEET_HANDLE_PX && Math.abs(h.p.y - screen.y) <= SHEET_HANDLE_PX) ?? null;
 
   /**
    * Ein Schritt beim Verschieben: Shift beschränkt die Richtung, Alt dupliziert, Cmd/Strg schaltet den
@@ -250,13 +264,17 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       if (s) setLabelOffset(pageId, [g.id], { x: (g.box0.minX + g.box0.maxX) / 2 + g.delta.x - s.cx, y: (g.box0.minY + g.box0.maxY) / 2 + g.delta.y - s.cy });
       return;
     }
+    if (g.kind === 'sheetResize') {
+      setPaperGhost(null);
+      if (commit && g.moved) setSheetRegion(pageId, g.box);
+      return;
+    }
     if (g.kind === 'paper') {
       setPaperGhost(null);
       if (!commit || !g.moved) return;
       const pp = ctx.paper;
       if (g.element === 'sheet') {
-        const c = { x: (g.box0.minX + g.box0.maxX) / 2 + g.delta.x, y: (g.box0.minY + g.box0.maxY) / 2 + g.delta.y };
-        setSheet(pageId, { cx: Math.round(c.x * 100) / 100, cy: Math.round(c.y * 100) / 100 });
+        moveSheetTo(pageId, { x: (g.box0.minX + g.box0.maxX) / 2 + g.delta.x, y: (g.box0.minY + g.box0.maxY) / 2 + g.delta.y });
       } else {
         const el = pp[g.element];
         if (el && g.target) setPaperAnchor(pageId, g.element, paperToAnchor(g.target, el.layout, pp.frame.paper));
@@ -315,10 +333,16 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
         return true;
       }
 
+      const sheetHandle = !handle ? hitSheetHandle(p.screen) : null;
+      if (sheetHandle) {
+        const box0 = ctx.paper.frame.bounds;
+        startGesture({ kind: 'sheetResize', hx: sheetHandle.hx, hy: sheetHandle.hy, box0, box: box0, start: p.screen, moved: false });
+        return true;
+      }
       const paperHit = !handle ? pickPaper(p.world) : null;
       const paperSelected = st.ui.selection?.kind === 'paper' && st.ui.selection.element === paperHit;
-      // Ein angepasstes Blatt folgt dem Inhalt und lässt sich nicht ziehen
-      const fixedPaper = paperHit === 'sheet' && ctx.page.sheet.scale === null;
+      // Ein angepasstes DIN-Blatt und ein Plan folgen dem Inhalt und lassen sich nicht ziehen
+      const fixedPaper = paperHit === 'sheet' && !ctx.paper.frame.movable;
       if (paperHit && (!paperSelected || fixedPaper)) {
         // Papier-Elemente und Blatt stören die Arbeit nicht (M8-Nacharbeit, §8): wie bei Grundflächen wählt ein Klick
         // aus, Ziehen auf einem nicht ausgewählten Element zieht ein Auswahlrechteck auf
@@ -410,9 +434,14 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       const g = gesture.current;
       if (!g) {
         const handle = hitHandle(geo, p.screen);
+        const sh = handle ? null : hitSheetHandle(p.screen);
+        // Mauszeiger am Griff des Ausschnitts (#13): achsenparallel, also fest je Griff
+        const sheet = sh ? (sh.hx && sh.hy ? (sh.hx === sh.hy ? 'cursor-nwse' : 'cursor-nesw') : sh.hx ? 'cursor-ew' : 'cursor-ns') : null;
         const bg = ctx.page.background;
-        const object = !handle && (!!directionHandleAt(ctx.page, ctx.toScreen, p.screen) || !!pickPaper(p.world) || !!pick(p.world) || (!!bg && !bg.locked && ctx.page.layers.background.visible && onBackground(p.world)));
-        if (hover?.object !== object || hover.alt !== p.altKey || JSON.stringify(hover?.handle ?? null) !== JSON.stringify(handle)) setHover({ handle, object, alt: p.altKey });
+        const object =
+          !handle && !sh && (!!directionHandleAt(ctx.page, ctx.toScreen, p.screen) || !!pickPaper(p.world) || !!pick(p.world) || (!!bg && !bg.locked && ctx.page.layers.background.visible && onBackground(p.world)));
+        if (hover?.object !== object || hover.alt !== p.altKey || (hover?.sheet ?? null) !== sheet || JSON.stringify(hover?.handle ?? null) !== JSON.stringify(handle))
+          setHover({ handle, object, alt: p.altKey, sheet });
         return;
       }
       switch (g.kind) {
@@ -485,6 +514,13 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
           const w = g.box0.maxX - g.box0.minX;
           const h = g.box0.maxY - g.box0.minY;
           setPaperGhost({ minX: min.x, minY: min.y, maxX: min.x + w, maxY: min.y + h });
+          return;
+        }
+        case 'sheetResize': {
+          if (!g.moved && Math.hypot(p.screen.x - g.start.x, p.screen.y - g.start.y) < DRAG_PX) return;
+          g.moved = true;
+          g.box = resizeBounds(g.box0, g.hx, g.hy, p.world);
+          setPaperGhost(g.box);
           return;
         }
         case 'label': {
@@ -577,9 +613,11 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
         ? 'cursor-copy'
         : 'cursor-move'
       : !h
-        ? hover?.object
-          ? objectCursor
-          : undefined
+        ? hover?.sheet
+          ? hover.sheet
+          : hover?.object
+            ? objectCursor
+            : undefined
         : h.kind === 'rotate'
           ? 'cursor-rotate'
           : h.kind === 'resize' && geo
@@ -617,6 +655,9 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
             ))}
           </>
         )}
+        {sheetHandles.map((sh) => (
+          <rect key={`${sh.hx}${sh.hy}`} className="resize-handle sheet-handle" data-testid="sheet-handle" data-handle={`${sh.hx},${sh.hy}`} x={sh.p.x - 4} y={sh.p.y - 4} width={8} height={8} />
+        ))}
         {marquee && <MarqueeRect ctx={ctx} a={marquee.a} b={marquee.b} />}
         {labelGhost && <MarqueeRect ctx={ctx} a={{ x: labelGhost.minX, y: labelGhost.minY }} b={{ x: labelGhost.maxX, y: labelGhost.maxY }} className="paper-ghost label-ghost" />}
         {paperGhost && <MarqueeRect ctx={ctx} a={{ x: paperGhost.minX, y: paperGhost.minY }} b={{ x: paperGhost.maxX, y: paperGhost.maxY }} className="paper-ghost" />}

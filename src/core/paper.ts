@@ -2,11 +2,12 @@
  * Papier-Elemente einer Page zusammengestellt (M7, M8, spec.md §8): Blatt, Schriftfeld, Legende, Maßstabsbalken und
  * Nordpfeil mit ihrer Lage auf dem Plan. Gemeinsam für Zeichenfläche, Befehle (Ziehen, Pfeiltasten) und PDF-Export.
  */
+import { profileLayers, type ExportProfile } from './exportProfiles';
 import { pageFree } from './hiddenFree';
 import { legendEntries, legendLayout, type LegendLayout } from './legend';
 import type { FestplatzPage, LayerId, LayerState, PaperAnchor, Project, Vec } from './model/types';
-import { NORTH_ARROW_SIZE, scaleBarLayout, type ScaleBarLayout } from './scene/paper';
-import { anchorToWorld, backgroundBounds, mmToM, sheetFrame, shownOnPaper, titleBlockLayout, paperSize, type PaperRect, type SheetFrame, type TitleBlockLayout } from './sheet';
+import { NORTH_ARROW_SIZE, SCALE_BAR_SIZE, scaleBarLayout, type ScaleBarLayout } from './scene/paper';
+import { anchorToWorld, backgroundBounds, formatText, mmToM, sheetFrame, titleBlockLayout, type SheetElement, type SheetFrame, type TitleBlockLayout } from './sheet';
 import type { Bounds } from './viewport';
 
 export type PaperKind = 'titleBlock' | 'legend' | 'scaleBar' | 'northArrow';
@@ -48,29 +49,38 @@ export function paperElement(pp: PagePaper, kind: PaperKind): PaperElement<{ w: 
  * Export-Profils); `freeShown` aus der Freiflächen-Berechnung des Aufrufers (sonst neu berechnet).
  */
 export function pagePaper(page: FestplatzPage, project: ProjectPart, layers: Record<LayerId, LayerState> = page.layers, freeShown?: boolean): PagePaper {
-  const paper = paperSize(page.sheet);
-  const tb = (scale: number) =>
+  const tb = (scale: number, format: string) =>
     titleBlockLayout({
       projectName: project.name,
       pageName: page.name,
       scale,
-      sheet: page.sheet,
+      format,
       dateText: project.titleBlock.dateText,
       version: project.titleBlock.version,
       freeText: page.titleBlockText,
     });
   const entries = legendEntries(page, project, layers, freeShown ?? hasFreeSpace(page, project));
-  const lLayout = entries.length ? legendLayout(entries, paper.h) : null;
-  // Größen auf dem Papier hängen nicht vom Maßstab ab: Freizuhaltende Bereiche vor dem Anpassen bestimmen (E-49)
-  const sizes: [PaperAnchor, { w: number; h: number } | null][] = [
-    [page.titleBlock, tb(page.sheet.scale ?? 1000)],
-    [page.legend, lLayout],
-    [page.scaleBar, scaleBarLayout(page.sheet.scale ?? 1000)],
-    [page.northArrow, NORTH_ARROW_SIZE],
-  ];
-  const obstacles: PaperRect[] = sizes.flatMap(([a, size]) => (a.visible && size ? [{ ...shownOnPaper(a, size, paper), w: size.w, h: size.h }] : []));
-  const frame = sheetFrame(page, backgroundBounds(page), obstacles);
-  const tLayout = tb(frame.scale);
+  // Die Legende bricht nach der Blatthöhe um; beim Plan hängt die vom Maßstab ab (#13)
+  const legends = new Map<number, LegendLayout | null>();
+  const legendFor = (height: number) => {
+    if (!legends.has(height)) legends.set(height, entries.length ? legendLayout(entries, height) : null);
+    return legends.get(height)!;
+  };
+  // Größen auf dem Papier hängen nicht vom Maßstab ab (Inhalt des Schriftfelds schon, seine Größe nicht): Freizuhaltende
+  // Bereiche bzw. Bänder vor dem Maßstab bestimmen (E-49, #13)
+  const tbSize = tb(1000, '');
+  const elements = (height: number): SheetElement[] =>
+    (
+      [
+        [page.titleBlock, tbSize],
+        [page.legend, legendFor(height)],
+        [page.scaleBar, SCALE_BAR_SIZE],
+        [page.northArrow, NORTH_ARROW_SIZE],
+      ] as [PaperAnchor, { w: number; h: number } | null][]
+    ).flatMap(([a, size]) => (a.visible && size ? [{ corner: a.corner, dx: a.dx, dy: a.dy, w: size.w, h: size.h }] : []));
+  const frame = sheetFrame(page, backgroundBounds(page), elements);
+  const lLayout = legendFor(frame.layoutHeight);
+  const tLayout = tb(frame.scale, formatText(page.sheet, frame.paper));
   const sLayout = scaleBarLayout(frame.scale);
   const nLayout = { ...NORTH_ARROW_SIZE, angle: page.northAngle };
   return {
@@ -98,4 +108,13 @@ export function paperElementAt(page: Pick<FestplatzPage, PaperKind | 'layers'>, 
     if (b && w.x >= b.minX && w.x <= b.maxX && w.y >= b.minY && w.y <= b.maxY) return kind;
   }
   return null;
+}
+
+/**
+ * Blatt der Page im PDF (§9): Die Legende entsteht aus den Ebenen des Export-Profils; beim Plan hängt davon auch das
+ * Papiermaß ab (#13). Für Export-Dialog, Vorschau, gerasterte Hintergründe und Größenschätzung, damit alle dasselbe
+ * Blatt wie `pageScene` verwenden.
+ */
+export function exportFrame(page: FestplatzPage, project: ProjectPart, profile: ExportProfile): SheetFrame {
+  return pagePaper(page, project, profileLayers(profile)).frame;
 }

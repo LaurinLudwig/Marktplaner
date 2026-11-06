@@ -17,15 +17,17 @@ import {
   type WarningMode,
 } from '../../core/exportProfiles';
 import { fmt } from '../../core/format';
-import { SCALE_LIMITS } from '../../core/model/schema';
-import { PAPER_FORMATS, type FestplatzPage, type PaperFormat } from '../../core/model/types';
-import { pagePaper } from '../../core/paper';
+import { SCALE_LIMITS, TARGET_WIDTH_LIMITS } from '../../core/model/schema';
+import type { FestplatzPage } from '../../core/model/types';
+import { exportFrame } from '../../core/paper';
+import { exceedsPdfLimit, isFreeFormat, paperSizeText, PDF_MAX_MM, sheetLabel } from '../../core/sheet';
 import { addProfile, deleteProfile, loadExportSettings, resetProfile, selectProfile, setExportDpi, updateProfile, useExportSettings } from '../../state/exportSettings';
 import { fixSheetScale, setSheet } from '../../state/paper';
 import { useStore } from '../../state/store';
 import { openPdf } from '../canvas/background/renderer';
 import { estimateExportBytes, sizeText } from '../../app/pdfEstimate';
 import { NumberField } from '../panels/NumberField';
+import { SheetFormatSelect } from '../panels/PaperPanels';
 import { TextField } from '../panels/TextField';
 
 /**
@@ -124,6 +126,7 @@ function ExportDialogBody() {
                     checked={all || scope.pageIds!.includes(p.id)}
                     disabled={all}
                     previewed={p.id === previewPageId}
+                    profile={profile}
                     onToggle={(on) => togglePage(p.id, on)}
                   />
                 ))}
@@ -185,44 +188,71 @@ function profileSummary(p: ExportProfile): string {
   ].join(' · ');
 }
 
-/** Zeile je Page: Häkchen, Name (Klick = Vorschau) und Blatt (Format, Ausrichtung, Maßstab). */
-function PageRow({ page, checked, disabled, previewed, onToggle }: { page: FestplatzPage; checked: boolean; disabled: boolean; previewed: boolean; onToggle: (on: boolean) => void }) {
+/**
+ * Zeile je Page: Häkchen, Name (Klick = Vorschau) und Blatt (Format, Ausrichtung, Maßstab bzw. Zielbreite), darunter
+ * das Papiermaß in mm (#13) und gegebenenfalls die Warnung für Seiten über 5 080 mm.
+ */
+function PageRow({ page, checked, disabled, previewed, profile, onToggle }: { page: FestplatzPage; checked: boolean; disabled: boolean; previewed: boolean; profile: ExportProfile; onToggle: (on: boolean) => void }) {
   const project = useStore((s) => s.project);
   const s = page.sheet;
-  const fit = s.scale === null;
-  const frame = pagePaper(page, project).frame;
+  const auto = s.scale === null;
+  const free = isFreeFormat(s.format);
+  // Maß und Maßstab wie im PDF: Die Legende folgt den Ebenen des Profils (beim Plan ändert das das Papiermaß)
+  const frame = exportFrame(page, project, profile);
   return (
     <div className={`export-page${previewed ? ' previewed' : ''}`} role="listitem" data-testid="export-page">
       <input type="checkbox" aria-label={`${page.name} exportieren`} checked={checked} disabled={disabled} onChange={(e) => onToggle(e.target.checked)} />
       <button type="button" className="export-page-name" aria-pressed={previewed} onClick={() => setPreviewPage(page.id)} title="Vorschau zeigen">
         {page.name}
       </button>
-      <select aria-label={`Format ${page.name}`} value={s.format} onChange={(e) => setSheet(page.id, { format: e.target.value as PaperFormat })}>
-        {PAPER_FORMATS.map((f) => (
-          <option key={f} value={f}>
-            {f}
-          </option>
-        ))}
-      </select>
-      <select aria-label={`Ausrichtung ${page.name}`} value={s.orientation} onChange={(e) => setSheet(page.id, { orientation: e.target.value as 'portrait' | 'landscape' })}>
-        <option value="landscape">quer</option>
-        <option value="portrait">hoch</option>
-      </select>
-      <label className="check" title="An Seite anpassen">
-        <input type="checkbox" aria-label={`${page.name}: an Seite anpassen`} checked={fit} onChange={(e) => (e.target.checked ? setSheet(page.id, { scale: null }) : fixSheetScale(page.id))} />
-        anpassen
+      <SheetFormatSelect page={page} ariaLabel={`Format ${page.name}`} />
+      {free ? (
+        <NumberField
+          id={`ex-width-${page.id}`}
+          label="Zielbreite"
+          unit="mm"
+          value={s.targetWidth}
+          min={TARGET_WIDTH_LIMITS.min}
+          max={TARGET_WIDTH_LIMITS.max}
+          step={10}
+          digits={0}
+          disabled={!auto}
+          onCommit={(n) => setSheet(page.id, { targetWidth: n })}
+        />
+      ) : (
+        <select aria-label={`Ausrichtung ${page.name}`} value={s.orientation} onChange={(e) => setSheet(page.id, { orientation: e.target.value as 'portrait' | 'landscape' })}>
+          <option value="landscape">quer</option>
+          <option value="portrait">hoch</option>
+        </select>
+      )}
+      <label className="check" title={free ? 'Maßstab über Zielbreite' : 'An Seite anpassen'}>
+        <input
+          type="checkbox"
+          aria-label={free ? `${page.name}: Maßstab über Zielbreite` : `${page.name}: an Seite anpassen`}
+          checked={auto}
+          onChange={(e) => (e.target.checked ? setSheet(page.id, { scale: null }) : fixSheetScale(page.id))}
+        />
+        {free ? 'über Zielbreite' : 'anpassen'}
       </label>
       <NumberField
         id={`ex-scale-${page.id}`}
         label="1:"
-        value={fit ? null : s.scale}
-        placeholder={fit ? fmt(frame.scale, 0) : undefined}
+        value={auto ? null : s.scale}
+        placeholder={auto ? fmt(frame.scale, 0) : undefined}
         min={SCALE_LIMITS.min}
         max={SCALE_LIMITS.max}
         step={50}
         digits={0}
         onCommit={(n) => setSheet(page.id, { scale: n })}
       />
+      <span className="hint export-page-size" data-testid="export-page-size">
+        {paperSizeText(frame.paper)}
+      </span>
+      {exceedsPdfLimit(frame.paper) && (
+        <span className="warn-chip export-page-warn" data-testid="export-page-too-large">
+          Länger als {fmt(PDF_MAX_MM, 0)} mm: PDF-Programme schneiden ab
+        </span>
+      )}
     </div>
   );
 }
@@ -345,9 +375,19 @@ function Preview({ pageId, profile }: { pageId: string | null; profile: ExportPr
   const busy = result?.for !== request;
   const error = !busy ? result?.error : null;
   const page = project.pages.find((p) => p.id === pageId);
+  // Maß und Maßstab der Seite im PDF (Ebenen des Profils, wie die Vorschau selbst)
+  const frame = page && exportFrame(page, project, profile);
   return (
     <div className="export-preview" aria-label="Vorschau" data-testid="export-preview" data-state={busy ? 'busy' : error ? 'error' : 'ok'}>
-      <div className="export-preview-head">Vorschau: {page?.name}</div>
+      <div className="export-preview-head">
+        Vorschau: {page?.name}
+        {page && frame && (
+          <span className="hint" data-testid="export-preview-size">
+            {' '}
+            · {sheetLabel(page.sheet, frame)}
+          </span>
+        )}
+      </div>
       <div className="export-preview-box">
         <canvas ref={canvasRef} />
         {busy && <span className="hint export-preview-busy">Vorschau wird erzeugt …</span>}

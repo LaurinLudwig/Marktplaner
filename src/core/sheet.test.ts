@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createInfra } from './infra';
 import { legendEntries, legendLayout, fitText, LEGEND_COLUMN } from './legend';
-import { createPage, DEFAULT_INFRA_TYPES, defaultLayers } from './model/defaults';
+import { createPage, DEFAULT_INFRA_TYPES, defaultLayers, LEGACY_SHEET } from './model/defaults';
 import type { FestplatzPage } from './model/types';
 import { createArea, createStand } from './objects';
 import { anchorToPaper, anchorToWorld, clampToPaper, fitScale, mmToM, nudgeAnchor, paperSize, paperToAnchor, sheetFrame, shownOnPaper, snapToPaperCorners, titleBlockLayout, titleBlockMeta, worldToAnchor } from './sheet';
 
 /** M7: Blatt, Papier-Elemente, Schriftfeld, Legende (spec.md §8). */
 
-const page = (patch: Partial<FestplatzPage> = {}): FestplatzPage => ({ ...createPage('Obermarkt'), ...patch });
+// Neue Pages haben seit #13 das Format „Plan“; diese Tests prüfen das DIN-Blatt (A3 quer, angepasst vom Entwickler)
+const page = (patch: Partial<FestplatzPage> = {}): FestplatzPage => ({ ...createPage('Obermarkt'), sheet: { ...LEGACY_SHEET }, ...patch });
 
 describe('Blatt', () => {
   it('Papiermaße hoch und quer', () => {
@@ -17,7 +18,7 @@ describe('Blatt', () => {
   });
 
   it('fester Maßstab: Papiermaß × n um die Mitte (A1 quer bei 1:500 = 420,5 × 297 m)', () => {
-    const f = sheetFrame(page({ sheet: { format: 'A1', orientation: 'landscape', scale: 500, cx: 100, cy: 50 } }), null);
+    const f = sheetFrame(page({ sheet: { ...LEGACY_SHEET, format: 'A1', scale: 500, cx: 100, cy: 50 } }), null);
     expect(f.scale).toBe(500);
     expect(f.bounds.maxX - f.bounds.minX).toBeCloseTo(420.5);
     expect(f.bounds.maxY - f.bounds.minY).toBeCloseTo(297);
@@ -55,7 +56,7 @@ describe('Ecken-Anker', () => {
   });
 
   it('Bei anderem Maßstab bleibt das Element an seiner Ecke und gleich groß auf dem Papier', () => {
-    const base = page({ sheet: { format: 'A3', orientation: 'landscape', scale: 200, cx: 0, cy: 0 } });
+    const base = page({ sheet: { ...LEGACY_SHEET, scale: 200 } });
     const a = { corner: 'br' as const, dx: 10, dy: 10 };
     for (const scale of [200, 500]) {
       const f = sheetFrame({ ...base, sheet: { ...base.sheet, scale } }, null);
@@ -95,7 +96,7 @@ describe('Ecken-Anker', () => {
 });
 
 describe('Schriftfeld', () => {
-  const fields = { projectName: 'Schelmenmarkt 2027', pageName: 'Obermarkt', scale: 500, sheet: { format: 'A1' as const, orientation: 'landscape' as const }, dateText: '12.10.2026', version: '3', freeText: '' };
+  const fields = { projectName: 'Schelmenmarkt 2027', pageName: 'Obermarkt', scale: 500, format: 'A1 quer', dateText: '12.10.2026', version: '3', freeText: '' };
 
   it('dritte Zeile: Maßstab, Format, Datum, Version; leere Angaben entfallen', () => {
     expect(titleBlockMeta(fields)).toBe('Maßstab 1:500 bei Druck in Originalgröße (A1 quer) · 12.10.2026 · Version 3');

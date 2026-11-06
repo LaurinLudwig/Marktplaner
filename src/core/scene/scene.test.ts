@@ -4,10 +4,10 @@ import * as fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { blankedPlaceholders, BUILTIN_PROFILES, exportFileName, loadProfiles, normalizeProfile, profileLayers, redactProject, STAND_FIELDS } from '../exportProfiles';
 import { formatLabel } from '../label';
-import { createPage, createProject } from '../model/defaults';
+import { createPage, createProject, LEGACY_SHEET } from '../model/defaults';
 import { createStand } from '../objects';
 import { pagePaper } from '../paper';
-import { fitIntoFreeArea, paperSize, sheetFrame, type PaperRect } from '../sheet';
+import { clampToPaper, fitIntoFreeArea, paperSize, sheetFrame, type PaperRect } from '../sheet';
 import { cachedStandLabels } from '../labelLayout';
 import { areaPrims, standLabelPrims, standPrim, standPrims, warnKind } from './objects';
 import { pageScene } from './page';
@@ -106,17 +106,19 @@ describe('An Seite anpassen mit freigehaltenen Papier-Elementen (M8-04, E-49)', 
   it('Eigenschaft: Der eingepasste Inhalt schneidet kein Element und liegt im Rand', () => {
     const rect = fc.record({ x: fc.integer({ min: 0, max: 380 }), y: fc.integer({ min: 0, max: 260 }), w: fc.integer({ min: 10, max: 200 }), h: fc.integer({ min: 10, max: 120 }) });
     fc.assert(
-      fc.property(fc.array(rect, { maxLength: 4 }), fc.integer({ min: 5, max: 500 }), fc.integer({ min: 5, max: 500 }), (obs, cw, ch) => {
+      fc.property(fc.array(rect, { maxLength: 4 }), fc.integer({ min: 5, max: 500 }), fc.integer({ min: 5, max: 500 }), (raw, cw, ch) => {
+        // Seit #13 hängen die Elemente an einer Ecke (hier oben links) und stehen auf dem Blatt (angepasst vom Entwickler)
+        const obs = raw.map((o) => ({ ...clampToPaper(o, o, A3), w: o.w, h: o.h }));
         const page = createPage('P');
-        page.sheet = { format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0 };
+        page.sheet = { ...LEGACY_SHEET };
         page.areas.push({ id: 'a', name: '', cx: cw / 2, cy: ch / 2, w: cw, d: ch, rot: 0 });
-        const f = sheetFrame(page, null, obs);
+        const f = sheetFrame(page, null, obs.map((o) => ({ corner: 'tl' as const, dx: o.x, dy: o.y, w: o.w, h: o.h })));
         const toMm = (x: number, y: number) => ({ x: ((x - f.bounds.minX) * 1000) / f.scale, y: ((y - f.bounds.minY) * 1000) / f.scale });
         const a = toMm(0, 0);
         const b = toMm(cw, ch);
         const eps = 1e-6;
         if (a.x < 10 - eps || a.y < 10 - eps || b.x > A3.w - 10 + eps || b.y > A3.h - 10 + eps) return false;
-        const fit = fitIntoFreeArea({ minX: 0, minY: 0, maxX: cw, maxY: ch }, paperSize(page.sheet), obs);
+        const fit = fitIntoFreeArea({ minX: 0, minY: 0, maxX: cw, maxY: ch }, paperSize({ format: 'A3', orientation: 'landscape' }), obs);
         // Wurde der freie Bereich gewählt (nicht der Rückfall aufs ganze Papier), schneidet der Inhalt kein Element (mit 3 mm Abstand)
         if (fit.rect.w === 400 && fit.rect.h === 277) return true;
         return obs.every((o) => b.x <= o.x - 3 + eps || a.x >= o.x + o.w + 3 - eps || b.y <= o.y - 3 + eps || a.y >= o.y + o.h + 3 - eps || o.x + o.w + 3 <= 10 || o.y + o.h + 3 <= 10 || o.x - 3 >= 410 || o.y - 3 >= 287);
@@ -128,6 +130,8 @@ describe('An Seite anpassen mit freigehaltenen Papier-Elementen (M8-04, E-49)', 
   it('Seite: angepasstes Blatt lässt Platz für Schriftfeld, Legende, Maßstabsbalken und Nordpfeil', () => {
     const p = createProject('P');
     const pg = p.pages[0]!;
+    // Neue Pages haben seit #13 das Format „Plan“; hier das angepasste DIN-Blatt (angepasst vom Entwickler)
+    pg.sheet = { ...LEGACY_SHEET };
     pg.areas.push({ id: 'G', name: '', cx: 0, cy: 0, w: 100, d: 60, rot: 0 });
     const pp = pagePaper(pg, p);
     const k = 1000 / pp.frame.scale;

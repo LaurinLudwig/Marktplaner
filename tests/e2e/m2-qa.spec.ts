@@ -193,6 +193,15 @@ test.describe('QA M2: Zahleneingaben mit Tausenderpunkt (QA-M2-01)', () => {
   test('QA-M2-01: Vorbelegter Abstand ≥ 1000 m wird beim Anwenden nicht durch 1000 geteilt', async ({ page }) => {
     await openApp(page);
     await importReady(page, 'raster-10m.png');
+    // Neue Pages haben seit #13 das Blatt „Plan“; „An Fenster anpassen“ zeigt damit einen anderen Ausschnitt, und
+    // Playwright-WebKit schneidet Mauskoordinaten auf ganze Pixel ab (1498,74 statt 1500). Der Test prüft die
+    // Eingabe, nicht das Blatt: hier das bisherige Blatt A3 quer, an Seite anpassen (angepasst vom Tester)
+    await page.evaluate(() => {
+      const s = (window as any).__marktplanerStore.getState();
+      s.change('Testdaten', (p: any) => {
+        Object.assign(p.pages[0].sheet, { format: 'A3', orientation: 'landscape', scale: null });
+      });
+    });
     await calibrate(page, RASTER, [100, 100], [600, 100], '1500');
     await page.keyboard.press(`${MOD}+0`);
     const p = await at(page, RASTER);

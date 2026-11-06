@@ -972,7 +972,10 @@ kbd {
 .export-group legend { color: var(--muted); font-size: 11px; padding: 0 4px; }
 .export-group legend.sub { padding: 6px 0 0; }
 .export-pages { display: grid; gap: 3px; margin-top: 4px; max-height: 220px; overflow: auto; }
-.export-page { display: grid; grid-template-columns: auto minmax(80px, 1fr) 56px 64px auto 92px; gap: 6px; align-items: center; }
+.export-page { display: grid; grid-template-columns: auto minmax(80px, 1fr) 92px 132px auto 92px; gap: 2px 6px; align-items: center; }
+/* Papiermaß und Warnung unter Name und Blatt (#13) */
+.export-page-size, .export-page-warn { grid-column: 2 / -1; }
+.export-page .field .inp { min-width: 0; }
 .export-page select { height: 22px; }
 .export-page .field { display: flex; align-items: center; gap: 4px; }
 .export-page.previewed .export-page-name { color: var(--accent); }

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { exportFileName, rasterQuality, type AppendixPart, type ExportDpi, type ExportProfile } from '../core/exportProfiles';
 import { userMessage } from '../core/errors';
 import type { Id, Project } from '../core/model/types';
-import { pagePaper } from '../core/paper';
+import { exportFrame } from '../core/paper';
 import type { PreparedBackground } from '../core/pdf/writePdf';
 import { platform } from '../platform';
 import { currentProfile, useExportSettings } from '../state/exportSettings';
@@ -77,7 +77,7 @@ async function prepareSvg(project: Project, profile: ExportProfile, pageIds: Id[
   for (const page of project.pages) {
     const bg = page.background;
     if (!pageIds.includes(page.id) || bg?.kind !== 'svg') continue;
-    const frame = pagePaper(page, project).frame;
+    const frame = exportFrame(page, project, profile);
     out[page.id] = await prepareBackground(bg, assets[bg.assetId], frame, dpi, async (bytes, mime, format, q) => {
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
       try {
