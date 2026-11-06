@@ -510,7 +510,7 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
   festes Papierformat (#13): „Plan“ oder „Ausschnitt“, Maßstab 1:n oder über eine Zielbreite in mm.
   - Standard neuer Pages (#13, Entscheidung Laurin 2026-11-05): „Plan“, Maßstab über die Zielbreite 841 mm (Breite
     von A1 quer, passt auf übliche Plotterrollen), Rand automatisch. Bis #13 war es A3 quer, an Seite anpassen;
-    bestehende Blätter bleiben DIN (Migration 11 → 12).
+    bestehende Blätter bleiben DIN (Migration 13 → 14).
   - Einstellbar im Seitenleisten-Bereich „Blatt“ der Page, ohne Auswahl. Jede Änderung ist ein Undo-Schritt.
 - Auf der Zeichenfläche ist das Blatt als gestrichelter Rahmen sichtbar, mit der Marke „A1 quer · 1:500“ (freies
   Blatt: das Papiermaß, „1.236 × 341 mm · 1:200“). Es ist nicht gedreht; seine Achsen sind die der Zeichenfläche.
@@ -787,7 +787,7 @@ Chromium und WebKit. Geprüft mit `npm run test:perf`.
   Standardwerten ergänzt. Dateien einer neueren Version, als die App kennt, werden mit einer
   verständlichen Meldung abgewiesen (Entscheidung 2026-10-11; Version 2 seit M4, Version 3 seit M5, Version 4 seit M7, Version 5 seit M8,
   Version 6 seit M10, Version 7 seit M11: ausgeblendete Freiflächen je Page, Version 8 seit M12: Form der Stände und
-  Formvorlagen, Version 12 seit #13: freies Blatt „Plan“/„Ausschnitt“ mit Rand, Zielbreite und Ausschnitt).
+  Formvorlagen, Version 14 seit #13: freies Blatt „Plan“/„Ausschnitt“ mit Rand, Zielbreite und Ausschnitt).
 - Projekt als Vorlage fürs nächste Jahr duplizieren.
 - Import einer Händlerliste aus CSV/XLSX (Spalten zuordnen). Importierte Händler landen in einer
   Liste „noch nicht platziert“ und können per Drag & Drop platziert werden. [Phase 2]

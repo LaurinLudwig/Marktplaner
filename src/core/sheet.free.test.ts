@@ -94,6 +94,15 @@ describe('Plan: Papiermaß aus Inhalt × Maßstab', () => {
     expect(scaleForWidth((n) => 100_000 / n, 100)).toEqual({ scale: 1000, tooNarrow: false });
   });
 
+  it('ohne „Grundflächen verwenden“ (#17) zählen behaltene Grundflächen nicht zum Inhalt (Plan und Ausschnitt)', () => {
+    const stand = createStand({ cx: 5, cy: 2, w: 10, d: 4, rot: 0 });
+    const off = sheetFrame(page({ scale: 200 }, { areas: wide, stands: [stand], useAreas: false }), null);
+    // nur der Stand: 10 × 4 m bei 1:200 = 50 × 20 mm + 2 × 10 mm Rand
+    expect(off.paper).toEqual({ w: 70, h: 40 });
+    expect(sheetFrame(page({ scale: 200 }, { areas: wide, stands: [stand], useAreas: true }), null).paper).toEqual({ w: 1060, h: 310 });
+    expect(sheetFrame(page({ format: 'region', scale: 200, region: null }, { areas: wide, stands: [stand], useAreas: false }), null).bounds).toEqual({ minX: 0, minY: 0, maxX: 10, maxY: 4 });
+  });
+
   it('ohne Inhalt gilt der Hintergrund, sonst 100 × 100 m um den Ursprung', () => {
     const bg = { minX: 0, minY: 0, maxX: 400, maxY: 100 };
     const f = sheetFrame(page({ scale: 1000 }), bg);

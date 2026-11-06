@@ -47,7 +47,7 @@ export const DEFAULT_INFRA_TYPES: InfraTypeDef[] = [
 export const DEFAULT_TARGET_WIDTH = 841;
 /** Neue Pages (#13): „Plan“, Maßstab aus der Zielbreite, Rand automatisch. */
 export const DEFAULT_SHEET: Sheet = { format: 'plan', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: DEFAULT_TARGET_WIDTH, region: null };
-/** Blatt bis Formatversion 11 (A3 quer, an Seite anpassen); bestehende Blätter bleiben DIN (Migration 11 → 12). */
+/** Blatt bis Formatversion 13 (A3 quer, an Seite anpassen); bestehende Blätter bleiben DIN (Migration 13 → 14). */
 export const LEGACY_SHEET: Sheet = { format: 'A3', orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: DEFAULT_TARGET_WIDTH, region: null };
 export const DEFAULT_TITLE_BLOCK_ANCHOR: PaperAnchor = { visible: true, corner: 'br', dx: 10, dy: 10 };
 export const DEFAULT_LEGEND_ANCHOR: PaperAnchor = { visible: true, corner: 'bl', dx: 10, dy: 10 };

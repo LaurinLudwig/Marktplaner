@@ -160,7 +160,7 @@ const EMPTY_BOUNDS: Bounds = { minX: -EMPTY_HALF, minY: -EMPTY_HALF, maxX: EMPTY
  * Papier-Elementen; Ausschnitt aus dem aufgezogenen Rechteck (#13). `elements` = sichtbare Papier-Elemente; beim
  * Anpassen eines DIN-Blatts bleibt ihr Bereich frei (M8, E-49), um einen Plan wächst das Blatt.
  */
-export function sheetFrame(page: Pick<FestplatzPage, 'sheet' | 'areas' | 'stands' | 'infra'>, background: Bounds | null, elements: SheetElements = []): SheetFrame {
+export function sheetFrame(page: AreasOf & Pick<FestplatzPage, 'sheet' | 'stands' | 'infra'>, background: Bounds | null, elements: SheetElements = []): SheetFrame {
   const s = page.sheet;
   if (s.format === 'plan') return planFrame(s, contentBounds(page, background) ?? EMPTY_BOUNDS, elements);
   if (s.format === 'region') return regionFrame(s, s.region ?? regionOf(contentBounds(page, background) ?? EMPTY_BOUNDS));

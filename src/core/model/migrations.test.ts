@@ -65,7 +65,7 @@ function withoutLabelOffset(project: Project): Project {
 }
 
 /**
- * Felder aus Formatversion 12 (#13) prüfen und entfernen: Nach der Migration bleibt jedes Blatt DIN, Rand automatisch,
+ * Felder aus Formatversion 14 (#13) prüfen und entfernen: Nach der Migration bleibt jedes Blatt DIN, Rand automatisch,
  * Zielbreite 841 mm, kein Ausschnitt.
  */
 function withoutFreeSheet(project: Project): Project {
@@ -608,7 +608,7 @@ describe('Migration 11 → 12 (#17: ohne Grundflächen)', () => {
     expect(raw.schemaVersion).toBe(11);
     expect(raw.project.pages[0]).not.toHaveProperty('useAreas');
 
-    const project = decodeProjectFile(bytes).project;
+    const project = withoutFreeSheet(decodeProjectFile(bytes).project);
     expect(project.pages.map((p) => p.useAreas)).toEqual([true, true, true, true]);
     expect(withoutUseAreas(project)).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren
@@ -639,8 +639,8 @@ describe('Migration 12 → 13 (#12: Nummerierung in weiteren Richtungen)', () =>
     expect(raw.project.pages.map((p: { numberingMode: string }) => p.numberingMode)).toEqual(['frontLtr', 'clockwise', 'clockwise', 'manual']);
     for (const p of raw.project.pages) expect(p).not.toHaveProperty('direction');
 
-    // Version 13 ergänzt nichts: Nach dem Lesen ist das Projekt gleich dem Inhalt der Datei
-    const project = decodeProjectFile(bytes).project;
+    // Version 13 ergänzt nichts: Nach dem Lesen ist das Projekt gleich dem Inhalt der Datei (ohne die Felder aus 14)
+    const project = withoutFreeSheet(decodeProjectFile(bytes).project);
     expect(project).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren; die bisherigen Modi behalten ihre Bedeutung
     expect(project.name).toBe('Formatversion 12 (#17)');
@@ -714,19 +714,25 @@ describe('Migration 13 → 14 (#13: Blatt ohne festes Papierformat)', () => {
     expect((MIGRATIONS[13]!({ id: 'x', pages: 'kaputt' }) as any).pages).toBe('kaputt');
   });
 
-  it('Datei der Version 11 (Lastprojekt ohne die neuen Felder): Blätter bleiben DIN, neue Felder ergänzt', () => {
-    // Bis die echte, mit Version 11 gespeicherte Datei beim Zusammenführen dazukommt: das Lastprojekt, zurückgesetzt auf
-    // Version 11 ohne die Felder aus #13
-    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'last-500-staende.schelme')));
-    const file = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
-    for (const pg of file.project.pages) {
-      const { margin: _m, targetWidth: _t, region: _r, ...sheet } = pg.sheet;
-      pg.sheet = sheet;
-    }
-    file.schemaVersion = 11;
-    const project = parseProjectFile(file);
-    expect(project.pages.map((p) => p.sheet)).toEqual(file.project.pages.map((p: any) => ({ ...p.sheet, margin: null, targetWidth: 841, region: null })));
-    expect(project.pages.every((p) => p.sheet.format === 'A3')).toBe(true);
+  it('echte Datei aus #12 (Version 13, tests/fixtures/format-v13-nummerierung.mplan) wird vollständig migriert', () => {
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v13-nummerierung.mplan')));
+    const raw = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
+    expect(raw.schemaVersion).toBe(13);
+    for (const p of raw.project.pages) for (const k of ['margin', 'targetWidth', 'region']) expect(p.sheet).not.toHaveProperty(k);
+
+    const project = decodeProjectFile(bytes).project;
+    // Blätter bleiben DIN, wie sie in der Datei standen; die neuen Felder sind ergänzt
+    expect(project.pages.map((p) => p.sheet)).toEqual(raw.project.pages.map((p: { sheet: object }) => ({ ...p.sheet, margin: null, targetWidth: 841, region: null })));
+    // alles andere unverändert
+    expect(withoutFreeSheet(project)).toEqual(raw.project);
+    // Werte, die in der Datei gezielt gesetzt waren
+    expect(project.name).toBe('Formatversion 13 (#12)');
+    expect(project.pages[0]!.sheet).toMatchObject({ format: 'A1', orientation: 'landscape', scale: 500, cx: 85, cy: 40 });
+    expect(project.pages[1]!.sheet).toMatchObject({ format: 'A2', orientation: 'portrait', scale: null });
+    expect(project.pages[2]!.useAreas).toBe(false);
+    expect(project.pages[2]!.areas).toHaveLength(6);
+    expect(project.pages[3]).toMatchObject({ numberingMode: 'direction', direction: { from: { x: 10, y: 5 }, to: { x: 150, y: 45 } } });
+    expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
   });
 
   it('Laden: Format, Rand, Zielbreite und Ausschnitt geprüft, begrenzt und gerundet; Ungültiges = Standard', () => {
