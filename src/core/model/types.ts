@@ -270,7 +270,7 @@ export interface FestplatzPage {
   numberingMode: NumberingMode;
   /** Mittelpunkt und Startrichtung für „Uhrzeigersinn“ und „gegen den Uhrzeigersinn“. */
   clockwise?: ClockwiseSettings;
-  /** Eigene Richtung A → B für den Modus `direction` (seit #12, Formatversion 12). */
+  /** Eigene Richtung A → B für den Modus `direction` (seit #12, Formatversion 13). */
   direction?: NumberingDirection;
   powerLimitKw: number | null;
   blockOverLimit: boolean;

@@ -615,6 +615,28 @@ describe('Migration 12 → 13 (#12: Nummerierung in weiteren Richtungen)', () =>
     expect(JSON.stringify(v12)).toBe(before);
   });
 
+  it('echte Datei aus #17 (Version 12, tests/fixtures/format-v12-ohne-grundflaechen.mplan) wird vollständig migriert', () => {
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v12-ohne-grundflaechen.mplan')));
+    const raw = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
+    expect(raw.schemaVersion).toBe(12);
+    expect(raw.project.pages.map((p: { numberingMode: string }) => p.numberingMode)).toEqual(['frontLtr', 'clockwise', 'clockwise', 'manual']);
+    for (const p of raw.project.pages) expect(p).not.toHaveProperty('direction');
+
+    // Version 13 ergänzt nichts: Nach dem Lesen ist das Projekt gleich dem Inhalt der Datei
+    const project = decodeProjectFile(bytes).project;
+    expect(project).toEqual(raw.project);
+    // Werte, die in der Datei gezielt gesetzt waren; die bisherigen Modi behalten ihre Bedeutung
+    expect(project.name).toBe('Formatversion 12 (#17)');
+    expect(project.pages.map((p) => p.name)).toEqual(['Obermarkt', 'Untermarkt', 'Am Ziegelturm', 'Schifftor']);
+    expect(project.pages[1]).toMatchObject({ numberingMode: 'clockwise', clockwise: { center: { x: 50, y: 40 }, startAngle: 90 } });
+    // Am Ziegelturm: Uhrzeigersinn ohne gesetzten Mittelpunkt, Grundflächen ausgeschaltet (aber gespeichert)
+    expect(project.pages[2]).toMatchObject({ numberingMode: 'clockwise', useAreas: false });
+    expect(project.pages[2]!.clockwise).toBeUndefined();
+    expect(project.pages[2]!.areas).toHaveLength(6);
+    expect(project.pages[3]!.numberingMode).toBe('manual');
+    expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
+  });
+
   it('Lesen: alte und neue Modi, eigene Richtung auf 0,01 m gerundet; Unbrauchbares entfällt, A = B bleibt', () => {
     const file = (version: number, pg: Record<string, unknown>) => ({
       format: 'schelmeplaner',

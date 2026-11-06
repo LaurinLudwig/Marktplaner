@@ -352,7 +352,7 @@ Entscheidungen 2026-10-12 (M5-Planung).
   - Erstes Umschalten: A und B laufen waagrecht durch die Mitte aller Stände (vom linken bis zum rechten Rand ihrer
     Hülle; ohne Stände der Grundflächen), nummeriert also wie links → rechts.
   - Verschieben oder Drehen einer Page im Verbund (#15) bewegt A und B noch nicht mit; das kommt mit #15.
-  - Formatversion 12 (Page `numberingMode` zusätzlich `rightToLeft`, `topToBottom`, `bottomToTop`, `direction`,
+  - Formatversion 13 (Page `numberingMode` zusätzlich `rightToLeft`, `topToBottom`, `bottomToTop`, `direction`,
     `counterClockwise`; Page `direction` mit `from` und `to` in Metern). `frontLtr` bleibt der Name für links → rechts.
 - **Uhrzeigersinn:** um einen pro Festplatz gesetzten Mittelpunkt (Klick auf die Zeichenfläche nach „Mittelpunkt
   setzen“ oder Felder X/Y; beim ersten Umschalten die Mitte aller Grundflächen und Stände). Startrichtung in Grad
