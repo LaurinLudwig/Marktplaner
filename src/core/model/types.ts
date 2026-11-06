@@ -107,13 +107,17 @@ export interface Area extends Rect {
 
 export type Connection = '230V' | 'CEE16' | 'CEE32';
 
-/** Grundform eines Stands (M12, #9). Nur Darstellung; gerechnet wird immer mit dem Rechteck B × T (Hitbox). */
+/**
+ * Grundform eines Stands (M12, #9). Nur Darstellung; gerechnet wird mit dem Rechteck B × T (Hitbox), außer bei einer
+ * eigenen Form (`Stand.parts`) oder einer Formvorlage mit „belegt wie gezeichnet“ (#16, core/footprint.ts).
+ */
 export type StandShape = 'rect' | 'ellipse';
 export const STAND_SHAPES: readonly StandShape[] = ['rect', 'ellipse'];
 
 /**
- * Teil einer Formvorlage: Rechteck oder Ellipse ohne Drehung, relativ (0–1) zum Hüllrechteck der Vorlage.
- * x/y = linke obere Ecke (y nach unten, die Vorderseite ist unten), w/h = Breite und Tiefe.
+ * Teil einer Form (Formvorlage oder eigene Form eines Stands): Rechteck oder Ellipse, relativ (0–1) zum Hüllrechteck.
+ * x/y = linke obere Ecke des ungedrehten Teils (y nach unten, die Vorderseite ist unten), w/h = Breite und Tiefe.
+ * `rot` (seit #16, Formatversion 15) dreht den Teil um seine Mitte, Grad im Uhrzeigersinn relativ zum Stand.
  */
 export interface ShapePart {
   kind: StandShape;
@@ -121,6 +125,7 @@ export interface ShapePart {
   y: number;
   w: number;
   h: number;
+  rot: number;
 }
 
 /** Formvorlage (M12): aus Teilen zusammengesetzter Umriss; `w` × `d` ist das Vorschlagsmaß in Metern. */
@@ -130,6 +135,8 @@ export interface ShapeTemplate {
   w: number;
   d: number;
   parts: ShapePart[];
+  /** „belegt wie gezeichnet“ (#16): Stände mit dieser Vorlage belegen mit ihren Teilen statt mit B × T. */
+  occupies: boolean;
 }
 
 export interface Stand extends Rect {
@@ -159,6 +166,13 @@ export interface Stand extends Rect {
   shape: StandShape;
   /** Formvorlage (M12); hat Vorrang vor `shape`. */
   shapeTemplateId: Id | null;
+  /**
+   * Eigene Form (#16, Formatversion 15): Teile relativ zum Hüllrechteck B × T wie bei einer Vorlage; hat Vorrang vor
+   * Vorlage und Grundform (die Vorlage ist dann null). Belegt immer wie gezeichnet. null = keine eigene Form.
+   */
+  parts: ShapePart[] | null;
+  /** Frontmeter von Hand (#16, Standgeld): nur bei Belegung wie gezeichnet; null = automatisch (core/footprint.ts). */
+  frontOverride: number | null;
   /** Von Hand verschobene Beschriftung (#9): Mitte relativ zur Standmitte in Metern; null = automatisch. */
   labelOffset: Vec | null;
 }

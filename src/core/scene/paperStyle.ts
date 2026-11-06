@@ -35,6 +35,8 @@ export const PAPER_STYLE: Record<StyleKey, PaperStyle> = {
   'stand-outline': { stroke: '#000000', strokeOpacity: 0.65, width: 0.2 },
   /** Nur Zeichenfläche (Auswahl); der Export zeichnet die Hitbox nie. */
   'stand-hitbox': { stroke: '#000000', strokeOpacity: 0.5, width: 0.15, dash: [1, 0.6] },
+  /** Nur Zeichenfläche (Auswahl, #16): Teile einer Form mit Belegung wie gezeichnet. */
+  'stand-part': { stroke: '#000000', strokeOpacity: 0.5, width: 0.1 },
   'free-space': { fill: FREE, fillOpacity: 0.12 },
   'free-hatch': { stroke: FREE, strokeOpacity: 0.38, width: 0.18 },
   'overlap-region': { fill: ERR, fillOpacity: 0.45, stroke: ERR, width: 0.2 },

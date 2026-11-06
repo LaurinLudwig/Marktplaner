@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { confirm } from '../../app/dialogs';
 import { fmt } from '../../core/format';
+import { normAngle } from '../../core/geometry/rect';
 import { STAND_SHAPES, type ShapePart, type ShapeTemplate, type StandShape } from '../../core/model/types';
 import { normalizeParts, partsInMeters, SHAPE_LABEL, shapePaths } from '../../core/shape';
 import { deleteShapeTemplate, nextTemplateName, saveShapeTemplate, shapeTemplateUsage } from '../../state/shapes';
@@ -62,7 +63,7 @@ function TemplateRow({ tpl, onEdit }: { tpl: ShapeTemplate; onEdit: () => void }
         {tpl.name}
         <span className="hint">
           {' '}
-          · {fmt(tpl.w)} × {fmt(tpl.d)} m
+          · {fmt(tpl.w)} × {fmt(tpl.d)} m{tpl.occupies ? ' · belegt wie gezeichnet' : ''}
         </span>
       </span>
       <span className="cat-usage" data-testid="shape-usage" {...tip({ label: `${used} ${used === 1 ? 'Geschäft' : 'Geschäfte'} mit dieser Form`, side: 'top' })}>
@@ -82,9 +83,9 @@ function TemplateRow({ tpl, onEdit }: { tpl: ShapeTemplate; onEdit: () => void }
  * Vorschau einer Form im Hüllrechteck w × d (Meter): Füllung, äußere Kontur, Hüllrechteck gestrichelt, Vorderseite
  * (Unterkante) orange. Dieselbe Geometrie wie auf der Zeichenfläche (`shapePaths`).
  */
-function ShapePreview({ w, d, parts, size, labels = false }: { w: number; d: number; parts: readonly ShapePart[]; size: number; labels?: boolean }) {
+export function ShapePreview({ w, d, parts, size, labels = false }: { w: number; d: number; parts: readonly ShapePart[]; size: number; labels?: boolean }) {
   const stand = { cx: 0, cy: 0, w, d, rot: 0, shape: 'rect' as StandShape };
-  const { fill, outline } = shapePaths(stand, { id: '', name: '', w, d, parts: [...parts] });
+  const { fill, outline } = shapePaths(stand, parts);
   const pad = Math.max(w, d) * (labels ? 0.12 : 0.06);
   const k = size / Math.max(w + 2 * pad, d + 2 * pad);
   return (
@@ -109,11 +110,11 @@ function ShapePreview({ w, d, parts, size, labels = false }: { w: number; d: num
   );
 }
 
-const newPart = (parts: readonly ShapePart[]): ShapePart => {
-  if (!parts.length) return { kind: 'ellipse', x: 0, y: 0, w: 6, h: 6 };
+export const newPart = (parts: readonly ShapePart[]): ShapePart => {
+  if (!parts.length) return { kind: 'ellipse', x: 0, y: 0, w: 6, h: 6, rot: 0 };
   const right = Math.max(...parts.map((p) => p.x + p.w));
   const top = Math.min(...parts.map((p) => p.y));
-  return { kind: 'rect', x: right, y: top, w: 3, h: 3 };
+  return { kind: 'rect', x: right, y: top, w: 3, h: 3, rot: 0 };
 };
 
 /**
@@ -124,6 +125,7 @@ function ShapeEditor({ tpl, onClose }: { tpl: ShapeTemplate | null; onClose: () 
   const project = useStore((s) => s.project);
   const [name, setName] = useState(tpl?.name ?? nextTemplateName(project));
   const [parts, setParts] = useState<ShapePart[]>(tpl ? partsInMeters(tpl) : [newPart([])]);
+  const [occupies, setOccupies] = useState(tpl?.occupies ?? false);
   const used = tpl ? shapeTemplateUsage(project, tpl.id) : 0;
   const n = normalizeParts(parts);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -143,7 +145,7 @@ function ShapeEditor({ tpl, onClose }: { tpl: ShapeTemplate | null; onClose: () 
 
   const setPart = (i: number, patch: Partial<ShapePart>) => setParts((ps) => ps.map((p, k) => (k === i ? { ...p, ...patch } : p)));
   const apply = () => {
-    if (saveShapeTemplate(tpl?.id ?? null, name, parts)) onClose();
+    if (saveShapeTemplate(tpl?.id ?? null, name, parts, occupies)) onClose();
   };
 
   return (
@@ -165,6 +167,7 @@ function ShapeEditor({ tpl, onClose }: { tpl: ShapeTemplate | null; onClose: () 
                 <span role="columnheader">Y</span>
                 <span role="columnheader">B</span>
                 <span role="columnheader">T</span>
+                <span role="columnheader">Drehung</span>
                 <span />
               </div>
               {parts.map((p, i) => (
@@ -180,6 +183,7 @@ function ShapeEditor({ tpl, onClose }: { tpl: ShapeTemplate | null; onClose: () 
                   <NumberField id={`se-y-${i}`} className="se-num" label={`Y von Teil ${i + 1}`} unit="m" value={p.y} min={-100} max={100} step={0.5} onCommit={(y) => setPart(i, { y })} />
                   <NumberField id={`se-w-${i}`} className="se-num" label={`Breite von Teil ${i + 1}`} unit="m" value={p.w} min={0.1} max={100} step={0.5} onCommit={(w) => setPart(i, { w })} />
                   <NumberField id={`se-h-${i}`} className="se-num" label={`Tiefe von Teil ${i + 1}`} unit="m" value={p.h} min={0.1} max={100} step={0.5} onCommit={(h) => setPart(i, { h })} />
+                  <NumberField id={`se-rot-${i}`} className="se-num" label={`Drehung von Teil ${i + 1}`} unit="°" value={p.rot} min={-360} max={360} step={1} digits={1} onCommit={(rot) => setPart(i, { rot: normAngle(rot) })} />
                   <button
                     type="button"
                     className="icon-btn"
@@ -195,9 +199,16 @@ function ShapeEditor({ tpl, onClose }: { tpl: ShapeTemplate | null; onClose: () 
             <button type="button" className="btn" data-testid="shape-part-add" onClick={() => setParts((ps) => [...ps, newPart(ps)])}>
               Teil hinzufügen
             </button>
+            <label className="check" data-testid="shape-occupies">
+              <input type="checkbox" checked={occupies} onChange={(e) => setOccupies(e.target.checked)} />
+              belegt wie gezeichnet
+            </label>
             <p className="hint">
-              X/Y ist die linke obere Ecke eines Teils, die Vorderseite liegt unten. Die Teile dürfen sich überlappen. Belegung, Warnungen und Fang
-              rechnen mit dem Hüllrechteck.
+              X/Y ist die linke obere Ecke eines Teils (vor der Drehung um seine Mitte), die Vorderseite liegt unten. Die Teile dürfen sich
+              überlappen.{' '}
+              {occupies
+                ? 'Belegung, Warnungen, Treffer, Fang und Frontmeter rechnen mit den Teilen.'
+                : 'Belegung, Warnungen und Fang rechnen mit dem Hüllrechteck.'}
             </p>
           </div>
           <div className="se-preview">

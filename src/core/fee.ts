@@ -1,8 +1,10 @@
 /**
- * Standgeld (#5, spec.md §3 „Standgeld“): netto aus den Frontmetern (Breite) und dem Preis je Frontmeter des Projekts
+ * Standgeld (#5, spec.md §3 „Standgeld“): netto aus den Frontmetern (Breite; bei Belegung wie gezeichnet die belegte
+ * Länge an der Vorderseite oder die Frontmeter von Hand, #16, core/footprint.ts `frontMeters`) und dem Preis je Frontmeter des Projekts
  * oder dem Sonderpreis der Kategorie (eigener Preis je Frontmeter oder Pauschale je Stand). Brutto = netto plus
  * Mehrwertsteuer, je Stand auf Cent gerundet; Summen addieren die gerundeten Beträge der Stände in ganzen Cent.
  */
+import { frontMeters, type FrontStand } from './footprint';
 import type { Category, Id, PricingSettings, Stand } from './model/types';
 
 export interface Fee {
@@ -12,7 +14,7 @@ export interface Fee {
   gross: number;
   /** Woher der Preis kommt: Projektpreis, Sonderpreis je Frontmeter oder Pauschale der Kategorie. */
   source: 'project' | 'perMeter' | 'flat';
-  /** Berechnete Frontmeter (bei „angefangene Meter voll“ aufgerundet); bei Pauschalen die Breite. */
+  /** Berechnete Frontmeter (bei „angefangene Meter voll“ aufgerundet); bei Pauschalen die Frontmeter ungerundet. */
   meters: number;
   /** Preis je Frontmeter bzw. Pauschale (netto). */
   rate: number;
@@ -29,9 +31,10 @@ export function billedMeters(w: number, roundUpMeters: boolean): number {
 export const grossOf = (net: number, vatRate: number) => cents(net * (1 + vatRate / 100)) / 100;
 
 /** Standgeld eines Stands; null, wenn weder die Kategorie noch das Projekt einen Preis hat. */
-export function standFee(stand: Pick<Stand, 'w'>, category: Pick<Category, 'price'> | undefined, pricing: PricingSettings): Fee | null {
+export function standFee(stand: FrontStand, category: Pick<Category, 'price'> | undefined, pricing: PricingSettings): Fee | null {
   const special = category?.price ?? null;
-  const meters = billedMeters(stand.w, pricing.roundUpMeters);
+  const front = frontMeters(stand);
+  const meters = billedMeters(front, pricing.roundUpMeters);
   let net: number;
   let source: Fee['source'];
   let rate: number;
@@ -44,7 +47,7 @@ export function standFee(stand: Pick<Stand, 'w'>, category: Pick<Category, 'pric
   } else {
     return null;
   }
-  return { net, gross: grossOf(net, pricing.vatRate), source, meters: source === 'flat' ? Math.round(stand.w * 100) / 100 : meters, rate };
+  return { net, gross: grossOf(net, pricing.vatRate), source, meters: source === 'flat' ? Math.round(front * 100) / 100 : meters, rate };
 }
 
 /** Ob überhaupt ein Preis festgelegt ist (sonst blenden Tabelle, Kennzahlen und Seitenleiste das Standgeld aus). */
@@ -75,7 +78,7 @@ export function sumFees(fees: Iterable<Fee | null>): FeeSum {
 }
 
 /** Standgeld aller Stände einer Liste, Kategorien über ihre ID (nicht mehr vorhandene zählen als „ohne“). */
-export function feesOf(stands: readonly Pick<Stand, 'w' | 'categoryId'>[], categories: readonly Category[], pricing: PricingSettings): (Fee | null)[] {
+export function feesOf(stands: readonly (FrontStand & Pick<Stand, 'categoryId'>)[], categories: readonly Category[], pricing: PricingSettings): (Fee | null)[] {
   const byId = new Map<Id, Category>(categories.map((c) => [c.id, c]));
   return stands.map((s) => standFee(s, s.categoryId ? byId.get(s.categoryId) : undefined, pricing));
 }

@@ -61,7 +61,7 @@ describe('PDF: Seitengröße und Maßstab', () => {
 
   it('Geschäftsformen (M12): Oval und Vorlage im Maßstab, ohne Hitbox', async () => {
     const p = oneStand('A3', 200);
-    p.shapeTemplates.push({ id: 't', name: 'K', w: 10, d: 12, parts: [{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 10 / 12 }, { kind: 'rect', x: 0.35, y: 0.75, w: 0.3, h: 0.25 }] });
+    p.shapeTemplates.push({ id: 't', name: 'K', w: 10, d: 12, occupies: false, parts: [{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 10 / 12, rot: 0 }, { kind: 'rect', x: 0.35, y: 0.75, w: 0.3, h: 0.25, rot: 0 }] });
     const pg = p.pages[0]!;
     pg.stands[0]!.shape = 'ellipse';
     pg.stands.push(createStand({ cx: 20, cy: 0, w: 10, d: 12, rot: 0 }, { shapeTemplateId: 't' }));

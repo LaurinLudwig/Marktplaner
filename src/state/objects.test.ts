@@ -22,7 +22,8 @@ import {
 } from './objects';
 import { addPage } from './pages';
 import { setLayer, setUseAreas } from './pageSettings';
-import { deleteShapeTemplate, saveShapeTemplate, setStandShape, shapeTemplateUsage } from './shapes';
+import { deleteShapeTemplate, dissolveStandOnPage, mergeStandsOnPage, saveShapeTemplate, setFrontOverride, setStandParts, setStandShape, shapeTemplateUsage } from './shapes';
+import { standPartsInMeters } from '../core/compound';
 import { selectDirty, useStore } from './store';
 
 const s = () => useStore.getState();
@@ -268,7 +269,7 @@ describe('Geschäftsformen (M12, #9)', () => {
     const n0 = past();
     setStandShape(pid, [id], { shape: 'ellipse' });
     expect(page().stands[0]).toMatchObject({ shape: 'ellipse', shapeTemplateId: null, w: 4, d: 3 });
-    const tid = saveShapeTemplate(null, ' Karussell ', [{ kind: 'ellipse', x: 2, y: 1, w: 8, h: 8 }, { kind: 'rect', x: 5, y: 9, w: 2, h: 2 }])!;
+    const tid = saveShapeTemplate(null, ' Karussell ', [{ kind: 'ellipse', x: 2, y: 1, w: 8, h: 8, rot: 0 }, { kind: 'rect', x: 5, y: 9, w: 2, h: 2, rot: 0 }])!;
     expect(s().project.shapeTemplates[0]).toMatchObject({ id: tid, name: 'Karussell', w: 8, d: 10 });
     setStandShape(pid, [id], { templateId: tid });
     expect(page().stands[0]).toMatchObject({ shape: 'ellipse', shapeTemplateId: tid, w: 8, d: 10, cx: 10, cy: 10, rot: 30 });
@@ -281,9 +282,9 @@ describe('Geschäftsformen (M12, #9)', () => {
     const pid = page().id;
     addStand(pid, { cx: 0, cy: 0, w: 4, d: 3, rot: 0 });
     const id = page().stands[0]!.id;
-    const tid = saveShapeTemplate(null, 'T', [{ kind: 'rect', x: 0, y: 0, w: 6, h: 6 }])!;
+    const tid = saveShapeTemplate(null, 'T', [{ kind: 'rect', x: 0, y: 0, w: 6, h: 6, rot: 0 }])!;
     setStandShape(pid, [id], { templateId: tid });
-    saveShapeTemplate(tid, 'T2', [{ kind: 'rect', x: 0, y: 0, w: 2, h: 2 }, { kind: 'ellipse', x: 2, y: 0, w: 2, h: 2 }]);
+    saveShapeTemplate(tid, 'T2', [{ kind: 'rect', x: 0, y: 0, w: 2, h: 2, rot: 0 }, { kind: 'ellipse', x: 2, y: 0, w: 2, h: 2, rot: 0 }]);
     expect(s().project.shapeTemplates).toHaveLength(1);
     expect(s().project.shapeTemplates[0]).toMatchObject({ name: 'T2', w: 4, d: 2 });
     expect(page().stands[0]).toMatchObject({ w: 6, d: 6, shapeTemplateId: tid });
@@ -298,7 +299,7 @@ describe('Geschäftsformen (M12, #9)', () => {
   });
 
   it('ohne brauchbares Teil wird keine Vorlage gespeichert', () => {
-    expect(saveShapeTemplate(null, 'leer', [{ kind: 'rect', x: 0, y: 0, w: 0, h: 2 }])).toBeNull();
+    expect(saveShapeTemplate(null, 'leer', [{ kind: 'rect', x: 0, y: 0, w: 0, h: 2, rot: 0 }])).toBeNull();
     expect(s().project.shapeTemplates).toEqual([]);
   });
 
@@ -345,5 +346,79 @@ describe('#17 Grundflächen verwenden', () => {
     expect(page().areas).toEqual([]);
     expect(page().stands).toHaveLength(1);
     expect(s().ui.selection).toEqual({ kind: 'objects', ids: [page().stands[0]!.id] });
+  });
+});
+
+describe('#16 Zusammengesetzte Form', () => {
+  /** Importiertes B-06: Hauptkörper und zwei Ausleger als drei einzelne Stände. */
+  const importB06 = () => {
+    const pid = page().id;
+    const main = addStand(pid, { cx: 0, cy: 0, w: 20, d: 12, rot: 0 });
+    updateStands(pid, [main], { nr: 'B-06', name: 'Hip-Hop Fly', powerKw: 63 }, 'Daten');
+    const left = addStand(pid, { cx: -11.25, cy: 0, w: 2.5, d: 7, rot: 0 });
+    const right = addStand(pid, { cx: 11.25, cy: 0, w: 2.5, d: 7, rot: 0 });
+    return { pid, main, left, right };
+  };
+
+  it('Zusammenfassen ist ein Undo-Schritt; Daten vom größten Teil; Rückgängig stellt die drei Stände wieder her', () => {
+    const { pid, main, left, right } = importB06();
+    const n = past();
+    const id = mergeStandsOnPage(pid, [left, main, right]);
+    expect(id).toBe(main);
+    expect(past()).toBe(n + 1);
+    expect(page().stands).toHaveLength(1);
+    expect(page().stands[0]).toMatchObject({ id: main, nr: 'B-06', name: 'Hip-Hop Fly', powerKw: 63, w: 25, d: 12, cx: 0, cy: 0 });
+    expect(page().stands[0]!.parts).toHaveLength(3);
+    expect(s().ui.selection).toEqual({ kind: 'objects', ids: [main] });
+    s().undo();
+    expect(page().stands.map((x) => x.id)).toEqual([main, left, right]);
+    expect(page().stands[0]).toMatchObject({ w: 20, parts: null });
+    s().redo();
+    expect(page().stands).toHaveLength(1);
+  });
+
+  it('Teile bearbeiten, Frontmeter von Hand, Form auflösen – je ein Undo-Schritt', () => {
+    const { pid, main, left, right } = importB06();
+    mergeStandsOnPage(pid, [main, left, right]);
+    const st = () => page().stands.find((x) => x.id === main)!;
+    let n = past();
+    // linken Ausleger um 1 m nach links: B × T wächst, der Hauptkörper bleibt auf dem Plan
+    const meters = standPartsInMeters(st());
+    const li = meters.findIndex((p) => p.w === 2.5 && p.x === 0);
+    meters[li] = { ...meters[li]!, x: -1 };
+    expect(setStandParts(pid, main, meters)).toBe(true);
+    expect(st()).toMatchObject({ w: 26, cx: -0.5 });
+    expect(past()).toBe(n + 1);
+    setFrontOverride(pid, [main], 24);
+    expect(st().frontOverride).toBe(24);
+    setFrontOverride(pid, [main], null);
+    expect(st().frontOverride).toBeNull();
+    expect(past()).toBe(n + 3);
+    n = past();
+    const ids = dissolveStandOnPage(pid, main);
+    expect(ids).toHaveLength(3);
+    expect(past()).toBe(n + 1);
+    expect(page().stands.find((x) => x.id === main)).toMatchObject({ w: 20, d: 12, cx: 0, parts: null, nr: 'B-06' });
+    s().undo();
+    expect(page().stands).toHaveLength(1);
+  });
+
+  it('„Eigene Form“ übernimmt die gezeichneten Teile; eine Grundform entfernt sie und die Frontmeter von Hand', () => {
+    const pid = page().id;
+    const id = addStand(pid, { cx: 0, cy: 0, w: 8, d: 4, rot: 0 });
+    const tid = saveShapeTemplate(null, 'L', [{ kind: 'rect', x: 0, y: 0, w: 8, h: 2, rot: 0 }, { kind: 'rect', x: 0, y: 2, w: 4, h: 2, rot: 0 }], true)!;
+    expect(s().project.shapeTemplates[0]!.occupies).toBe(true);
+    setStandShape(pid, [id], { templateId: tid });
+    setFrontOverride(pid, [id], 5);
+    setStandShape(pid, [id], { own: true });
+    expect(page().stands[0]).toMatchObject({ shapeTemplateId: null, frontOverride: 5 });
+    expect(page().stands[0]!.parts).toHaveLength(2);
+    setStandShape(pid, [id], { shape: 'rect' });
+    expect(page().stands[0]).toMatchObject({ parts: null, frontOverride: null, shape: 'rect' });
+    // Vorlage ohne „belegt wie gezeichnet“: Frontmeter von Hand der Stände entfallen
+    setStandShape(pid, [id], { templateId: tid });
+    setFrontOverride(pid, [id], 5);
+    saveShapeTemplate(tid, 'L', [{ kind: 'rect', x: 0, y: 0, w: 8, h: 4, rot: 0 }], false);
+    expect(page().stands[0]!.frontOverride).toBeNull();
   });
 });

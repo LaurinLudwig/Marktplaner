@@ -3,7 +3,8 @@
  * Summen. Rein und ohne UI; die Tabelle zeigt nur an, was hier berechnet wird.
  */
 import { feesOf, sumFees, type Fee, type FeeSum } from './fee';
-import { sumWidths } from './stats';
+import { sumFront } from './stats';
+import { pageStands } from './footprint';
 import { cachedDuplicates, nrKey, type NrRef } from './numbering';
 import { CONNECTION_KEYS, sumPower, type ConnectionKey } from './power';
 import { outsideRef } from './pageAreas';
@@ -26,16 +27,18 @@ export interface StandRow {
   fee: Fee | null;
 }
 
-export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categories'> & Partial<Pick<Project, 'infraTypes'>>): StandRow[] {
+export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categories'> & Partial<Pick<Project, 'infraTypes' | 'shapeTemplates'>>): StandRow[] {
   const cats = new Map(project.categories.map((c) => [c.id, c.name]));
   const dups = cachedDuplicates(project.pages, project.settings.numbering.scope);
   const rows: StandRow[] = [];
   project.pages.forEach((page, pageIndex) => {
-    const w = cachedPageWarnings(outsideRef(page), page.stands);
-    const iw = project.infraTypes ? cachedInfraWarnings(page, project.infraTypes, project.settings.minPassageWidth) : NO_INFRA_WARNINGS;
-    const dw = cachedDistanceWarnings(page.stands, project.categories);
-    const fees = feesOf(page.stands, project.categories, project.settings.pricing);
-    page.stands.forEach((s, i) => {
+    // Stände, wie sie belegen (#16): Vorlagen mit „belegt wie gezeichnet“ eingesetzt
+    const stands = pageStands(page, project.shapeTemplates ?? []);
+    const w = cachedPageWarnings(outsideRef(page), stands);
+    const iw = project.infraTypes ? cachedInfraWarnings({ stands, infra: page.infra }, project.infraTypes, project.settings.minPassageWidth) : NO_INFRA_WARNINGS;
+    const dw = cachedDistanceWarnings(stands, project.categories);
+    const fees = feesOf(stands, project.categories, project.settings.pricing);
+    stands.forEach((s, i) => {
       const d = dups.get(s.id);
       const close = dw.get(s.id);
       const warnings = activeWarnings(w.byStand.get(s.id), s, project.settings, !!d, iw.byStand.has(s.id), !!close);
@@ -231,5 +234,5 @@ export function sumRows(rows: readonly StandRow[]): StandSums {
   const stands = rows.map((r) => r.stand);
   const byConnection = Object.fromEntries(CONNECTION_KEYS.map((k) => [k, 0])) as Record<ConnectionKey, number>;
   for (const s of stands) byConnection[s.connection ?? 'none']++;
-  return { count: rows.length, frontM: sumWidths(stands), powerKw: sumPower(stands), byConnection, fee: sumFees(rows.map((r) => r.fee)) };
+  return { count: rows.length, frontM: sumFront(stands), powerKw: sumPower(stands), byConnection, fee: sumFees(rows.map((r) => r.fee)) };
 }

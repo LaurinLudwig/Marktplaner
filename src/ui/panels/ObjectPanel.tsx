@@ -2,7 +2,7 @@ import { normAngle, rectCorners, roundRect } from '../../core/geometry/rect';
 import { openProjectSettings } from '../../app/startPageNav';
 import { CONNECTION_LABEL } from '../../core/label';
 import { PASSAGE_TYPE_ID, typeMap } from '../../core/infra';
-import { STAND_SHAPES, type Area, type Connection, type EdgeIndex, type FestplatzPage, type InfraObject, type Stand } from '../../core/model/types';
+import { STAND_SHAPES, type Area, type Connection, type EdgeIndex, type FestplatzPage, type InfraObject, type ShapePart, type Stand, type StandShape } from '../../core/model/types';
 import { cachedDuplicates } from '../../core/numbering';
 import { SHAPE_LABEL } from '../../core/shape';
 import { feesOf, fmtEuro, hasPricing, sumFees, type Fee } from '../../core/fee';
@@ -12,7 +12,10 @@ import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, fmtGap
 import { Icon } from '../icons/Icon';
 import { tip } from '../shortcuts/tip';
 import { setNrLocked } from '../../state/numbering';
-import { setStandShape } from '../../state/shapes';
+import { dissolveStandOnPage, mergeStandsOnPage, setFrontOverride, setStandParts, setStandShape } from '../../state/shapes';
+import { autoFrontMeters, hasOwnForm, occupancyStands, occupiesParts, pageStands } from '../../core/footprint';
+import { standPartsInMeters } from '../../core/compound';
+import { newPart } from '../startpage/ShapeTemplates';
 import { setAreaFront, setInfraType, setLabelOffset, setRectField, setWarningIgnored, updateArea, updateInfra, updateStands, type WarningKind } from '../../state/objects';
 import { useStore } from '../../state/store';
 import { ColorField } from './ColorField';
@@ -43,6 +46,17 @@ export function ObjectPanel({ sel }: { sel: SelectionInfo }) {
         {areas.length === 1 && single && <AreaFields pageId={page.id} area={areas[0]!} />}
         {stands.length > 0 && kinds === 1 && <StandWarnings page={page} stands={stands} />}
         {stands.length > 0 && kinds === 1 && <StandFields pageId={page.id} stands={stands} />}
+        {stands.length > 1 && kinds === 1 && (
+          <button
+            type="button"
+            className="btn"
+            data-testid="merge-stands"
+            onClick={() => mergeStandsOnPage(page.id, stands.map((x) => x.id))}
+            {...tip({ label: 'Zu einem Stand zusammenfassen', desc: 'Ein Stand mit eigener Form; Nummer, Name und Strom kommen vom größten Stand', ariaLabel: false })}
+          >
+            Zu einem Stand zusammenfassen
+          </button>
+        )}
         {onlyInfra && <InfraWarnings page={page} objects={infra} />}
         {onlyInfra && <InfraFields pageId={page.id} objects={infra} />}
         <GeometryFields pageId={page.id} sel={sel} />
@@ -136,12 +150,15 @@ const SUPPRESS: Record<WarningKind, 'suppressOutsideWarning' | 'suppressOverlapW
 function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] }) {
   const settings = useStore((s) => s.project.settings);
   const pages = useStore((s) => s.project.pages);
-  const w = cachedPageWarnings(outsideRef(page), page.stands);
+  const shapeTemplates = useStore((s) => s.project.shapeTemplates);
+  // Stände, wie sie belegen (#16)
+  const calc = pageStands(page, shapeTemplates);
+  const w = cachedPageWarnings(outsideRef(page), calc);
   const infraTypes = useStore((s) => s.project.infraTypes);
-  const iw = cachedInfraWarnings(page, infraTypes, settings.minPassageWidth);
+  const iw = cachedInfraWarnings({ stands: calc, infra: page.infra }, infraTypes, settings.minPassageWidth);
   const dups = cachedDuplicates(pages, settings.numbering.scope);
   const categories = useStore((s) => s.project.categories);
-  const dw = cachedDistanceWarnings(page.stands, categories);
+  const dw = cachedDistanceWarnings(calc, categories);
   const byId = new Map(page.stands.map((s) => [s.id, s]));
   const outside = stands.filter((s) => w.byStand.get(s.id)?.outside);
   const overlap = stands.filter((s) => w.byStand.get(s.id)?.overlaps.length);
@@ -265,6 +282,10 @@ const MIXED = '__mixed';
 
 function StandFields({ pageId, stands }: { pageId: string; stands: Stand[] }) {
   const categories = useStore((s) => s.project.categories);
+  const shapeTemplates = useStore((s) => s.project.shapeTemplates);
+  // Stände, wie sie belegen (#16): Vorlagen mit „belegt wie gezeichnet“ eingesetzt
+  const calc = occupancyStands(stands, shapeTemplates) as Stand[];
+  const occupying = calc.every((s) => occupiesParts(s));
   const ids = stands.map((s) => s.id);
   const single = stands.length === 1;
   const text = (key: 'name' | 'owner' | 'ware' | 'note') => common(stands.map((s) => s[key]));
@@ -294,6 +315,8 @@ function StandFields({ pageId, stands }: { pageId: string; stands: Stand[] }) {
         </div>
       </div>
       <ShapeField pageId={pageId} stands={stands} />
+      {single && hasOwnForm(stands[0]!) && <StandPartsFields pageId={pageId} stand={stands[0]!} />}
+      {occupying && <FrontField pageId={pageId} stands={calc} />}
       <div className="field">
         <label htmlFor="st-cat">Kategorie</label>
         <select id="st-cat" value={cat ?? MIXED} onChange={(e) => set({ categoryId: e.target.value || null }, 'Kategorie zuordnen')}>
@@ -315,7 +338,7 @@ function StandFields({ pageId, stands }: { pageId: string; stands: Stand[] }) {
           </p>
         )}
       </div>
-      <FeeInfo stands={stands} />
+      <FeeInfo stands={calc} />
       {stands.some((s) => s.labelOffset) && (
         <button
           type="button"
@@ -381,19 +404,24 @@ function FeeInfo({ stands }: { stands: Stand[] }) {
   );
 }
 
-/** Wert im Feld „Form“: Grundform oder `tpl:<ID>` (Vorlage). */
-const shapeValue = (s: Stand) => (s.shapeTemplateId ? `tpl:${s.shapeTemplateId}` : s.shape);
+/** Wert im Feld „Form“: Grundform, `tpl:<ID>` (Vorlage) oder `own` (eigene Form, #16). */
+const OWN = 'own';
+const shapeValue = (s: Stand) => (s.parts?.length ? OWN : s.shapeTemplateId ? `tpl:${s.shapeTemplateId}` : s.shape);
 
 /**
- * Form der Stände (M12, spec.md §3 „Form“): Rechteck, Kreis/Oval oder eine Formvorlage. Nur Darstellung; gerechnet
- * wird mit dem Rechteck B × T. Eine Vorlage übernimmt ihr Vorschlagsmaß.
+ * Form der Stände (M12, spec.md §3 „Form“): Rechteck, Kreis/Oval, eigene Form (#16) oder eine Formvorlage. Eine eigene
+ * Form und eine Vorlage mit „belegt wie gezeichnet“ belegen mit ihren Teilen, sonst wird mit dem Rechteck B × T
+ * gerechnet. Eine Vorlage übernimmt ihr Vorschlagsmaß.
  */
 function ShapeField({ pageId, stands }: { pageId: string; stands: Stand[] }) {
   const templates = useStore((s) => s.project.shapeTemplates);
   const value = common(stands.map(shapeValue));
   const ids = stands.map((s) => s.id);
   const sorted = templates.toSorted((a, b) => a.name.localeCompare(b.name, 'de'));
-  const onChange = (v: string) => setStandShape(pageId, ids, v.startsWith('tpl:') ? { templateId: v.slice(4) } : { shape: v as Stand['shape'] });
+  const onChange = (v: string) =>
+    setStandShape(pageId, ids, v === OWN ? { own: true } : v.startsWith('tpl:') ? { templateId: v.slice(4) } : { shape: v as Stand['shape'] });
+  const tpl = value?.startsWith('tpl:') ? templates.find((t) => t.id === value.slice(4)) : undefined;
+  const occupies = value === OWN || !!tpl?.occupies;
   return (
     <div className="field">
       <label htmlFor="st-shape">Form</label>
@@ -404,6 +432,7 @@ function ShapeField({ pageId, stands }: { pageId: string; stands: Stand[] }) {
             {SHAPE_LABEL[k]}
           </option>
         ))}
+        <option value={OWN}>Eigene Form</option>
         {sorted.length > 0 && (
           <optgroup label="Formvorlagen">
             {sorted.map((t) => (
@@ -414,8 +443,14 @@ function ShapeField({ pageId, stands }: { pageId: string; stands: Stand[] }) {
           </optgroup>
         )}
       </select>
-      {value !== 'rect' && value !== null && <p className="hint">Belegung, Warnungen und Fang rechnen mit dem Rechteck B × T.</p>}
-      {!templates.length && (
+      {value !== 'rect' && value !== null && (
+        <p className="hint" data-testid="shape-hint">
+          {occupies
+            ? 'Belegt wie gezeichnet: Freiflächen, Warnungen, Treffer, Fang und Frontmeter rechnen mit den Teilen.'
+            : 'Belegung, Warnungen und Fang rechnen mit dem Rechteck B × T.'}
+        </p>
+      )}
+      {!templates.length && value !== OWN && (
         <p className="hint">
           Formvorlagen legst du in den{' '}
           <button type="button" className="link-btn" onClick={() => openProjectSettings()}>
@@ -425,6 +460,99 @@ function ShapeField({ pageId, stands }: { pageId: string; stands: Stand[] }) {
         </p>
       )}
     </div>
+  );
+}
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * Teile der eigenen Form eines Stands (#16): Art, X/Y (linke obere Ecke ab der linken oberen Ecke von B × T, vor der
+ * Drehung), Breite, Tiefe und Drehung je Teil. Jede Eingabe ist ein Undo-Schritt; B × T passt sich an, die übrigen
+ * Teile bleiben auf dem Plan an ihrem Platz. Dazu „Teil hinzufügen“ und „Form auflösen“.
+ */
+function StandPartsFields({ pageId, stand }: { pageId: string; stand: Stand }) {
+  const parts = standPartsInMeters(stand);
+  const set = (i: number, patch: Partial<ShapePart>) => setStandParts(pageId, stand.id, parts.map((p, k) => (k === i ? { ...p, ...patch } : p)));
+  return (
+    <div className="field stand-parts" data-testid="stand-parts">
+      <label>Teile der Form</label>
+      {parts.map((p, i) => (
+        <div key={i} className="stand-part-row" data-testid="stand-part">
+          <div className="stand-part-head">
+            <select aria-label={`Art von Teil ${i + 1}`} value={p.kind} onChange={(e) => set(i, { kind: e.target.value as StandShape })}>
+              {STAND_SHAPES.map((k) => (
+                <option key={k} value={k}>
+                  {SHAPE_LABEL[k]}
+                </option>
+              ))}
+            </select>
+            <span className="hint grow">Teil {i + 1}</span>
+            <button
+              type="button"
+              className="icon-btn"
+              disabled={parts.length === 1}
+              onClick={() => setStandParts(pageId, stand.id, parts.filter((_, k) => k !== i), 'Teil entfernen')}
+              {...tip({ label: `Teil ${i + 1} entfernen`, side: 'top' })}
+            >
+              <Icon name="delete" size={16} />
+            </button>
+          </div>
+          <div className="fields-3">
+            <NumberField id={`sp-x-${i}`} label={`X von Teil ${i + 1}`} unit="m" value={round2(p.x)} min={-1000} max={1000} step={0.5} onCommit={(x) => set(i, { x })} />
+            <NumberField id={`sp-y-${i}`} label={`Y von Teil ${i + 1}`} unit="m" value={round2(p.y)} min={-1000} max={1000} step={0.5} onCommit={(y) => set(i, { y })} />
+            <NumberField id={`sp-rot-${i}`} label={`Drehung von Teil ${i + 1}`} unit="°" value={round1(p.rot)} min={-360} max={360} step={1} digits={1} onCommit={(rot) => set(i, { rot })} />
+          </div>
+          <div className="fields-2">
+            <NumberField id={`sp-w-${i}`} label={`Breite von Teil ${i + 1}`} unit="m" value={round2(p.w)} min={0.1} max={100} step={0.5} onCommit={(w) => set(i, { w })} />
+            <NumberField id={`sp-h-${i}`} label={`Tiefe von Teil ${i + 1}`} unit="m" value={round2(p.h)} min={0.1} max={100} step={0.5} onCommit={(h) => set(i, { h })} />
+          </div>
+        </div>
+      ))}
+      <div className="stand-part-actions">
+        <button type="button" className="btn" data-testid="stand-part-add" onClick={() => setStandParts(pageId, stand.id, [...parts, newPart(parts)], 'Teil hinzufügen')}>
+          Teil hinzufügen
+        </button>
+        <button
+          type="button"
+          className="btn"
+          data-testid="dissolve-stand"
+          disabled={parts.length < 2}
+          onClick={() => dissolveStandOnPage(pageId, stand.id)}
+          {...tip({ label: 'Form auflösen', desc: 'Jeder Teil wird ein eigener Stand; der größte behält die Daten', ariaLabel: false })}
+        >
+          Form auflösen
+        </button>
+      </div>
+      <p className="hint">
+        X/Y: linke obere Ecke des Teils ab der linken oberen Ecke von B × T (vor der Drehung), die Vorderseite liegt unten. Auf der Zeichenfläche:
+        Teil anklicken, dann ziehen oder an seinen Griffen ändern.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Frontmeter fürs Standgeld (#16), nur bei Belegung wie gezeichnet: leer = automatisch die belegte Länge an der
+ * Vorderseite (als Platzhalter angezeigt), sonst der eingegebene Wert.
+ */
+function FrontField({ pageId, stands }: { pageId: string; stands: Stand[] }) {
+  const ids = stands.map((s) => s.id);
+  const override = common(stands.map((s) => s.frontOverride));
+  const auto = common(stands.map((s) => autoFrontMeters(s)));
+  return (
+    <NumberField
+      id="st-front"
+      label="Frontmeter"
+      unit="m"
+      value={override}
+      min={0}
+      max={1000}
+      step={0.5}
+      placeholder={auto !== null ? `automatisch ${fmtInput(auto)}` : 'automatisch'}
+      onCommit={(v) => setFrontOverride(pageId, ids, v)}
+      onClear={() => setFrontOverride(pageId, ids, null)}
+    />
   );
 }
 

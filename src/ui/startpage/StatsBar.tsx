@@ -25,8 +25,12 @@ export function StatsBar() {
   const settings = useStore((s) => s.project.settings);
   const infraTypes = useStore((s) => s.project.infraTypes);
   const categories = useStore((s) => s.project.categories);
+  const shapeTemplates = useStore((s) => s.project.shapeTemplates);
   const setUi = useStore((s) => s.setUi);
-  const stats = useMemo(() => projectStats({ pages, settings, infraTypes, categories }, freeOf(settings.minFreeWidth, infraTypes)), [pages, settings, infraTypes, categories]);
+  const stats = useMemo(
+    () => projectStats({ pages, settings, infraTypes, categories, shapeTemplates }, freeOf(settings.minFreeWidth, infraTypes, shapeTemplates)),
+    [pages, settings, infraTypes, categories, shapeTemplates],
+  );
   const t = stats.total;
   const withFee = hasPricing(settings.pricing, categories);
   return (

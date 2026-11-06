@@ -21,6 +21,7 @@ import { PAPER_HATCH_MM } from './paperStyle';
 import type { Prim } from './prims';
 import { resolveStandColor } from '../objects';
 import { templateOf } from '../shape';
+import { pageStands } from '../footprint';
 
 export const SCENE_ORDER = ['grid', 'areas', 'free', 'stands', 'infra', 'warnings', 'labels'] as const;
 export type SceneLayerId = (typeof SCENE_ORDER)[number];
@@ -58,7 +59,7 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
   const settings = project.settings;
   const fontSize = settings.labelFontSize;
   const mSize = markerSize(fontSize);
-  const free = L.areas && L.free ? pageFree(page, { minFreeWidth: settings.minFreeWidth, infraTypes: project.infraTypes }) : [];
+  const free = L.areas && L.free ? pageFree(page, { minFreeWidth: settings.minFreeWidth, infraTypes: project.infraTypes, shapeTemplates: project.shapeTemplates }) : [];
   const freeShown = free.some((a) => a.free.length > 0);
   const pp = pagePaper(page, project, profileLayers(profile), freeShown);
   const frame = pp.frame;
@@ -74,10 +75,12 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
 
   // Warnungen nach Profil: „alle“ wie auf der Zeichenfläche, „Rettungswege“ nur Freihaltefläche und Durchfahrt
   const mode = profile.warnings;
-  const pw = cachedPageWarnings(outsideRef(page), page.stands);
-  const iw = cachedInfraWarnings(page, project.infraTypes, settings.minPassageWidth);
+  // Stände, wie sie belegen (#16): Vorlagen mit „belegt wie gezeichnet“ eingesetzt
+  const calc = pageStands(page, project.shapeTemplates);
+  const pw = cachedPageWarnings(outsideRef(page), calc);
+  const iw = cachedInfraWarnings({ stands: calc, infra: page.infra }, project.infraTypes, settings.minPassageWidth);
   const dups = mode === 'all' ? cachedDuplicates(project.pages, settings.numbering.scope) : null;
-  const dw = mode === 'all' ? cachedDistanceWarnings(page.stands, project.categories) : null;
+  const dw = mode === 'all' ? cachedDistanceWarnings(calc, project.categories) : null;
   const kinds = new Map<string, WarnKind>(
     stands.map((s) => {
       if (mode === 'none') return [s.id, null];
@@ -124,7 +127,7 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
     if (L.stands) {
       // Platziert wird auf der ganzen Page, damit Beschriftungen am Blattrand denselben Platz haben wie auf der Zeichenfläche
       const blocked = L.areas ? pageAreas.map((a) => areaLabelBounds(a, fontSize)) : [];
-      const placed = cachedStandLabels({ stands: page.stands, areas: pageAreas, infra: page.infra, template: settings.labelTemplate, fontSize, categories: project.categories, blank, blocked });
+      const placed = cachedStandLabels({ stands: calc, areas: pageAreas, infra: page.infra, template: settings.labelTemplate, fontSize, categories: project.categories, blank, blocked });
       for (const s of stands) {
         const p = placed.get(s.id);
         if (p) labels.push(...standLabelPrims(p, fontSize));

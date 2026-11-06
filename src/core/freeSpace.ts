@@ -14,7 +14,8 @@ import { AXIS_END, AXIS_START, mergeIntervals, subtractIntervals, type Gap, type
 import { boundsTouch, centroid, clipConvex, penetration, polygonArea, projectOn, rectGeo, subtractAll, thickness, type Polygon } from './geometry/polygon';
 import { exceedsTol, greaterThan, lessThan, TOL, withinTol } from './geometry/tolerance';
 import { fromFrame, frontFrame, type FrontFrame } from './geometry/rect';
-import type { Area, Id, Rect, Vec } from './model/types';
+import { footprint, type PartsRect } from './footprint';
+import type { Area, Id, Vec } from './model/types';
 
 /** Fachliche Toleranz (siehe geometry/tolerance.ts), hier weitergereicht für bestehende Importe. */
 export { TOL };
@@ -22,7 +23,7 @@ export { TOL };
 /** Grenzen der Mindestbreite (immer größer als TOL). */
 export const MIN_FREE_WIDTH = { min: 0.05, max: 100 };
 
-type StandLike = Rect & { id: Id };
+type StandLike = PartsRect & { id: Id };
 
 export interface FreeSpace {
   /** Stabiler Schlüssel `areaId|links|rechts[#k]` (siehe `freeSpaceKey`). */
@@ -65,12 +66,15 @@ export function earlierOverlaps(area: Area, earlier: readonly Area[]): Polygon[]
 /**
  * BELEGTES INTERVALL eines Stands auf der Achse einer Grundfläche, oder null.
  * `cutters` = Polygone früherer Grundflächen, deren Teil nicht zu dieser Fläche gehört.
+ * Ein Stand mit Teilen (#16) belegt die Projektion seiner Teile innerhalb der Fläche (Hüllintervall); Teile, die die
+ * Fläche nicht erreichen (z. B. zurückgesetzte Ausleger bei einer flachen Fläche), belegen nichts.
  */
-export function occupiedInterval(area: Area, f: FrontFrame, stand: Rect, cutters: readonly Polygon[] = []): [number, number] | null {
+export function occupiedInterval(area: Area, f: FrontFrame, stand: PartsRect, cutters: readonly Polygon[] = []): [number, number] | null {
   const ap = rectGeo(area).poly;
-  const sp = rectGeo(stand).poly;
-  if (withinTol(penetration(sp, ap))) return null;
-  let pieces: Polygon[] = [clipConvex(sp, ap)].filter((p) => p.length >= 3);
+  // Belegung wie gezeichnet (#16): nur die Teile, die mehr als TOL hineinragen; sonst das Rechteck
+  const sp = footprint(stand).polys.filter((p) => exceedsTol(penetration(p, ap)));
+  if (!sp.length) return null;
+  let pieces: Polygon[] = sp.map((p) => clipConvex(p, ap)).filter((p) => p.length >= 3);
   if (cutters.length) pieces = subtractAll(pieces, cutters).filter((p) => exceedsTol(thickness(p)));
   if (!pieces.length) return null;
   let lo = Infinity;
@@ -202,7 +206,7 @@ export function pageFreeSpaces(areas: readonly Area[], stands: readonly StandLik
   const seen = new Set<Id>();
   areas.forEach((area, i) => {
     const b = rectGeo(area).bounds;
-    const near = stands.filter((s) => boundsTouch(b, rectGeo(s).bounds));
+    const near = stands.filter((s) => boundsTouch(b, footprint(s).bounds));
     const earlier = areas.slice(0, i).filter((e) => boundsTouch(b, rectGeo(e).bounds));
     const hit = cache.entries.get(area.id);
     let result: AreaFreeSpaces;

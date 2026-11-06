@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { runCommand } from '../../app/commands';
 import { setInteractionKeyHandler } from '../../app/keyboard';
 import { effectivePage } from '../../core/derive';
+import { occupancyStands, snapRects } from '../../core/footprint';
 import { createFreeSpaceCache, pageFreeSpaces, type FreeSpace } from '../../core/freeSpace';
 import { applyHidden, pickFreeSpace } from '../../core/hiddenFree';
 import { pickObject } from '../../core/hit';
@@ -9,7 +10,7 @@ import { cachedStandLabels } from '../../core/labelLayout';
 import { areaLabelBounds } from '../../core/scene/objects';
 import { markerSize, pageOccupants, typeMap } from '../../core/infra';
 import { fmt } from '../../core/format';
-import type { FestplatzPage, Id, Rect, Vec, View } from '../../core/model/types';
+import type { FestplatzPage, Id, Rect, Stand, Vec, View } from '../../core/model/types';
 import { findSnap, rectSnapSource } from '../../core/snap';
 import { defaultView, fitBounds, focusBounds, screenToWorld, worldToScreen, zoomAt, type Bounds } from '../../core/viewport';
 import { cachedDuplicates } from '../../core/numbering';
@@ -147,10 +148,17 @@ interface PanDrag {
  */
 export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const preview = useStore((s) => s.preview);
-  const page = useMemo(() => effectivePage(storedPage, preview), [storedPage, preview]);
+  const shapeTemplates = useStore((s) => s.project.shapeTemplates);
+  // Page mit Vorschau; Stände, wie sie belegen (#16: Vorlagen mit „belegt wie gezeichnet“ als Teile eingesetzt).
+  // Alle Rechnungen (Freiflächen, Warnungen, Treffer, Fang) und die Zeichnung lesen diese Sicht.
+  const page = useMemo(() => {
+    const e = effectivePage(storedPage, preview);
+    const stands = occupancyStands(e.stands, shapeTemplates);
+    return stands === e.stands ? e : { ...e, stands: stands as Stand[] };
+  }, [storedPage, preview, shapeTemplates]);
+  const baseStands = occupancyStands(storedPage.stands, shapeTemplates) as Stand[];
   const categories = useStore((s) => s.project.categories);
   const defaultStandColor = useStore((s) => s.project.settings.defaultStandColor);
-  const shapeTemplates = useStore((s) => s.project.shapeTemplates);
   const labelTemplate = useStore((s) => s.project.settings.labelTemplate);
   const labelFontSize = useStore((s) => s.project.settings.labelFontSize);
   const minFreeWidth = useStore((s) => s.project.settings.minFreeWidth);
@@ -161,8 +169,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const areasLabelled = storedPage.layers.areas.visible;
   const areaLabelBoxes = useMemo(() => (areasLabelled ? storedAreas.map((a) => areaLabelBounds(a, labelFontSize)) : []), [areasLabelled, storedAreas, labelFontSize]);
   const standLabels = useMemo(
-    () => cachedStandLabels({ stands: storedPage.stands, areas: storedAreas, infra: storedPage.infra, template: labelTemplate, fontSize: labelFontSize, categories, blocked: areaLabelBoxes }),
-    [storedPage.stands, storedAreas, storedPage.infra, labelTemplate, labelFontSize, categories, areaLabelBoxes],
+    () => cachedStandLabels({ stands: baseStands, areas: storedAreas, infra: storedPage.infra, template: labelTemplate, fontSize: labelFontSize, categories, blocked: areaLabelBoxes }),
+    [baseStands, storedAreas, storedPage.infra, labelTemplate, labelFontSize, categories, areaLabelBoxes],
   );
   const warnOutside = useStore((s) => s.project.settings.warnOutside);
   const warnOverlap = useStore((s) => s.project.settings.warnOverlap);
@@ -199,8 +207,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const titleFields = useStore((s) => s.project.titleBlock);
   const freeShown = free.some((a) => a.free.length > 0);
   const paper = useMemo(
-    () => pagePaper(page, { name: projectName, categories, infraTypes, titleBlock: titleFields, settings: { minFreeWidth, defaultStandColor } }, page.layers, freeShown),
-    [page, projectName, categories, infraTypes, titleFields, minFreeWidth, defaultStandColor, freeShown],
+    () => pagePaper(page, { name: projectName, categories, infraTypes, titleBlock: titleFields, shapeTemplates, settings: { minFreeWidth, defaultStandColor } }, page.layers, freeShown),
+    [page, projectName, categories, infraTypes, titleFields, shapeTemplates, minFreeWidth, defaultStandColor, freeShown],
   );
   const paperVisible = useMemo(
     () => ({ titleBlock: page.titleBlock.visible, legend: page.legend.visible, scaleBar: page.scaleBar.visible, northArrow: page.northArrow.visible }),
@@ -258,7 +266,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const snapSource = useMemo(() => {
     const rects: Rect[] = [];
     if (page.layers.areas.visible) rects.push(...areas);
-    if (page.layers.stands.visible) rects.push(...page.stands);
+    // Bei Belegung wie gezeichnet fangen die Kanten der Teile (#16)
+    if (page.layers.stands.visible) rects.push(...page.stands.flatMap(snapRects));
     if (page.layers.infra.visible) rects.push(...page.infra);
     return rectSnapSource(rects);
   }, [areas, page.stands, page.infra, page.layers]);
@@ -568,7 +577,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
             warnings={warnings}
             warnSettings={warnSettings}
             duplicates={duplicates}
-            baseStands={storedPage.stands}
+            baseStands={baseStands}
             labels={standLabels}
             movingIds={movingIds}
             infraTypes={typesById}
@@ -636,7 +645,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
 function snapSourceWithout(page: FestplatzPage, exclude: Id) {
   const rects: Rect[] = [];
   if (page.layers.areas.visible) rects.push(...activeAreas(page));
-  if (page.layers.stands.visible) rects.push(...page.stands);
+  if (page.layers.stands.visible) rects.push(...page.stands.filter((x) => x.id !== exclude).flatMap(snapRects));
   if (page.layers.infra.visible) rects.push(...page.infra.filter((o) => o.id !== exclude));
   return rectSnapSource(rects.filter((r) => (r as Rect & { id?: Id }).id !== exclude));
 }

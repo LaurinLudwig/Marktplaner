@@ -31,8 +31,8 @@ describe('standOutline', () => {
   });
 
   it('Vorlage: Teile werden auf B × T gestreckt; die Vorlage hat Vorrang vor der Grundform', () => {
-    const t: ShapeTemplate = { id: 't', name: 'T', w: 2, d: 2, parts: [{ kind: 'rect', x: 0, y: 0.5, w: 1, h: 0.5 }, { kind: 'ellipse', x: 0.25, y: 0, w: 0.5, h: 0.5 }] };
-    const polys = standOutline(stand({ shape: 'ellipse' }), t);
+    const t: ShapeTemplate = { id: 't', name: 'T', w: 2, d: 2, occupies: false, parts: [{ kind: 'rect', x: 0, y: 0.5, w: 1, h: 0.5, rot: 0 }, { kind: 'ellipse', x: 0.25, y: 0, w: 0.5, h: 0.5, rot: 0 }] };
+    const polys = standOutline(stand({ shape: 'ellipse' }), t.parts);
     expect(polys).toHaveLength(2);
     expect(polys[0]).toEqual([{ x: 7, y: 20 }, { x: 13, y: 20 }, { x: 13, y: 22 }, { x: 7, y: 22 }]);
     const xs = polys[1]!.map((p) => p.x);
@@ -72,8 +72,8 @@ describe('unionOutline', () => {
   });
 
   it('Kreis auf Rechteck (Karussell mit Kasse): Kreis-Abschnitt im Rechteck entfällt', () => {
-    const t: ShapeTemplate = { id: 't', name: 'T', w: 1, d: 1, parts: [{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 1 }, { kind: 'rect', x: 0.4, y: 0.5, w: 0.2, h: 0.5 }] };
-    const polys = standOutline({ cx: 0, cy: 0, w: 10, d: 10, rot: 17, shape: 'rect' }, t);
+    const t: ShapeTemplate = { id: 't', name: 'T', w: 1, d: 1, occupies: false, parts: [{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 1, rot: 0 }, { kind: 'rect', x: 0.4, y: 0.5, w: 0.2, h: 0.5, rot: 0 }] };
+    const polys = standOutline({ cx: 0, cy: 0, w: 10, d: 10, rot: 17, shape: 'rect' }, t.parts);
     const segs = unionOutline(polys);
     const s = { cx: 0, cy: 0, w: 10, d: 10, rot: 17 };
     for (const [a, b] of segs) {
@@ -88,17 +88,18 @@ describe('unionOutline', () => {
 
 describe('normalizeParts', () => {
   it('Teile in Metern → relativ zum Hüllrechteck; Vorschlagsmaß = Hüllrechteck; Rückweg über partsInMeters', () => {
-    const n = normalizeParts([{ kind: 'ellipse', x: 1, y: 1, w: 8, h: 8 }, { kind: 'rect', x: 3, y: 7, w: 4, h: 4 }])!;
+    const n = normalizeParts([{ kind: 'ellipse', x: 1, y: 1, w: 8, h: 8, rot: 0 }, { kind: 'rect', x: 3, y: 7, w: 4, h: 4, rot: 0 }])!;
     expect(n.w).toBe(8);
     expect(n.d).toBe(10);
-    expect(n.parts).toEqual([{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 0.8 }, { kind: 'rect', x: 0.25, y: 0.6, w: 0.5, h: 0.4 }]);
-    expect(partsInMeters(n)).toEqual([{ kind: 'ellipse', x: 0, y: 0, w: 8, h: 8 }, { kind: 'rect', x: 2, y: 6, w: 4, h: 4 }]);
+    expect([n.x0, n.y0]).toEqual([1, 1]);
+    expect(n.parts).toEqual([{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 0.8, rot: 0 }, { kind: 'rect', x: 0.25, y: 0.6, w: 0.5, h: 0.4, rot: 0 }]);
+    expect(partsInMeters(n)).toEqual([{ kind: 'ellipse', x: 0, y: 0, w: 8, h: 8, rot: 0 }, { kind: 'rect', x: 2, y: 6, w: 4, h: 4, rot: 0 }]);
   });
 
   it('ohne brauchbares Teil null; unbrauchbare Teile entfallen', () => {
     expect(normalizeParts([])).toBeNull();
-    expect(normalizeParts([{ kind: 'rect', x: 0, y: 0, w: 0, h: 1 }])).toBeNull();
-    expect(normalizeParts([{ kind: 'rect', x: 0, y: 0, w: 2, h: 1 }, { kind: 'rect', x: NaN, y: 0, w: 1, h: 1 }])!.parts).toHaveLength(1);
+    expect(normalizeParts([{ kind: 'rect', x: 0, y: 0, w: 0, h: 1, rot: 0 }])).toBeNull();
+    expect(normalizeParts([{ kind: 'rect', x: 0, y: 0, w: 2, h: 1, rot: 0 }, { kind: 'rect', x: NaN, y: 0, w: 1, h: 1, rot: 0 }])!.parts).toHaveLength(1);
   });
 });
 
@@ -109,7 +110,7 @@ describe('shapePaths (Bögen statt Vielecke)', () => {
       const n = args!.trim().split(/[\s,]+/).map(Number);
       return c === 'A' ? { x: n[5]!, y: n[6]! } : { x: n[0]!, y: n[1]! };
     });
-  const tpl = (parts: ShapeTemplate['parts']): ShapeTemplate => ({ id: 't', name: 'T', w: 1, d: 1, parts });
+  const tpl = (parts: ShapeTemplate['parts']) => parts;
 
   it('Kreis/Oval: geschlossener Pfad aus vier Bögen auf der Ellipse, gedreht', () => {
     const s = stand({ shape: 'ellipse', rot: 30 });
@@ -126,7 +127,7 @@ describe('shapePaths (Bögen statt Vielecke)', () => {
 
   it('Rechteck links über dem Kreis: der Bogen läuft über den Startwinkel hinweg als ein Zug, kein Stück im Rechteck', () => {
     // Kreis 0 … 1, Rechteck x −0,2 … 0,3 mittig: schneidet den Kreis links (Winkel π)
-    const t = tpl([{ kind: 'ellipse', x: 0.2, y: 0, w: 0.8, h: 1 }, { kind: 'rect', x: 0, y: 0.3, w: 0.4, h: 0.4 }]);
+    const t = tpl([{ kind: 'ellipse', x: 0.2, y: 0, w: 0.8, h: 1, rot: 0 }, { kind: 'rect', x: 0, y: 0.3, w: 0.4, h: 0.4, rot: 0 }]);
     const s = { cx: 0, cy: 0, w: 10, d: 10, rot: 0, shape: 'rect' as const };
     const { outline } = shapePaths(s, t);
     expect(outline.match(/M/g)).toHaveLength(2);
@@ -137,7 +138,7 @@ describe('shapePaths (Bögen statt Vielecke)', () => {
   });
 
   it('Kreis ganz im Rechteck: keine Bögen in der Kontur', () => {
-    const t = tpl([{ kind: 'rect', x: 0, y: 0, w: 1, h: 1 }, { kind: 'ellipse', x: 0.25, y: 0.25, w: 0.5, h: 0.5 }]);
+    const t = tpl([{ kind: 'rect', x: 0, y: 0, w: 1, h: 1, rot: 0 }, { kind: 'ellipse', x: 0.25, y: 0.25, w: 0.5, h: 0.5, rot: 0 }]);
     const { fill, outline } = shapePaths({ cx: 0, cy: 0, w: 4, d: 4, rot: 0, shape: 'rect' }, t);
     expect(fill.match(/A/g)).toHaveLength(4);
     expect(outline).not.toContain('A');
@@ -145,7 +146,7 @@ describe('shapePaths (Bögen statt Vielecke)', () => {
   });
 
   it('Vorlage aus einem Kreis: ganze Ellipse als Kontur', () => {
-    const { outline } = shapePaths({ cx: 0, cy: 0, w: 4, d: 2, rot: 0, shape: 'rect' }, tpl([{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 1 }]));
+    const { outline } = shapePaths({ cx: 0, cy: 0, w: 4, d: 2, rot: 0, shape: 'rect' }, tpl([{ kind: 'ellipse', x: 0, y: 0, w: 1, h: 1, rot: 0 }]));
     expect(outline.match(/A/g)).toHaveLength(4);
     expect(outline.endsWith('Z')).toBe(true);
   });

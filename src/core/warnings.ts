@@ -7,13 +7,16 @@
  * - Infrastruktur (M7): Stand in einem Objekt mit „freihalten“ (core/infra.ts, `infraConflicts`).
  * - Durchfahrt zu eng (M7): hängt am Infrastruktur-Objekt, nicht am Stand.
  * - Abstand (#3): Stand derselben Kategorie näher als deren Mindestabstand (Kante zu Kante, `distanceConflicts`).
+ * Stände mit eigener Form oder einer Vorlage mit „belegt wie gezeichnet“ rechnen mit ihren Teilen (#16, footprint.ts);
+ * die Aufrufer übergeben die Stände deshalb über `pageStands`.
  * Die Rohdaten hängen nur von der Geometrie ab; ob eine Warnung angezeigt wird, entscheiden die
  * Projekteinstellungen und die Häkchen am Stand (`activeWarnings`).
  */
-import { boundsTouch, clipConvex, dilateRect, distToRect, penetration, rectGap, rectGeo, subtractAll, type Polygon } from './geometry/polygon';
+import { boundsTouch, clipConvex, dilateRect, distToRect, penetration, rectGeo, subtractAll, type Polygon } from './geometry/polygon';
+import { footprint, footprintGap, overlapPolygons } from './footprint';
 import { exceedsTol, greaterThan, lessThan, TOL, withinTol } from './geometry/tolerance';
 import { infraConflicts, passageTooNarrow, typeMap } from './infra';
-import type { Area, Category, FestplatzPage, Id, InfraObject, InfraTypeDef, ProjectSettings, Stand, Vec } from './model/types';
+import type { Area, Category, Id, InfraObject, InfraTypeDef, ProjectSettings, Stand, Vec } from './model/types';
 
 export interface StandWarning {
   outside: boolean;
@@ -34,25 +37,34 @@ export interface PageWarnings {
 
 /**
  * Liegt ein Teil des Stands mehr als TOL außerhalb der Vereinigung der Grundflächen (QA-M4-02)?
- * Gemessen wird der echte Abstand, auch für schräg herausragende Ecken gedrehter Stände.
+ * Gemessen wird der echte Abstand, auch für schräg herausragende Ecken gedrehter Stände. Bei Belegung wie gezeichnet
+ * (#16) wird jeder Teil einzeln geprüft, sonst das Rechteck:
  * 1. Alle Ecken höchstens TOL von derselben Grundfläche entfernt → innerhalb (Rechteck aufgeweitet ist konvex).
  * 2. Eine Ecke mehr als TOL von allen Grundflächen entfernt → außerhalb.
- * 3. Sonst genau: Stand minus alle um TOL aufgeweiteten Grundflächen; bleibt etwas übrig → außerhalb.
+ * 3. Sonst genau: Teil minus alle um TOL aufgeweiteten Grundflächen; bleibt etwas übrig → außerhalb.
  * `areas` = null: Page ohne Grundflächen (#17), kein Stand ist außerhalb.
  */
 export function isOutside(stand: Stand, areas: readonly Area[] | null): boolean {
   if (areas === null) return false;
-  const { poly, bounds } = rectGeo(stand);
+  const { polys, bounds } = footprint(stand);
   const near = areas.filter((a) => boundsTouch(bounds, rectGeo(a).bounds, TOL));
   if (!near.length) return true;
+  return polys.some((poly) => polyOutside(poly, near));
+}
+
+function polyOutside(poly: Polygon, near: readonly Area[]): boolean {
   if (near.some((a) => poly.every((p) => withinTol(distToRect(a, p))))) return false;
   if (poly.some((p) => near.every((a) => exceedsTol(distToRect(a, p))))) return true;
   return subtractAll([poly], near.map((a) => dilateRect(a, TOL))).length > 0;
 }
 
-/** Paare sich überschneidender Stände (Sweep über die Hüllrechtecke, genau per SAT). */
+/**
+ * Paare sich überschneidender Stände (Sweep über die Hüllrechtecke, genau per SAT). Bei Belegung wie gezeichnet (#16)
+ * zählen nur die Teile; je überschneidendem Paar von Teilen ein Eintrag (ein Paar von Ständen kann also mehrfach
+ * vorkommen).
+ */
 export function overlappingPairs(stands: readonly Stand[]): OverlapRegion[] {
-  const items = stands.map((s) => ({ s, g: rectGeo(s) })).toSorted((p, q) => p.g.bounds.minX - q.g.bounds.minX);
+  const items = stands.map((s) => ({ s, g: footprint(s) })).toSorted((p, q) => p.g.bounds.minX - q.g.bounds.minX);
   const out: OverlapRegion[] = [];
   for (let i = 0; i < items.length; i++) {
     const p = items[i]!;
@@ -60,10 +72,13 @@ export function overlappingPairs(stands: readonly Stand[]): OverlapRegion[] {
       const q = items[j]!;
       if (greaterThan(q.g.bounds.minX, p.g.bounds.maxX)) break;
       if (!boundsTouch(p.g.bounds, q.g.bounds)) continue;
-      if (exceedsTol(penetration(p.g.poly, q.g.poly))) {
-        const [a, b] = p.s.id < q.s.id ? [p.s.id, q.s.id] : [q.s.id, p.s.id];
-        out.push({ a, b, polygon: clipConvex(p.g.poly, q.g.poly) });
+      const [a, b] = p.s.id < q.s.id ? [p.s.id, q.s.id] : [q.s.id, p.s.id];
+      if (!p.g.parts && !q.g.parts) {
+        const [pp, qp] = [p.g.polys[0]!, q.g.polys[0]!];
+        if (exceedsTol(penetration(pp, qp))) out.push({ a, b, polygon: clipConvex(pp, qp) });
+        continue;
       }
+      for (const polygon of overlapPolygons(p.g.polys, q.g.polys)) out.push({ a, b, polygon });
     }
   }
   return out;
@@ -85,8 +100,11 @@ export function pageWarnings(areas: readonly Area[] | null, stands: readonly Sta
   }
   const regions = overlappingPairs(stands);
   for (const r of regions) {
-    byStand.get(r.a)?.overlaps.push(r.b);
-    byStand.get(r.b)?.overlaps.push(r.a);
+    const a = byStand.get(r.a);
+    const b = byStand.get(r.b);
+    // Mehrere überschneidende Teile desselben Paars (#16) zählen einmal
+    if (a && !a.overlaps.includes(r.b)) a.overlaps.push(r.b);
+    if (b && !b.overlaps.includes(r.a)) b.overlaps.push(r.a);
   }
   return { byStand, regions };
 }
@@ -136,8 +154,9 @@ export const NO_DISTANCE_WARNINGS: DistanceWarnings = new Map();
 
 /**
  * Konkurrenzschutz (#3): Paare von Ständen derselben Kategorie, deren kürzester Abstand Kante zu Kante (Hitbox B × T,
- * auch bei Formen; Luftlinie, auf 0,01 m gerundet) unter dem Mindestabstand der Kategorie liegt. Nur Kategorien mit
- * Mindestabstand; je Kategorie ein Sweep über die Hüllrechtecke wie bei `overlappingPairs`.
+ * auch bei Kreis/Oval und Vorlagen ohne „belegt wie gezeichnet“; bei Belegung wie gezeichnet zwischen den Teilen, #16;
+ * Luftlinie, auf 0,01 m gerundet) unter dem Mindestabstand der Kategorie liegt. Nur Kategorien mit Mindestabstand; je
+ * Kategorie ein Sweep über die Hüllrechtecke wie bei `overlappingPairs`.
  */
 export function distanceConflicts(stands: readonly Stand[], categories: readonly Category[]): Map<Id, DistanceConflict[]> {
   const out = new Map<Id, DistanceConflict[]>();
@@ -158,14 +177,14 @@ export function distanceConflicts(stands: readonly Stand[], categories: readonly
   for (const [catId, group] of groups) {
     if (group.length < 2) continue;
     const min = limit.get(catId)!;
-    const items = group.map((s) => ({ s, b: rectGeo(s).bounds })).toSorted((p, q) => p.b.minX - q.b.minX);
+    const items = group.map((s) => ({ s, b: footprint(s).bounds })).toSorted((p, q) => p.b.minX - q.b.minX);
     for (let i = 0; i < items.length; i++) {
       const p = items[i]!;
       for (let j = i + 1; j < items.length; j++) {
         const q = items[j]!;
         if (q.b.minX - p.b.maxX >= min) break;
         if (!boundsTouch(p.b, q.b, min)) continue;
-        const gap = rectGap(p.s, q.s);
+        const gap = footprintGap(p.s, q.s);
         const dist = Math.round(gap.dist * 100) / 100;
         if (!lessThan(dist, min)) continue;
         push(p.s.id, { id: q.s.id, dist, from: gap.from, to: gap.to });
@@ -202,7 +221,7 @@ export const NO_INFRA_WARNINGS: InfraWarnings = { byStand: new Map(), narrow: ne
 /** Zwischenspeicher je Liste der Stände; gültig, solange Objekte, Typen und Mindestbreite gleich sind. */
 const infraCache = new WeakMap<readonly Stand[], { infra: readonly InfraObject[]; types: readonly InfraTypeDef[]; min: number; result: InfraWarnings }>();
 
-export function cachedInfraWarnings(page: Pick<FestplatzPage, 'stands' | 'infra'>, types: readonly InfraTypeDef[], minPassageWidth: number): InfraWarnings {
+export function cachedInfraWarnings(page: { stands: readonly Stand[]; infra: readonly InfraObject[] }, types: readonly InfraTypeDef[], minPassageWidth: number): InfraWarnings {
   if (!page.infra.length) return NO_INFRA_WARNINGS;
   const hit = infraCache.get(page.stands);
   if (hit && hit.infra === page.infra && hit.types === types && hit.min === minPassageWidth) return hit.result;
