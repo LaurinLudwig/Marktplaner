@@ -3,15 +3,16 @@ import { dissolveStand, mergeStands, refitStand, standPartsInMeters } from './co
 import { standFee } from './fee';
 import { areaFreeSpaces } from './freeSpace';
 import { autoFrontMeters, footprint, footprintGap, frontMeters, labelRect, occupancyStands, pointInFootprint } from './footprint';
-import { toLocal } from './geometry/rect';
+import { fromLocal, toLocal } from './geometry/rect';
 import { pickObject } from './hit';
 import { infraConflicts } from './infra';
 import { labelBounds, layoutStandLabels } from './labelLayout';
-import { createPage } from './model/defaults';
+import { createPage, DEFAULT_SETTINGS } from './model/defaults';
 import type { Area, Category, InfraObject, InfraTypeDef, ShapePart, ShapeTemplate, Stand } from './model/types';
 import { createStand } from './objects';
 import { normalizeParts, partPolygon } from './shape';
 import { categoryFigures, sumFront } from './stats';
+import { standRows, sumRows } from './standTable';
 import { distanceConflicts, isOutside, pageWarnings } from './warnings';
 
 /**
@@ -316,5 +317,77 @@ describe('Eigene Form bearbeiten, zusammenfassen, auflösen', () => {
     // Zusammenfassen und wieder auflösen ergibt dieselben Rechtecke
     const again = mergeStands(pieces, new Map())!.stand;
     expect(again).toMatchObject({ cx: 0, cy: 0, w: 25, d: 12 });
+  });
+});
+
+describe('Prüfung #16: gedrehte Stände und Teile, Teile desselben Stands, PDF-Szene', () => {
+  /** Weltpunkt aus lokalen Koordinaten des Stands (Mitte 0/0, y nach unten). */
+  const at = (s: Stand, x: number, y: number) => fromLocal(s, { x, y });
+
+  it('Stand gedreht UND Teil gedreht: Treffer, freie Ecke, Frontmeter, Überlappung und Abstand unabhängig von der Drehung des Stands', () => {
+    // B-06, der rechte Ausleger zusätzlich um 90° gedreht (7 breit, 2,5 tief: ragt nicht mehr in die Ecken)
+    const parts: ShapePart[] = [B06_PARTS[0]!, B06_PARTS[1]!, { kind: 'rect', x: 0.9, y: 2.5 / 12, w: 0.1, h: 7 / 12, rot: 30 }];
+    for (const rot of [0, 30, 137.5, 270]) {
+      const s: Stand = { ...b06({ parts }), cx: 40, cy: -15, rot };
+      expect(autoFrontMeters(s)).toBe(20);
+      expect(pointInFootprint(s, at(s, CORNER.x, CORNER.y))).toBe(false);
+      expect(pointInFootprint(s, at(s, -11.25, 0))).toBe(true);
+      // Mitte des gedrehten Auslegers trifft, seine ungedrehte Ecke nicht mehr
+      expect(pointInFootprint(s, at(s, 11.25, 0))).toBe(true);
+      expect(pointInFootprint(s, at(s, 12.4, 3.4))).toBe(false);
+      // Nachbar (gleich gedreht) in der freien Ecke oben links: keine Überlappung, Abstand zu den Teilen
+      const c = at(s, CORNER.x, CORNER.y);
+      const n = box(c.x, c.y, 2.4, 2.4, rot);
+      expect(pageWarnings(null, [s, n]).regions).toEqual([]);
+      expect(footprintGap(s, n).dist).toBeCloseTo(0.05, 6);
+      // ein Nachbar im gedrehten Ausleger überlappt
+      const m = at(s, 11.25, 0);
+      expect(pageWarnings(null, [s, box(m.x, m.y, 1, 1, rot)]).byStand.get(s.id)!.overlaps).toHaveLength(1);
+    }
+  });
+
+  it('Teile desselben Stands dürfen sich überlappen (keine Warnung); ein Nachbar über zwei Teilen zählt einmal', () => {
+    const s = createStand({ cx: 0, cy: 0, w: 10, d: 4, rot: 15 }, {
+      parts: [
+        { kind: 'rect', x: 0, y: 0, w: 0.6, h: 1, rot: 0 },
+        { kind: 'rect', x: 0.4, y: 0, w: 0.6, h: 1, rot: 10 },
+        { kind: 'ellipse', x: 0.2, y: 0.1, w: 0.5, h: 0.8, rot: 45 },
+      ],
+    });
+    expect(pageWarnings(null, [s]).regions).toEqual([]);
+    expect(pageWarnings(null, [s]).byStand.get(s.id)!.overlaps).toEqual([]);
+    const n = box(0, 0, 1, 1);
+    const w = pageWarnings(null, [s, n]);
+    expect(w.regions.length).toBeGreaterThan(1);
+    expect(w.byStand.get(s.id)!.overlaps).toEqual([n.id]);
+    expect(w.byStand.get(n.id)!.overlaps).toEqual([s.id]);
+  });
+
+  it('Zusammenfassen gedrehter Stände: alle Ecken bleiben auf dem Plan (Rundung 0,01 m); Auflösen ergibt die Rechtecke zurück', () => {
+    const a = createStand({ cx: 10, cy: 10, w: 6, d: 4, rot: 30 });
+    const b = createStand({ cx: 14, cy: 13, w: 2, d: 2, rot: 75 });
+    const m = mergeStands([b, a], new Map())!.stand;
+    expect(m).toMatchObject({ id: a.id, rot: 30 });
+    const polys = footprint(m).polys;
+    const near = (p: { x: number; y: number }) => Math.min(...polys.flatMap((q) => q.map((v) => Math.hypot(v.x - p.x, v.y - p.y))));
+    for (const s of [a, b]) for (const p of footprint(s).polys[0]!) expect(near(p)).toBeLessThan(0.01);
+    const back = dissolveStand(m);
+    const key = (s: Stand) => [s.cx, s.cy, s.w, s.d, s.rot].map((v) => Math.round(v * 10) / 10).join('/');
+    expect(back.map(key).toSorted()).toEqual([a, b].map(key).toSorted());
+  });
+
+  it('Formvorlage mit „belegt wie gezeichnet“: Tabelle und Standgeld rechnen mit den Teilen, ohne Schalter mit B × T', () => {
+    const page = createPage('P');
+    const s = createStand({ cx: 0, cy: 0, w: 25, d: 12, rot: 0 }, { shapeTemplateId: 't', nr: 'B-06' });
+    const n = box(CORNER.x, CORNER.y, 2.4, 2.4);
+    page.stands = [s, n];
+    page.useAreas = false;
+    const settings = { ...DEFAULT_SETTINGS, pricing: { perMeter: 10, roundUpMeters: false, vatRate: 0 } };
+    const rows = (occupies: boolean) => standRows({ pages: [page], settings, categories: [], shapeTemplates: [{ id: 't', name: 'B-06', w: 25, d: 12, parts: B06_PARTS, occupies }] });
+    expect(rows(true)[0]!.warnings.overlap).toBe(false);
+    expect(rows(true)[0]!.fee).toMatchObject({ meters: 20, net: 200 });
+    expect(sumRows(rows(true)).frontM).toBe(22.4);
+    expect(rows(false)[0]!.warnings.overlap).toBe(true);
+    expect(rows(false)[0]!.fee).toMatchObject({ meters: 25, net: 250 });
   });
 });
