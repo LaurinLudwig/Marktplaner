@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { defaultRenumberMode, planRenumber, type RenumberMode, type RenumberPlan } from '../core/numbering';
+import { defaultRenumberMode, planRenumber, renumberIssue, type RenumberMode, type RenumberPlan } from '../core/numbering';
 import { applyRenumber } from '../state/numbering';
 import { START_PAGE, useStore } from '../state/store';
 import { notify } from './notify';
@@ -26,6 +26,12 @@ export function openRenumber() {
   const s = useStore.getState();
   if (s.ui.activePage === START_PAGE && s.project.settings.numbering.scope !== 'global') return;
   const pageId = s.ui.activePage;
+  // Gesperrt, solange eine betroffene Page nicht nummerieren kann (eigene Richtung mit A = B, #12)
+  const issue = renumberIssue(s.project, pageId);
+  if (issue) {
+    notify(issue.pageId === pageId ? issue.message : `${issue.pageName}: ${issue.message}`);
+    return;
+  }
   const plans = { all: planRenumber(s.project, pageId, 'all'), missing: planRenumber(s.project, pageId, 'missing') };
   if (!plans.all.pageIds.length) {
     notify('Im Modus „manuell“ wird nicht automatisch nummeriert.');

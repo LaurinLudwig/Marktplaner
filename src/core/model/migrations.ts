@@ -26,10 +26,12 @@
  *  10  Standgeld (#5): Einstellung `pricing` (Preis je Frontmeter, Rundung, MwSt-Satz), Kategorie `price`.
  *  11  Beschriftung (#9): Geschäft `labelOffset` (von Hand verschobene Beschriftung).
  *  12  Ohne Grundflächen (#17): Page `useAreas` („Grundflächen verwenden“).
+ *  13  Nummerierung (#12): Page `numberingMode` auch `rightToLeft`, `topToBottom`, `bottomToTop`, `direction`,
+ *      `counterClockwise`; Page `direction` (Start- und Zielpunkt der eigenen Richtung).
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 12;
+export const CURRENT_SCHEMA_VERSION = 13;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -146,6 +148,12 @@ export const MIGRATIONS: Record<number, Migration> = {
     ...p,
     pages: mapList(p.pages, (pg) => (isObj(pg) ? { useAreas: true, ...pg } : pg)),
   }),
+  /**
+   * 12 → 13 (#12): Die bisherigen Modi `frontLtr`, `clockwise` und `manual` behalten ihre Bedeutung, `direction` ist
+   * optional (ohne Angabe gilt beim Umschalten die Vorgabe). Es gibt nichts zu ergänzen; die Version steigt, damit
+   * ältere Programmversionen die neuen Modi nicht stillschweigend als „links → rechts“ lesen.
+   */
+  12: (p) => ({ ...p }),
 };
 
 export function migrate(project: unknown, fromVersion: number): unknown {

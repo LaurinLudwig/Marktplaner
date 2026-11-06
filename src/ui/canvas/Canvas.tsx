@@ -30,6 +30,8 @@ import { SNAP_PX, type ToolContext, type ToolPointer } from './tools/types';
 import { useCalibrateTool } from './tools/useCalibrateTool';
 import { useCenterTool } from './tools/useCenterTool';
 import { ClockwiseMarker } from './ClockwiseMarker';
+import { DirectionMarker } from './DirectionMarker';
+import { useDirectionTool } from './tools/useDirectionTool';
 import { useCreateTool } from './tools/useCreateTool';
 import { useMeasureTool } from './tools/useMeasureTool';
 import { useSelectTool } from './tools/useSelectTool';
@@ -283,6 +285,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const infraTool = useInfraTool(ctx, tool === 'infra' && !spaceDown);
   const titleBlockTool = useTitleBlockTool(ctx, tool === 'titleBlock' && !spaceDown);
   const centerTool = useCenterTool(ctx, tool === 'numberCenter' && !spaceDown);
+  const directionTool = useDirectionTool(ctx, tool === 'numberDirection' && !spaceDown);
   const activeTool =
     tool === 'measure'
       ? measureTool
@@ -300,6 +303,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
                   ? titleBlockTool
                 : tool === 'numberCenter'
                   ? centerTool
+                : tool === 'numberDirection'
+                  ? directionTool
                   : null;
   const activeToolRef = useRef(activeTool);
   useLayoutEffect(() => {
@@ -580,6 +585,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
       </WorldLayer>
       <svg className="canvas-layer canvas-overlay" aria-hidden="true">
         <ClockwiseMarker page={storedPage} toScreen={ctx.toScreen} />
+        <DirectionMarker page={storedPage} toScreen={ctx.toScreen} />
         {flash && (
           <g key={flash.id} className="jump-flash" data-testid="jump-flash">
             {flash.polys.map((poly, i) => (

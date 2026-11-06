@@ -24,6 +24,10 @@ import { hitHandle, resizeCursor, selectionGeometry, type HandleHit } from './se
 import { SnapGuides } from './SnapGuides';
 import { SnapMarker } from './SnapMarker';
 import { SNAP_PX, type ToolContext, type ToolHandlers, type ToolPointer } from './types';
+import { directionHandleAt } from '../DirectionMarker';
+import { directionSnap } from './useDirectionTool';
+import { directionOf } from '../../../core/numbering';
+import { setDirectionPoint } from '../../../state/numbering';
 
 /** Ab dieser Mausbewegung (px) wird aus einem Klick ein Ziehen. */
 const DRAG_PX = 3;
@@ -51,7 +55,9 @@ type Gesture =
   | { kind: 'paper'; element: PaperElement; startWorld: Vec; box0: Bounds; start: Vec; moved: boolean; delta: Vec; target: Vec | null }
   | { kind: 'background'; start: Vec; transform0: BgTransform }
   /** Ausgelagerte Standbeschriftung von Hand verschieben (#9). */
-  | { kind: 'label'; id: Id; startWorld: Vec; start: Vec; box0: Bounds; moved: boolean; delta: Vec };
+  | { kind: 'label'; id: Id; startWorld: Vec; start: Vec; box0: Bounds; moved: boolean; delta: Vec }
+  /** Start- oder Zielpunkt der eigenen Nummerierungsrichtung ziehen (#12): eine Transaktion, ein Undo-Schritt. */
+  | { kind: 'direction'; end: 'from' | 'to'; start: Vec; moved: boolean; offset: Vec };
 
 const LABEL = { move: 'Verschieben', rotate: 'Drehen', resize: 'Größe ändern', end: 'Länge ändern' } as const;
 /** Trefferabstand für Linien ohne Fläche in Bildschirmpixeln (M7). */
@@ -227,6 +233,12 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
     setGuides([]);
     const st = useStore.getState();
     if (!g) return;
+    if (g.kind === 'direction') {
+      if (!g.moved) return;
+      if (commit) st.commitTransaction();
+      else st.abortTransaction();
+      return;
+    }
     if (g.kind === 'background') {
       if (commit) st.commitTransaction();
       else st.abortTransaction();
@@ -290,6 +302,16 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
         const edge: EdgeIndex = handle.edge;
         const id = current[0]!;
         startGesture({ kind: 'pending', start: p.screen, startWorld: p.world, shift: p.shiftKey, grab: id, onDrag: 'move', onClick: () => setAreaFront(pageId, id, edge) });
+        return true;
+      }
+
+      // Start- und Zielpunkt der eigenen Nummerierungsrichtung (#12) liegen über allen Objekten
+      const dirHit = !handle ? directionHandleAt(ctx.page, ctx.toScreen, p.screen) : null;
+      const dir0 = dirHit ? directionOf(ctx.page) : null;
+      if (dirHit && dir0) {
+        // Griffabstand merken: Der Punkt bleibt beim Ziehen um diesen Abstand neben der Maus (springt nicht)
+        const q = dir0[dirHit];
+        startGesture({ kind: 'direction', end: dirHit, start: p.screen, moved: false, offset: { x: q.x - p.world.x, y: q.y - p.world.y } });
         return true;
       }
 
@@ -389,7 +411,7 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       if (!g) {
         const handle = hitHandle(geo, p.screen);
         const bg = ctx.page.background;
-        const object = !handle && (!!pickPaper(p.world) || !!pick(p.world) || (!!bg && !bg.locked && ctx.page.layers.background.visible && onBackground(p.world)));
+        const object = !handle && (!!directionHandleAt(ctx.page, ctx.toScreen, p.screen) || !!pickPaper(p.world) || !!pick(p.world) || (!!bg && !bg.locked && ctx.page.layers.background.visible && onBackground(p.world)));
         if (hover?.object !== object || hover.alt !== p.altKey || JSON.stringify(hover?.handle ?? null) !== JSON.stringify(handle)) setHover({ handle, object, alt: p.altKey });
         return;
       }
@@ -470,6 +492,17 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
           g.moved = true;
           g.delta = { x: p.world.x - g.startWorld.x, y: p.world.y - g.startWorld.y };
           setLabelGhost({ minX: g.box0.minX + g.delta.x, minY: g.box0.minY + g.delta.y, maxX: g.box0.maxX + g.delta.x, maxY: g.box0.maxY + g.delta.y });
+          return;
+        }
+        case 'direction': {
+          if (!g.moved && Math.hypot(p.screen.x - g.start.x, p.screen.y - g.start.y) < DRAG_PX) return;
+          if (!g.moved) useStore.getState().beginTransaction('Richtung verschieben');
+          g.moved = true;
+          // Punkt = Maus + Griffabstand; Fang an Standmitten und Grundflächen-Ecken wie beim Setzen, Cmd/Strg aus
+          const q = { x: p.world.x + g.offset.x, y: p.world.y + g.offset.y };
+          const s = p.modKey ? null : directionSnap(ctx, q);
+          setEndSnap(s);
+          setDirectionPoint(pageId, g.end, s?.point ?? q, 'Richtung verschieben');
           return;
         }
         case 'background':

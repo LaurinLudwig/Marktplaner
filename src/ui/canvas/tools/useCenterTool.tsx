@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SnapResult } from '../../../core/snap';
-import { setClockwiseCenter } from '../../../state/numbering';
+import { setClockwiseCenter, toolFitsMode } from '../../../state/numbering';
 import { useStore } from '../../../state/store';
 import { SnapMarker } from './SnapMarker';
 import type { ToolContext, ToolHandlers } from './types';
@@ -12,9 +12,19 @@ import type { ToolContext, ToolHandlers } from './types';
 export function useCenterTool(ctx: ToolContext, active: boolean): ToolHandlers {
   const [hover, setHover] = useState<SnapResult | null>(null);
   const done = () => useStore.getState().setUi({ tool: 'select' });
+  // Page nicht (mehr) in einem Kreis-Modus (Moduswechsel, Undo, andere Page): zurück zum Auswahlwerkzeug (#12)
+  const selected = useStore((s) => s.ui.tool === 'numberCenter');
+  const fits = toolFitsMode('numberCenter', ctx.page.numberingMode);
+  useEffect(() => {
+    if (selected && !fits) useStore.getState().setUi({ tool: 'select' });
+  }, [selected, fits]);
   return {
     onPointerDown(p) {
       if (!active) return false;
+      if (!fits) {
+        done();
+        return true;
+      }
       const point = ctx.snap(p.world)?.point ?? p.world;
       setClockwiseCenter(ctx.page.id, point);
       done();

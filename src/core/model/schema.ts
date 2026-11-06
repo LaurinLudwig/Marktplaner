@@ -19,6 +19,7 @@ import {
   type InfraGeometry,
   type InfraObject,
   type InfraTypeDef,
+  type NumberingMode,
   type PaperAnchor,
   type PaperFormat,
   type Project,
@@ -152,8 +153,9 @@ function normalizePage(
     ...base,
     id: raw.id,
     prefix: str(raw.prefix, ''),
-    numberingMode: mode === 'clockwise' || mode === 'manual' ? mode : 'frontLtr',
+    numberingMode: typeof mode === 'string' && NUMBERING_MODES.has(mode) ? (mode as NumberingMode) : 'frontLtr',
     ...normalizeClockwise(raw.clockwise),
+    ...normalizeDirection(raw.direction),
     powerLimitKw: typeof raw.powerLimitKw === 'number' && Number.isFinite(raw.powerLimitKw) && raw.powerLimitKw > 0 ? raw.powerLimitKw : null,
     blockOverLimit: bool(raw.blockOverLimit, false),
     northAngle: num(raw.northAngle, 0),
@@ -192,6 +194,20 @@ function normalizeHiddenFree(v: unknown): HiddenFree[] {
 
 const vecOrNull = (v: unknown): Vec | null =>
   isObj(v) && typeof v.x === 'number' && typeof v.y === 'number' && Number.isFinite(v.x) && Number.isFinite(v.y) ? { x: v.x, y: v.y } : null;
+
+/** Gültige Nummerierungsmodi; ein unbekannter Modus wird „links → rechts“ (`frontLtr`, auch der Standard). */
+const NUMBERING_MODES: ReadonlySet<string> = new Set<NumberingMode>(['frontLtr', 'rightToLeft', 'topToBottom', 'bottomToTop', 'direction', 'clockwise', 'counterClockwise', 'manual']);
+
+/**
+ * Eigene Richtung der Nummerierung (#12): Start- und Zielpunkt auf 0,01 m gerundet. Fehlt einer, entfällt die Angabe;
+ * A = B bleibt erhalten (die Oberfläche zeigt dann einen Hinweis und sperrt das Nummerieren).
+ */
+function normalizeDirection(raw: unknown): Pick<FestplatzPage, 'direction'> {
+  const from = isObj(raw) ? vecOrNull(raw.from) : null;
+  const to = isObj(raw) ? vecOrNull(raw.to) : null;
+  const r = (v: Vec) => ({ x: Math.round(v.x * 100) / 100, y: Math.round(v.y * 100) / 100 });
+  return from && to ? { direction: { from: r(from), to: r(to) } } : {};
+}
 
 /** Mittelpunkt und Startrichtung der Nummerierung im Uhrzeigersinn; unbrauchbare Angaben entfallen. */
 function normalizeClockwise(raw: unknown): Pick<FestplatzPage, 'clockwise'> {

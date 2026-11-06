@@ -2,9 +2,10 @@
  * Standnummern (M5, spec.md §5): Reihenfolge der Stände, Format, Neu-Nummerieren mit Vorschau und
  * doppelte Nummern.
  *
- * - Links → rechts: alle Stände der Page nach der x-Koordinate ihrer Mitte, unabhängig von den Grundflächen.
- * - Uhrzeigersinn: nach dem Winkel der Standmitte um den Mittelpunkt, ab der Startrichtung (relativ
- *   zum Norden der Page).
+ * - Linear (links → rechts, rechts → links, oben → unten, unten → oben, eigene Richtung A → B, #12): alle Stände
+ *   der Page nach der Lage ihrer Mitte entlang der Richtung, unabhängig von den Grundflächen (`orderAlong`).
+ * - Im bzw. gegen den Uhrzeigersinn: nach dem Winkel der Standmitte um den Mittelpunkt, ab der Startrichtung
+ *   (relativ zum Norden der Page).
  * - Ohne Toleranz (QA-M5-01): Verglichen werden auf 0,01 m bzw. 0,1° gerundete Werte als ganze Zahlen. Eine
  *   Toleranz „bis 0,01 m gleich“ wäre nicht transitiv, das Ergebnis hinge dann von der Anlegereihenfolge ab.
  * - Nummernkreis „pro Festplatz“ oder „global“ (Pages in Tab-Reihenfolge, manuelle ausgelassen).
@@ -12,7 +13,7 @@
  */
 import { rectGeo } from './geometry/polygon';
 import { normAngle } from './geometry/rect';
-import type { ClockwiseSettings, FestplatzPage, Id, NumberingScope, Project, Stand, Vec } from './model/types';
+import type { ClockwiseSettings, FestplatzPage, Id, NumberingDirection, NumberingMode, NumberingScope, Project, Rect, Stand, Vec } from './model/types';
 import { activeAreas, type AreasOf } from './pageAreas';
 
 /** Grenzen der Einstellungen. */
@@ -44,15 +45,68 @@ const cm = (v: number) => Math.round(v * 100);
 const byId = (a: Stand, b: Stand) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /**
+ * Achsen einer linearen Nummerierung, als ganzzahlige Vektoren: sortiert wird nach dem Skalarprodukt der Standmitte
+ * (in ganzen Zentimetern) mit `main`, bei Gleichstand mit `cross`, danach nach ID. Ganzzahlig, damit das Ergebnis
+ * ohne Toleranz und unabhängig von der Anlegereihenfolge ist (QA-M5-01).
+ */
+export interface LinearAxes {
+  main: Vec;
+  cross: Vec;
+}
+
+/** Feste Richtungen an den Achsen der Zeichenfläche (y nach unten; Entscheidung Laurin 2026-11-05, #12). */
+export type FixedDirectionMode = 'frontLtr' | 'rightToLeft' | 'topToBottom' | 'bottomToTop';
+export const FIXED_AXES: Readonly<Record<FixedDirectionMode, LinearAxes>> = {
+  // links → rechts: kleineres x zuerst, bei gleichem x kleineres y
+  frontLtr: { main: { x: 1, y: 0 }, cross: { x: 0, y: 1 } },
+  // rechts → links: größeres x zuerst, bei gleichem x kleineres y
+  rightToLeft: { main: { x: -1, y: 0 }, cross: { x: 0, y: 1 } },
+  // oben → unten: kleineres y zuerst, bei gleichem y kleineres x
+  topToBottom: { main: { x: 0, y: 1 }, cross: { x: 1, y: 0 } },
+  // unten → oben: größeres y zuerst, bei gleichem y kleineres x
+  bottomToTop: { main: { x: 0, y: -1 }, cross: { x: 1, y: 0 } },
+};
+
+/** Lineare Modi (feste Richtungen und eigene Richtung). */
+export const isLinearMode = (mode: NumberingMode): mode is FixedDirectionMode | 'direction' =>
+  mode === 'direction' || mode === 'frontLtr' || mode === 'rightToLeft' || mode === 'topToBottom' || mode === 'bottomToTop';
+/** Modi um einen Mittelpunkt. */
+export const isCircularMode = (mode: NumberingMode): mode is 'clockwise' | 'counterClockwise' => mode === 'clockwise' || mode === 'counterClockwise';
+
+/**
+ * Achsen der eigenen Richtung A → B: Hauptachse = B − A in ganzen Zentimetern (Punkte auf 0,01 m gerundet),
+ * Nebenachse senkrecht dazu, so dass bei Gleichstand der Stand links der Richtung (vom Pfeil aus gesehen) zuerst
+ * kommt. Liegen A und B nach dem Runden aufeinander, gibt es keine Richtung: null.
+ */
+export function directionAxes(dir: NumberingDirection): LinearAxes | null {
+  const main = { x: cm(dir.to.x) - cm(dir.from.x), y: cm(dir.to.y) - cm(dir.from.y) };
+  if (main.x === 0 && main.y === 0) return null;
+  // Rechts der Richtung liegt auf dem Bildschirm (y nach unten) bei (−y, x); aufsteigend sortiert kommt links zuerst
+  return { main, cross: { x: -main.y, y: main.x } };
+}
+
+/**
+ * Lineare Reihenfolge (spec.md §5): Standmitte auf 0,01 m gerundet und als ganze Zentimeter mit den Achsen
+ * multipliziert; kleinster Wert auf der Hauptachse zuerst, dann auf der Nebenachse, dann nach ID. Die Lage der Punkte
+ * selbst spielt keine Rolle, nur die Richtung (Stände vor A oder hinter B zählen genauso).
+ */
+export function orderAlong(stands: readonly Stand[], axes: LinearAxes): Stand[] {
+  const { main, cross } = axes;
+  return stands
+    .map((s) => {
+      const x = cm(s.cx);
+      const y = cm(s.cy);
+      return { s, m: x * main.x + y * main.y, c: x * cross.x + y * cross.y };
+    })
+    .toSorted((p, q) => p.m - q.m || p.c - q.c || byId(p.s, q.s))
+    .map((k) => k.s);
+}
+
+/**
  * Links → rechts über den ganzen Festplatz, unabhängig von den Grundflächen (spec.md §5): Standmitte auf
  * 0,01 m gerundet; kleineres x zuerst, bei exakt gleichem x kleineres y (weiter oben), dann nach ID.
  */
-export function orderLeftToRight(stands: readonly Stand[]): Stand[] {
-  return stands
-    .map((s) => ({ s, x: cm(s.cx), y: cm(s.cy) }))
-    .toSorted((p, q) => p.x - q.x || p.y - q.y || byId(p.s, q.s))
-    .map((k) => k.s);
-}
+export const orderLeftToRight = (stands: readonly Stand[]): Stand[] => orderAlong(stands, FIXED_AXES.frontLtr);
 
 /** Winkel von `p` um `c` in Grad im Uhrzeigersinn ab „oben“ auf dem Bildschirm (y nach unten). */
 const screenAngle = (c: Vec, p: Vec) => normAngle((Math.atan2(p.x - c.x, c.y - p.y) * 180) / Math.PI);
@@ -60,50 +114,100 @@ const screenAngle = (c: Vec, p: Vec) => normAngle((Math.atan2(p.x - c.x, c.y - p
 /** Richtung des Startstrahls auf dem Bildschirm (Grad im Uhrzeigersinn ab oben). */
 export const clockwiseStartDirection = (cw: ClockwiseSettings, northAngle: number) => normAngle(northAngle + cw.startAngle);
 
+/** Drehsinn: 1 = im Uhrzeigersinn, −1 = gegen den Uhrzeigersinn. */
+export type TurnSense = 1 | -1;
+
 /**
- * Im Uhrzeigersinn um den Mittelpunkt, ab der Startrichtung (relativ zum Norden der Page). Standmitte und
- * Mittelpunkt auf 0,01 m gerundet, Winkel auf 0,1° (359,95° und mehr = 0°); bei gleichem Winkel der kleinere
- * Abstand (auf 0,01 m gerundet), dann nach ID.
+ * Um den Mittelpunkt, ab der Startrichtung (relativ zum Norden der Page); `sense` 1 = im Uhrzeigersinn (aufsteigender
+ * Winkel), −1 = gegen den Uhrzeigersinn (absteigender Winkel). Standmitte und Mittelpunkt auf 0,01 m gerundet,
+ * Winkel auf 0,1° (359,95° und mehr = 0°); bei gleichem Winkel der kleinere Abstand (auf 0,01 m gerundet), dann
+ * nach ID. Gegen den Uhrzeigersinn wird der gerundete Winkel gespiegelt (3600 − Zehntel), damit beide Drehsinne
+ * genau dieselben Gleichstände haben.
  */
-export function orderClockwise(stands: readonly Stand[], cw: ClockwiseSettings, northAngle: number): Stand[] {
+export function orderClockwise(stands: readonly Stand[], cw: ClockwiseSettings, northAngle: number, sense: TurnSense = 1): Stand[] {
   const start = clockwiseStartDirection(cw, northAngle);
   const c = { x: cm(cw.center.x) / 100, y: cm(cw.center.y) / 100 };
   const keyed = stands.map((s) => {
     const p = { x: cm(s.cx) / 100, y: cm(s.cy) / 100 };
     const dist = cm(Math.hypot(p.x - c.x, p.y - c.y));
-    const tenths = dist > 0 ? Math.round(normAngle(screenAngle(c, p) - start) * 10) % 3600 : 0;
+    const cwTenths = dist > 0 ? Math.round(normAngle(screenAngle(c, p) - start) * 10) % 3600 : 0;
+    const tenths = sense === 1 ? cwTenths : (3600 - cwTenths) % 3600;
     return { s, tenths, dist };
   });
   keyed.sort((p, q) => p.tenths - q.tenths || p.dist - q.dist || byId(p.s, q.s));
   return keyed.map((k) => k.s);
 }
 
-/** Mitte des Hüllrechtecks aller (wirkenden, #17) Grundflächen und Stände (Vorgabe für den Mittelpunkt), sonst null. */
-export function defaultClockwiseCenter(page: AreasOf & Pick<FestplatzPage, 'stands'>): Vec | null {
-  const all = [...activeAreas(page), ...page.stands];
-  if (!all.length) return null;
+/** Hüllrechteck der Rechtecke, sonst null. */
+function boundsOf(rects: readonly Rect[]) {
+  if (!rects.length) return null;
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  for (const r of all) {
+  for (const r of rects) {
     const b = rectGeo(r).bounds;
     minX = Math.min(minX, b.minX);
     minY = Math.min(minY, b.minY);
     maxX = Math.max(maxX, b.maxX);
     maxY = Math.max(maxY, b.maxY);
   }
-  return { x: Math.round(((minX + maxX) / 2) * 100) / 100, y: Math.round(((minY + maxY) / 2) * 100) / 100 };
+  return { minX, minY, maxX, maxY };
+}
+const round2 = (v: number) => cm(v) / 100;
+
+/** Mitte des Hüllrechtecks aller (wirkenden, #17) Grundflächen und Stände (Vorgabe für den Mittelpunkt), sonst null. */
+export function defaultClockwiseCenter(page: AreasOf & Pick<FestplatzPage, 'stands'>): Vec | null {
+  const b = boundsOf([...activeAreas(page), ...page.stands]);
+  return b ? { x: round2((b.minX + b.maxX) / 2), y: round2((b.minY + b.maxY) / 2) } : null;
 }
 
-/** Stände einer Page in Nummerierungsreihenfolge; im Modus „manuell“ leer. */
+/**
+ * Vorgabe für die eigene Richtung beim ersten Umschalten (#12): waagrecht durch die Mitte aller Stände, von ihrem
+ * linken bis zum rechten Rand – nummeriert also wie „links → rechts“. Ohne Stände über die (wirkenden, #17)
+ * Grundflächen, ohne beides null.
+ */
+export function defaultDirection(page: AreasOf & Pick<FestplatzPage, 'stands'>): NumberingDirection | null {
+  const b = boundsOf(page.stands.length ? page.stands : activeAreas(page));
+  if (!b) return null;
+  const y = round2((b.minY + b.maxY) / 2);
+  return { from: { x: round2(b.minX), y }, to: { x: round2(b.maxX), y } };
+}
+
+/** Gespeicherte oder vorgegebene Einstellungen der Kreis-Modi, ohne Objekte null. */
+export function clockwiseOf(page: FestplatzPage): ClockwiseSettings | null {
+  if (page.clockwise) return page.clockwise;
+  const center = defaultClockwiseCenter(page);
+  return center ? { center, startAngle: 0 } : null;
+}
+
+/** Gespeicherte oder vorgegebene eigene Richtung, ohne Objekte null. */
+export const directionOf = (page: FestplatzPage): NumberingDirection | null => page.direction ?? defaultDirection(page);
+
+/**
+ * Warum die Page nicht automatisch nummeriert werden kann, sonst null: Im Modus „eigene Richtung“ liegen Start- und
+ * Zielpunkt (auf 0,01 m gerundet) aufeinander.
+ */
+export function numberingIssue(page: FestplatzPage): string | null {
+  if (page.numberingMode !== 'direction') return null;
+  const dir = directionOf(page);
+  return dir && !directionAxes(dir) ? 'Start- und Zielpunkt der Richtung liegen aufeinander. Bitte zwei verschiedene Punkte setzen.' : null;
+}
+
+/** Stände einer Page in Nummerierungsreihenfolge; im Modus „manuell“ und bei ungültiger Richtung leer. */
 export function orderStands(page: FestplatzPage): Stand[] {
-  if (page.numberingMode === 'manual') return [];
-  if (page.numberingMode === 'clockwise') {
-    const cw = page.clockwise ?? (defaultClockwiseCenter(page) ? { center: defaultClockwiseCenter(page)!, startAngle: 0 } : null);
-    return cw ? orderClockwise(page.stands, cw, page.northAngle) : [];
+  const mode = page.numberingMode;
+  if (mode === 'manual') return [];
+  if (isCircularMode(mode)) {
+    const cw = clockwiseOf(page);
+    return cw ? orderClockwise(page.stands, cw, page.northAngle, mode === 'clockwise' ? 1 : -1) : [];
   }
-  return orderLeftToRight(page.stands);
+  if (mode === 'direction') {
+    const dir = directionOf(page);
+    const axes = dir ? directionAxes(dir) : null;
+    return axes ? orderAlong(page.stands, axes) : [];
+  }
+  return orderAlong(page.stands, FIXED_AXES[mode]);
 }
 
 // ---------- Doppelte Nummern ----------
@@ -180,6 +284,18 @@ function circleOf(project: Pick<Project, 'pages' | 'settings'>, pageId: Id) {
   const global = project.settings.numbering.scope === 'global';
   const circle = global ? project.pages : project.pages.filter((p) => p.id === pageId);
   return { circle, targets: circle.filter((p) => p.numberingMode !== 'manual') };
+}
+
+/**
+ * Hindernis für „Neu nummerieren“ im Nummernkreis der Page `pageId` (#12): die erste betroffene Page, deren Modus
+ * gerade nicht nummerieren kann (z. B. eigene Richtung mit A = B), mit Meldung; sonst null.
+ */
+export function renumberIssue(project: Pick<Project, 'pages' | 'settings'>, pageId: Id): { pageId: Id; pageName: string; message: string } | null {
+  for (const page of circleOf(project, pageId).targets) {
+    const message = numberingIssue(page);
+    if (message) return { pageId: page.id, pageName: page.name, message };
+  }
+  return null;
 }
 
 /** Zahl einer Nummer: die letzte Ziffernfolge („A-012“ → 12, „12a“ → 12), ohne Ziffern null. */

@@ -604,3 +604,69 @@ describe('Migration 11 → 12 (#17: ohne Grundflächen)', () => {
     expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
   });
 });
+
+describe('Migration 12 → 13 (#12: Nummerierung in weiteren Richtungen)', () => {
+  it('12 → 13: nichts zu ergänzen; Eingabe unverändert, bisherige Modi behalten ihre Bedeutung', () => {
+    const v12 = { id: 'x', pages: [{ id: 'p', numberingMode: 'frontLtr', useAreas: true }, { id: 'q', numberingMode: 'clockwise', clockwise: { center: { x: 1, y: 2 }, startAngle: 90 } }, 'kaputt'] };
+    const before = JSON.stringify(v12);
+    const v13 = MIGRATIONS[12]!(v12);
+    expect(v13).toEqual(v12);
+    expect(v13).not.toBe(v12);
+    expect(JSON.stringify(v12)).toBe(before);
+  });
+
+  it('echte Datei aus #17 (Version 12, tests/fixtures/format-v12-ohne-grundflaechen.mplan) wird vollständig migriert', () => {
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v12-ohne-grundflaechen.mplan')));
+    const raw = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
+    expect(raw.schemaVersion).toBe(12);
+    expect(raw.project.pages.map((p: { numberingMode: string }) => p.numberingMode)).toEqual(['frontLtr', 'clockwise', 'clockwise', 'manual']);
+    for (const p of raw.project.pages) expect(p).not.toHaveProperty('direction');
+
+    // Version 13 ergänzt nichts: Nach dem Lesen ist das Projekt gleich dem Inhalt der Datei
+    const project = decodeProjectFile(bytes).project;
+    expect(project).toEqual(raw.project);
+    // Werte, die in der Datei gezielt gesetzt waren; die bisherigen Modi behalten ihre Bedeutung
+    expect(project.name).toBe('Formatversion 12 (#17)');
+    expect(project.pages.map((p) => p.name)).toEqual(['Obermarkt', 'Untermarkt', 'Am Ziegelturm', 'Schifftor']);
+    expect(project.pages[1]).toMatchObject({ numberingMode: 'clockwise', clockwise: { center: { x: 50, y: 40 }, startAngle: 90 } });
+    // Am Ziegelturm: Uhrzeigersinn ohne gesetzten Mittelpunkt, Grundflächen ausgeschaltet (aber gespeichert)
+    expect(project.pages[2]).toMatchObject({ numberingMode: 'clockwise', useAreas: false });
+    expect(project.pages[2]!.clockwise).toBeUndefined();
+    expect(project.pages[2]!.areas).toHaveLength(6);
+    expect(project.pages[3]!.numberingMode).toBe('manual');
+    expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
+  });
+
+  it('Lesen: alte und neue Modi, eigene Richtung auf 0,01 m gerundet; Unbrauchbares entfällt, A = B bleibt', () => {
+    const file = (version: number, pg: Record<string, unknown>) => ({
+      format: 'schelmeplaner',
+      schemaVersion: version,
+      project: { id: 'x', pages: [{ id: 'p', name: 'P', ...pg }] },
+    });
+    const read = (pg: Record<string, unknown>, version = CURRENT_SCHEMA_VERSION) => parseProjectFile(file(version, pg)).pages[0]!;
+    // Version 12: `frontLtr`, `clockwise` und `manual` bleiben gültig, eine Richtung gibt es noch nicht
+    expect(read({ numberingMode: 'frontLtr' }, 12).numberingMode).toBe('frontLtr');
+    expect(read({ numberingMode: 'clockwise', clockwise: { center: { x: 1, y: 2 }, startAngle: 90 } }, 12)).toMatchObject({ numberingMode: 'clockwise', clockwise: { center: { x: 1, y: 2 }, startAngle: 90 } });
+    expect(read({ numberingMode: 'manual' }, 12).numberingMode).toBe('manual');
+    expect(read({}, 12)).not.toHaveProperty('direction');
+    // neue Modi; Unbekanntes wird „links → rechts“
+    for (const m of ['rightToLeft', 'topToBottom', 'bottomToTop', 'direction', 'counterClockwise'] as const) expect(read({ numberingMode: m }).numberingMode).toBe(m);
+    expect(read({ numberingMode: 'kreuz und quer' }).numberingMode).toBe('frontLtr');
+    // eigene Richtung
+    expect(read({ numberingMode: 'direction', direction: { from: { x: 1.234, y: -5 }, to: { x: 20, y: 3.456 } } }).direction).toEqual({ from: { x: 1.23, y: -5 }, to: { x: 20, y: 3.46 } });
+    expect(read({ direction: { from: { x: 4, y: 4 }, to: { x: 4, y: 4 } } }).direction).toEqual({ from: { x: 4, y: 4 }, to: { x: 4, y: 4 } });
+    for (const direction of [null, 'a', { from: { x: 1, y: 2 } }, { from: { x: 1, y: 2 }, to: { x: 'a', y: 1 } }, { from: { x: Number.NaN, y: 0 }, to: { x: 1, y: 1 } }]) {
+      expect(read({ direction })).not.toHaveProperty('direction');
+    }
+  });
+
+  it('Speichern und Laden behält Modus und eigene Richtung', () => {
+    const project = parseProjectFile({
+      format: 'schelmeplaner',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      project: { id: 'x', pages: [{ id: 'p', name: 'P', numberingMode: 'direction', direction: { from: { x: 0, y: 0 }, to: { x: 17.32, y: 10 } } }] },
+    });
+    const again = decodeProjectFile(encodeProjectFile({ project, assets: {} })).project;
+    expect(again.pages[0]).toMatchObject({ numberingMode: 'direction', direction: { from: { x: 0, y: 0 }, to: { x: 17.32, y: 10 } } });
+  });
+});

@@ -2,7 +2,27 @@ import * as fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { createPage, DEFAULT_SETTINGS } from './model/defaults';
 import type { Area, FestplatzPage, NumberingScope, Rect, Stand } from './model/types';
-import { cachedDuplicates, defaultClockwiseCenter, defaultRenumberMode, findDuplicates, formatNr, nrKey, nrLockTargets, nrNumber, orderClockwise, orderLeftToRight, orderStands, planRenumber, sameNr } from './numbering';
+import {
+  cachedDuplicates,
+  defaultClockwiseCenter,
+  defaultDirection,
+  defaultRenumberMode,
+  directionAxes,
+  findDuplicates,
+  FIXED_AXES,
+  formatNr,
+  nrKey,
+  nrLockTargets,
+  nrNumber,
+  numberingIssue,
+  orderAlong,
+  orderClockwise,
+  orderLeftToRight,
+  orderStands,
+  planRenumber,
+  renumberIssue,
+  sameNr,
+} from './numbering';
 import { createStand } from './objects';
 
 /**
@@ -144,6 +164,242 @@ describe('M5 Reihenfolge: unabhängig von der Anlegereihenfolge (Eigenschaften, 
         expect(ids(orderClockwise(perm, cw, north))).toEqual(ids(orderClockwise(list, cw, north)));
       }),
       { numRuns: 500 },
+    );
+  });
+});
+
+describe('#12 Weitere Richtungen (feste Richtungen an den Achsen der Zeichenfläche)', () => {
+  // Gitter 3 × 2: Spalten x = 0, 10, 20; Zeilen y = 0 (oben) und 10 (unten)
+  const grid = [st('lo', 0, 0), st('mo', 10, 0), st('ro', 20, 0), st('lu', 0, 10), st('mu', 10, 10), st('ru', 20, 10)];
+  const mode = (numberingMode: FestplatzPage['numberingMode'], stands = grid) => ids(orderStands(page('p', { numberingMode, stands })));
+
+  it('links → rechts: kleineres x zuerst, bei gleichem x kleineres y (wie bisher)', () => {
+    expect(mode('frontLtr')).toEqual(['lo', 'lu', 'mo', 'mu', 'ro', 'ru']);
+    expect(ids(orderAlong(grid, FIXED_AXES.frontLtr))).toEqual(ids(orderLeftToRight(grid)));
+  });
+
+  it('rechts → links: größeres x zuerst, bei gleichem x kleineres y', () => {
+    expect(mode('rightToLeft')).toEqual(['ro', 'ru', 'mo', 'mu', 'lo', 'lu']);
+  });
+
+  it('oben → unten: kleineres y zuerst, bei gleichem y kleineres x', () => {
+    expect(mode('topToBottom')).toEqual(['lo', 'mo', 'ro', 'lu', 'mu', 'ru']);
+  });
+
+  it('unten → oben: größeres y zuerst, bei gleichem y kleineres x', () => {
+    expect(mode('bottomToTop')).toEqual(['lu', 'mu', 'ru', 'lo', 'mo', 'ro']);
+  });
+
+  it('Gleichstand auf der Hauptachse ohne Toleranz: 0,01 m Unterschied zählt, unter 0,005 m ist gleich, danach nach ID', () => {
+    // rechts → links: 0,01 m weiter rechts kommt zuerst, auch wenn er weiter unten steht
+    expect(mode('rightToLeft', [st('a', 5, -10), st('b', 5.01, 10)])).toEqual(['b', 'a']);
+    // gleiches x nach Rundung: der obere zuerst
+    expect(mode('rightToLeft', [st('u', 5, 10), st('o', 5.004, -10)])).toEqual(['o', 'u']);
+    // oben → unten / unten → oben: gleiches y nach Rundung → der linke zuerst
+    expect(mode('topToBottom', [st('r', 10, 2), st('l', -10, 2.003)])).toEqual(['l', 'r']);
+    expect(mode('bottomToTop', [st('r', 10, 2), st('l', -10, 2.003)])).toEqual(['l', 'r']);
+    expect(mode('topToBottom', [st('o', 10, 1.99), st('u', -10, 2)])).toEqual(['o', 'u']);
+    expect(mode('bottomToTop', [st('o', 10, 1.99), st('u', -10, 2)])).toEqual(['u', 'o']);
+    // gleiche Position: nach ID
+    expect(mode('bottomToTop', [st('b', 3, 3), st('a', 3, 3)])).toEqual(['a', 'b']);
+  });
+
+  it('unabhängig von den Grundflächen: Stände außerhalb zählen genauso', () => {
+    expect(ids(orderStands(page('p', { numberingMode: 'topToBottom', areas: [area('G')], stands: [st('drin', 10, -5), st('draussen', 60, 20), st('oben', -40, -30)] })))).toEqual(['oben', 'drin', 'draussen']);
+  });
+});
+
+describe('#12 Gegen den Uhrzeigersinn', () => {
+  const N = st('N', 0, -10);
+  const E = st('E', 10, 0);
+  const S = st('S', 0, 10);
+  const W = st('W', -10, 0);
+  const all = [E, S, W, N];
+  const cw = (startAngle = 0) => ({ center: { x: 0, y: 0 }, startAngle });
+
+  it('ab Norden mit absteigendem Winkel: N, W, S, E', () => {
+    expect(ids(orderClockwise(all, cw(), 0, -1))).toEqual(['N', 'W', 'S', 'E']);
+    expect(ids(orderStands(page('p', { numberingMode: 'counterClockwise', clockwise: cw(), stands: all })))).toEqual(['N', 'W', 'S', 'E']);
+  });
+
+  it('Startrichtung relativ zum Norden der Page, wie im Uhrzeigersinn', () => {
+    expect(ids(orderClockwise(all, cw(90), 0, -1))).toEqual(['E', 'N', 'W', 'S']);
+    // Norden zeigt nach rechts, Start 90° → Süden zuerst, dann gegen den Uhrzeigersinn
+    expect(ids(orderClockwise(all, cw(90), 90, -1))).toEqual(['S', 'E', 'N', 'W']);
+  });
+
+  it('gleicher Winkel: näher am Mittelpunkt zuerst; knapp rechts vom Startstrahl kommt zuletzt', () => {
+    const near = st('near', 0, -5);
+    // 0,001 m links von Norden: gerundet auf 0,01 m genau auf dem Startstrahl
+    const tiny = st('tiny', -0.001, -20);
+    // 1 m rechts von Norden auf 20 m: knapp 3° im Uhrzeigersinn → gegen den Uhrzeigersinn ganz am Ende
+    const right = st('right', 1, -20);
+    expect(ids(orderClockwise([N, E, near, tiny, right], cw(), 0, -1))).toEqual(['near', 'N', 'tiny', 'E', 'right']);
+  });
+
+  it('ohne gesetzten Mittelpunkt: Mitte aller Grundflächen und Stände', () => {
+    expect(ids(orderStands(page('p', { numberingMode: 'counterClockwise', stands: all })))).toEqual(['N', 'W', 'S', 'E']);
+  });
+
+  it('jede Anlegereihenfolge ergibt dieselbe Reihenfolge', () => {
+    const list = [N, E, S, W, st('a', 3, -3), st('b', 3.01, -3), st('c', -0.01, -7), st('d', 0, -14), st('m', 0, 0)];
+    const expected = ids(orderClockwise(list, cw(), 0, -1));
+    for (let k = 0; k < list.length; k++) {
+      const rotated = [...list.slice(k), ...list.slice(0, k)];
+      expect(ids(orderClockwise(rotated, cw(), 0, -1))).toEqual(expected);
+      expect(ids(orderClockwise(rotated.toReversed(), cw(), 0, -1))).toEqual(expected);
+    }
+  });
+});
+
+describe('#12 Eigene Richtung über zwei Punkte', () => {
+  const dirPage = (direction: FestplatzPage['direction'], stands: Stand[]) => page('p', { numberingMode: 'direction', ...(direction ? { direction } : {}), stands });
+
+  it('waagrecht A → B entspricht links → rechts; andere Richtungen: bei Gleichstand der Stand links vom Pfeil zuerst', () => {
+    const grid = [st('lo', 0, 0), st('ro', 20, 0), st('lu', 0, 10), st('ru', 20, 10)];
+    const ltr = { from: { x: -5, y: 5 }, to: { x: 30, y: 5 } };
+    expect(ids(orderStands(dirPage(ltr, grid)))).toEqual(ids(orderLeftToRight(grid)));
+    // nach links: links vom Pfeil liegt unten auf dem Bildschirm
+    expect(ids(orderStands(dirPage({ from: ltr.to, to: ltr.from }, grid)))).toEqual(['ru', 'ro', 'lu', 'lo']);
+    // nach unten: links vom Pfeil liegt rechts auf dem Bildschirm
+    expect(ids(orderStands(dirPage({ from: { x: 0, y: 0 }, to: { x: 0, y: 1 } }, grid)))).toEqual(['ro', 'lo', 'ru', 'lu']);
+  });
+
+  it('nur die Richtung zählt: Stände vor A und hinter B zählen genauso, die Lage von A und B verschiebt nichts', () => {
+    const stands = [st('hinter', 80, 0), st('vor', -50, 0), st('mitte', 5, 0)];
+    expect(ids(orderStands(dirPage({ from: { x: 0, y: 0 }, to: { x: 10, y: 0 } }, stands)))).toEqual(['vor', 'mitte', 'hinter']);
+    expect(ids(orderStands(dirPage({ from: { x: 300, y: 77 }, to: { x: 301, y: 77 } }, stands)))).toEqual(['vor', 'mitte', 'hinter']);
+  });
+
+  it('schräg (30°): nach der Projektion auf A → B; Gleichstand links vor rechts, dann nach ID', () => {
+    // Richtung 30° unter der x-Achse nach rechts unten (Bildschirm, y nach unten), 20 m lang
+    const u = { x: Math.cos(Math.PI / 6), y: Math.sin(Math.PI / 6) };
+    const dir = { from: { x: 0, y: 0 }, to: { x: Math.round(u.x * 2000) / 100, y: Math.round(u.y * 2000) / 100 } };
+    expect(directionAxes(dir)).toEqual({ main: { x: 1732, y: 1000 }, cross: { x: -1000, y: 1732 } });
+    const n = { x: -u.y, y: u.x }; // rechts vom Pfeil
+    const at = (id: string, along: number, side = 0) => st(id, Math.round((u.x * along + n.x * side) * 100) / 100, Math.round((u.y * along + n.y * side) * 100) / 100);
+    // „b“ liegt 4 m rechts, „d“ 6 m links der Linie; maßgeblich ist nur die Lage entlang der Richtung
+    const stands = [at('c', 30), at('a', -5), at('b', 12, 4), at('d', 45, -6)];
+    expect(ids(orderStands(dirPage(dir, stands)))).toEqual(['a', 'b', 'c', 'd']);
+    // gleiche Lage entlang der Richtung (Senkrechte durch einen Punkt; Richtung 4 : 3, Senkrechte 3 : 4 ganzzahlig)
+    const d43 = { from: { x: 0, y: 0 }, to: { x: 4, y: 3 } };
+    const tie = [st('rechts', 7, 14), st('mitte2', 10, 10), st('links', 13, 6), st('mitte', 10, 10)];
+    expect(ids(orderStands(dirPage(d43, tie)))).toEqual(['links', 'mitte', 'mitte2', 'rechts']);
+  });
+
+  it('ganzzahlig in Zentimetern: Standmitten und Punkte auf 0,01 m gerundet, unabhängig von der Anlegereihenfolge', () => {
+    // A wird auf (0, 0) gerundet: Richtung (1000 cm, 1 cm), also 1 cm Steigung auf 10 m
+    const dir = { from: { x: 0.004, y: 0 }, to: { x: 10, y: 0.01 } };
+    expect(directionAxes(dir)).toEqual({ main: { x: 1000, y: 1 }, cross: { x: -1, y: 1000 } });
+    // Stände auf x = 0 übereinander: der untere liegt entlang der Richtung weiter vorn
+    const stands = [st('unten', 0, 0.02), st('oben', 0.001, 0), st('mitte', 0, 0.01)];
+    const order = ids(orderStands(dirPage(dir, stands)));
+    expect(order).toEqual(['oben', 'mitte', 'unten']);
+    for (const perm of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
+      expect(ids(orderStands(dirPage(dir, perm.map((i) => stands[i]!))))).toEqual(order);
+    }
+  });
+
+  it('A = B (nach Rundung auf 0,01 m) ist ungültig: Hinweis, keine Reihenfolge, Neu nummerieren gesperrt', () => {
+    const dir = { from: { x: 5, y: 5 }, to: { x: 5.004, y: 4.996 } };
+    expect(directionAxes(dir)).toBeNull();
+    const p = dirPage(dir, [st('a', 0, 0), st('b', 10, 0)]);
+    expect(orderStands(p)).toEqual([]);
+    expect(numberingIssue(p)).toMatch(/Start- und Zielpunkt/);
+    expect(renumberIssue(project([p]), 'p')).toEqual({ pageId: 'p', pageName: 'p', message: numberingIssue(p) });
+    // global auch von einer anderen Page aus gesperrt; pro Festplatz nur auf der Page selbst; „manuell“ zählt nicht
+    const ok = page('q', { stands: [st('c', 0, 0)] });
+    expect(renumberIssue(project([ok, p], { scope: 'global' }), 'q')?.pageId).toBe('p');
+    expect(renumberIssue(project([ok, p]), 'q')).toBeNull();
+    expect(renumberIssue(project([ok, { ...p, numberingMode: 'manual' }], { scope: 'global' }), 'q')).toBeNull();
+    expect(numberingIssue({ ...p, direction: { from: { x: 5, y: 5 }, to: { x: 5.01, y: 5 } } })).toBeNull();
+  });
+
+  it('Vorgabe beim ersten Umschalten: waagrecht durch die Mitte aller Stände, nummeriert wie links → rechts', () => {
+    const stands = [st('a', 10, 4), st('b', -6, -8), st('c', 30, 20)];
+    // Hülle der Stände (2 × 2 m): x −7 … 31, y −9 … 21 → y = 6
+    expect(defaultDirection(page('p', { stands }))).toEqual({ from: { x: -7, y: 6 }, to: { x: 31, y: 6 } });
+    expect(ids(orderStands(dirPage(undefined, stands)))).toEqual(ids(orderLeftToRight(stands)));
+    // ohne Stände über die Grundflächen, ohne beides keine Vorgabe
+    expect(defaultDirection(page('p', { areas: [area('G')] }))).toEqual({ from: { x: 0, y: -5 }, to: { x: 50, y: -5 } });
+    expect(defaultDirection(page('leer'))).toBeNull();
+  });
+
+  it('Neu nummerieren in eigener Richtung; fixierte Nummern werden übersprungen', () => {
+    const stands = [st('s1', 0, 0), st('s2', 0, 10, { nr: '1', nrLocked: true }), st('s3', 0, 20)];
+    const p = dirPage({ from: { x: 0, y: 30 }, to: { x: 0, y: -30 } }, stands);
+    const plan = planRenumber(project([p]), 'p');
+    expect(plan.changes.map((c) => [c.standId, c.next])).toEqual([
+      ['s3', '2'],
+      ['s1', '3'],
+    ]);
+    expect(plan.fixed).toBe(1);
+  });
+});
+
+describe('#12 Grenzfälle', () => {
+  it('große Koordinaten (100 km) und lange Richtung bleiben ganzzahlig exakt, 0,01 m entscheidet weiter', () => {
+    // Skalarprodukt bis ca. 2 · 10⁷ cm · 10⁷ cm = 2 · 10¹⁴, weit unter 2⁵³
+    const dir = { from: { x: -100_000, y: -100_000 }, to: { x: 100_000, y: 99_999.99 } };
+    const axes = directionAxes(dir)!;
+    expect(axes.main).toEqual({ x: 20_000_000, y: 19_999_999 });
+    const a = st('a', 50_000, 50_000);
+    const b = st('b', 50_000.01, 50_000);
+    const c = st('c', 50_000, 50_000.01);
+    for (const list of [[a, b, c], [c, b, a], [b, a, c]]) expect(ids(orderAlong(list, axes))).toEqual(['a', 'c', 'b']);
+    expect(ids(orderAlong([b, a], FIXED_AXES.rightToLeft))).toEqual(['b', 'a']);
+  });
+
+  it('Stand genau im Mittelpunkt: in beiden Drehsinnen zuerst; Gleichstand im Winkel in beiden Drehsinnen gleich aufgelöst', () => {
+    const cw = { center: { x: 0, y: 0 }, startAngle: 0 };
+    const list = [st('E', 10, 0), st('m', 0.004, 0), st('W', -10, 0), st('Wfern', -20, 0)];
+    expect(ids(orderClockwise(list, cw, 0, 1))).toEqual(['m', 'E', 'W', 'Wfern']);
+    expect(ids(orderClockwise(list, cw, 0, -1))).toEqual(['m', 'W', 'Wfern', 'E']);
+  });
+
+  it('gegen den Uhrzeigersinn: Neu nummerieren mit Startnummer und fixierter Nummer', () => {
+    const cw = { center: { x: 0, y: 0 }, startAngle: 0 };
+    const stands = [st('N', 0, -10), st('E', 10, 0, { nr: '11', nrLocked: true }), st('S', 0, 10), st('W', -10, 0)];
+    const plan = planRenumber(project([page('p', { numberingMode: 'counterClockwise', clockwise: cw, stands })], { start: 10 }), 'p');
+    expect(plan.changes.map((c) => [c.standId, c.next])).toEqual([
+      ['N', '10'],
+      ['W', '12'],
+      ['S', '13'],
+    ]);
+    expect(plan.fixed).toBe(1);
+  });
+
+  it('eigene Richtung ohne gesetzte Punkte: Vorgabe aus den Ständen, auch für gedrehte Stände über ihre Hülle', () => {
+    const r = st('r', 10, 0, { w: 4, d: 2, rot: 90 });
+    expect(defaultDirection(page('p', { stands: [r, st('a', 0, 0)] }))).toEqual({ from: { x: -1, y: 0 }, to: { x: 11, y: 0 } });
+    // ohne Objekte: keine Reihenfolge, aber auch kein Hinweis (nichts zu nummerieren)
+    const empty = page('leer', { numberingMode: 'direction' });
+    expect(orderStands(empty)).toEqual([]);
+    expect(numberingIssue(empty)).toBeNull();
+  });
+});
+
+describe('#12 Reihenfolge: Eigenschaften (QA-M5-01) für alle Richtungen und Drehsinne', () => {
+  const standsArb = fc
+    .uniqueArray(fc.record({ x: fc.integer({ min: -30, max: 30 }), y: fc.integer({ min: -30, max: 30 }) }), { minLength: 1, maxLength: 25, selector: (p) => `${p.x}|${p.y}` })
+    .map((pts) => pts.map((p, i) => st(`s${i}`, p.x / 100, p.y / 100)));
+  const ptArb = fc.record({ x: fc.integer({ min: -2000, max: 2000 }), y: fc.integer({ min: -2000, max: 2000 }) }).map((p) => ({ x: p.x / 100, y: p.y / 100 }));
+  const permuted = standsArb.chain((list) => fc.shuffledSubarray(list, { minLength: list.length, maxLength: list.length }).map((perm) => [list, perm] as const));
+
+  it('jede Permutation ergibt dieselbe Reihenfolge; ohne Gleichstände ist B → A die Umkehrung von A → B', () => {
+    fc.assert(
+      fc.property(permuted, ptArb, ptArb, fc.integer({ min: 0, max: 359 }), ([list, perm], from, to, startAngle) => {
+        for (const axes of Object.values(FIXED_AXES)) expect(ids(orderAlong(perm, axes))).toEqual(ids(orderAlong(list, axes)));
+        const cw = { center: from, startAngle };
+        expect(ids(orderClockwise(perm, cw, 0, -1))).toEqual(ids(orderClockwise(list, cw, 0, -1)));
+        const axes = directionAxes({ from, to });
+        if (!axes) return;
+        expect(ids(orderAlong(perm, axes))).toEqual(ids(orderAlong(list, axes)));
+        const back = directionAxes({ from: to, to: from })!;
+        const key = (s: Stand) => Math.round(s.cx * 100) * axes.main.x + Math.round(s.cy * 100) * axes.main.y;
+        if (new Set(list.map(key)).size === list.length) expect(ids(orderAlong(list, back))).toEqual(ids(orderAlong(list, axes)).toReversed());
+      }),
+      { numRuns: 300 },
     );
   });
 });

@@ -15,7 +15,7 @@ import {
   type BgTransform,
 } from './background';
 import { constrainAngle, measure } from './measure';
-import { closestPointOnSegment, findSnap, rectSnapSource } from './snap';
+import { closestPointOnSegment, findSnap, pointSnapSource, rectSnapSource } from './snap';
 
 const close = (a: { x: number; y: number }, b: { x: number; y: number }, digits = 9) => {
   expect(a.x).toBeCloseTo(b.x, digits);
@@ -183,6 +183,16 @@ describe('Fang', () => {
     const r = findSnap({ x: 0, y: -1.35 }, [rectSnapSource([rotated])], 0.2);
     expect(r?.kind).toBe('corner');
     close(r!.point, { x: 0, y: -Math.SQRT2 });
+  });
+
+  it('#12 Richtung setzen: nur Grundflächen-Ecken und Standmitten, keine Kanten', () => {
+    const stand = { cx: 30, cy: 5, w: 2, d: 2, rot: 0 };
+    const src = pointSnapSource([rect], [stand]);
+    expect(findSnap({ x: 0.3, y: 0.2 }, [src], 1)).toMatchObject({ kind: 'corner', point: { x: 0, y: 0 } });
+    expect(findSnap({ x: 30.4, y: 5.3 }, [src], 1)).toMatchObject({ kind: 'center', point: { x: 30, y: 5 } });
+    // Kantenmitte der Grundfläche und Ecke des Stands fangen nicht
+    expect(findSnap({ x: 10, y: 0.4 }, [src], 1)).toBeNull();
+    expect(findSnap({ x: 31, y: 6 }, [pointSnapSource([], [stand])], 0.5)).toBeNull();
   });
 
   it('closestPointOnSegment begrenzt auf die Strecke', () => {
