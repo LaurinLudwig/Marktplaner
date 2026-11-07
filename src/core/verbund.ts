@@ -20,7 +20,7 @@
 import { bgCorners, moveBy, rotateAround as rotateBackground } from './background';
 import { footprint, type PartsRect } from './footprint';
 import { boundsTouch, penetration, rectGeo } from './geometry/polygon';
-import { boundsOfRects, normAngle, rotateAround, roundAngle } from './geometry/rect';
+import { boundsOfRects, normAngle, rotateAround } from './geometry/rect';
 import { exceedsTol } from './geometry/tolerance';
 import { rotate } from './geometry/vec';
 import { activeAreas, usesAreas } from './pageAreas';
@@ -308,6 +308,12 @@ const r2 = (n: number) => {
   return Object.is(r, -0) ? 0 : r;
 };
 
+/** Gleitkomma-Reste entfernen (10⁻⁸): ändert die Lage der Objekte zueinander nicht messbar (Toleranz 0,01 m). */
+const fine = (n: number) => {
+  const r = Math.round(n * 1e8) / 1e8;
+  return Object.is(r, -0) ? 0 : r;
+};
+
 /**
  * Verschiebt bzw. dreht eine ganze Page in das gemeinsame Koordinatensystem des Verbunds (#15). Mit:
  * - Grundflächen, Stände (Teile einer eigenen Form hängen am Stand und drehen mit), Infrastruktur (Linien über Mitte
@@ -323,13 +329,16 @@ const r2 = (n: number) => {
  * - Ansicht: so verschoben, dass der Drehpunkt an derselben Bildschirmstelle bleibt.
  * Unverändert: Papier-Elemente (mm auf dem Papier), Raster, Teile einer Form (relativ zum Stand) und `hiddenFree`
  * (Schlüssel und Intervalle beziehen sich auf die Achse der Grundfläche und bleiben bei einer starren Bewegung gültig).
- * `round` (Standard): Positionen auf 0,01 m, Drehungen auf 0,1° wie beim Übernehmen; Hin- und Rückweg ergeben dann das
- * Original bis auf diese Rundung (bei reiner Verschiebung um ganze cm exakt).
+ * `round` (Standard): Positionen und Drehungen auf 10⁻⁸ (m bzw. °), das entfernt nur Gleitkomma-Reste. Nicht auf 0,01 m
+ * wie beim Übernehmen: Das runden alle Objekte einzeln, nach einer Drehung verschöben sich Stand und Grundfläche bzw.
+ * zwei bündige Stände gegeneinander um bis zu etwa 0,014 m – mehr als die Toleranz (Fehlwarnungen „außerhalb“ und
+ * „Überlappung“, geänderte Freiflächen). Hin- und Rückweg ergeben das Original bis auf 10⁻⁸ (bei Verschiebung um ganze
+ * cm exakt).
  */
 export function transformPageContent(page: FestplatzPage, t: PageTransform, opts: { round?: boolean } = {}): FestplatzPage {
   const round = opts.round ?? true;
-  const pos = (n: number) => (round ? r2(n) : n);
-  const ang = (a: number) => (round ? roundAngle(a) : normAngle(a));
+  const pos = (n: number) => (round ? fine(n) : n);
+  const ang = (a: number) => normAngle(round ? fine(normAngle(a)) : a);
   const pt = (p: Vec): Vec => {
     const q = applyTransform(t, p);
     return { x: pos(q.x), y: pos(q.y) };

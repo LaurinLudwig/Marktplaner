@@ -989,8 +989,9 @@ des Hintergrunds), „Anwenden“ = ein Undo-Schritt. Der Hinweis nennt, dass di
   ihm), Start- und Zielpunkt der eigenen Richtung (A/B folgen der Bewegung), die Nordrichtung (+ Drehung);
 - die Ansicht der Page (der Drehpunkt bleibt an seiner Bildschirmstelle).
 Unverändert bleiben Papier-Elemente (mm auf dem Papier), Raster und ausgeblendete Freiflächen (Schlüssel und Intervall
-beziehen sich auf die Achse der Grundfläche). Positionen werden wie beim Übernehmen auf 0,01 m gerundet; nach einer
-Drehung kann sich ein Stand dadurch um bis zu etwa 0,005 m gegen seine Grundfläche verschieben (innerhalb der Toleranz).
+beziehen sich auf die Achse der Grundfläche). Die bewegten Positionen werden nicht auf 0,01 m gerundet (nur Gleitkomma-Reste
+unter 10⁻⁸ m entfallen): Würde jedes Objekt nach einer Drehung einzeln gerundet, verschöben sich Stand und Grundfläche
+bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die Toleranz (Fehlwarnungen, andere Freiflächen).
 
 **Nachbarn in der Einzelansicht** (Entscheidung 2026-11-03):
 - Nachbarn einer Page sind die Stände und Infrastruktur-Objekte der anderen Plätze ihres Verbunds, deren Hüllrechteck die

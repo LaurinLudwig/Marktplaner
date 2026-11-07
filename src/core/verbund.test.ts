@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { bgToWorld } from './background';
 import { feesOf } from './fee';
+import { decodeProjectFile } from './fileFormat';
 import { expiredHiddenFree, hiddenEntry, pageFree } from './hiddenFree';
 import { lineEnds } from './infra';
 import { createInfra } from './infra';
@@ -226,6 +229,7 @@ describe('#15 Nachbarn in der Einzelansicht', () => {
     expect(expiredHiddenFree(before, after).get('Z')).toEqual([]);
   });
 
+
   it('PDF: Nachbarn werden nicht gezeichnet, belegen aber die Freiflächen', () => {
     const z = zPage([Z1], { sheet: { ...createPage('x').sheet, format: 'A3', scale: null } });
     const p = proj([z, sPage()]);
@@ -354,12 +358,49 @@ describe('#15 transformPageContent', () => {
     expect(out.view).toEqual({ scale: 10, tx: 100 - 123.4, ty: 50 + 56.7 });
   });
 
-  it('gerundet: Positionen auf 0,01 m, Drehungen auf 0,1°', () => {
+  it('gerundet: nur Gleitkomma-Reste entfallen (10⁻⁸); Drehungen bleiben auf 0,1°', () => {
     const out = transformPageContent(full(), t);
     for (const r of [...out.areas, ...out.stands, ...out.infra]) {
-      expect(Math.round(r.cx * 100) / 100).toBe(r.cx);
-      expect(Math.round(r.cy * 100) / 100).toBe(r.cy);
+      expect(Math.round(r.cx * 1e8) / 1e8).toBe(r.cx);
+      expect(Math.round(r.cy * 1e8) / 1e8).toBe(r.cy);
       expect(Math.round(r.rot * 10) / 10).toBe(r.rot);
+    }
+    // 90° um den Ursprung: exakte Werte ohne Reste wie 6e-17
+    const quarter = transformPageContent(full(), { dx: 0, dy: 0, rot: 90, pivot: { x: 0, y: 0 } });
+    expect(quarter.areas[0]).toMatchObject({ cx: 5, cy: 25, rot: 105 });
+  });
+
+  it('Drehen erzeugt keine Fehlwarnungen: bündige Stände bleiben innerhalb und ohne Überlappung, Freiflächen gleich', () => {
+    // Nicht auf 0,01 m runden: Einzeln gerundet verschöben sich Stand und Grundfläche bzw. zwei bündige Stände um bis zu
+    // etwa 0,014 m gegeneinander (mehr als die Toleranz); vorher bei 66 von 515 Winkeln eine Fehlwarnung
+    const area: Area = { id: 'A', name: '', cx: 45, cy: -5, w: 90, d: 10, rot: 0 };
+    const stands = Array.from({ length: 30 }, (_, i) => st(`b${i}`, 1.5 + 3 * i));
+    const flat: FestplatzPage = { ...createPage('bündig'), areas: [area], stands: stands.filter((_, i) => i % 7 !== 3) };
+    const p = proj([flat], []);
+    const ctx = { minFreeWidth: 0.5, infraTypes: p.infraTypes };
+    const widths = (pg: FestplatzPage) => pageFree(pg, ctx).flatMap((a) => a.free.map((f) => Math.round((f.end - f.start) * 1000) / 1000));
+    const before = widths(flat);
+    expect(before).toHaveLength(4);
+    for (let r = 0.1; r < 360; r += 0.7) {
+      const q = transformPageContent(flat, { dx: 12.34, dy: -5.67, rot: Math.round(r * 10) / 10, pivot: { x: 0.003, y: 0 } });
+      const w = cachedWarningData(q.stands, q.infra, pageEnv(p, q), p);
+      expect(countWarnings(w.page, q.stands, p.settings), `Drehung ${Math.round(r * 10) / 10}°`).toMatchObject({ outside: 0, overlap: 0 });
+      expect(widths(q), `Drehung ${Math.round(r * 10) / 10}°`).toEqual(before);
+    }
+  });
+
+  it('Lastprojekt: Drehen und Verschieben jedes Platzes ändert weder Warnungen noch Freiflächen', () => {
+    // vorher (Rundung auf 0,01 m): bei 183 von 392 Fällen andere Warnungen und über 10 000 Freiflächen Unterschied
+    const project = decodeProjectFile(new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'last-500-staende.schelme')))).project;
+    const ctx = { minFreeWidth: project.settings.minFreeWidth, infraTypes: project.infraTypes };
+    const sig = (pg: FestplatzPage) => {
+      const w = cachedWarningData(pg.stands, pg.infra, pageEnv(project, pg), project);
+      const free = pageFree(pg, ctx).flatMap((a) => a.free.map((f) => `${f.key} ${(f.end - f.start).toFixed(3)}`));
+      return { warnings: countWarnings(w.page, pg.stands, project.settings, undefined, { warnings: w.infra, objects: pg.infra }, w.distance), free };
+    };
+    for (const pg of project.pages) {
+      const before = sig(pg);
+      for (const rot of [7.3, 45, 123.4, 271.9]) expect(sig(transformPageContent(pg, { dx: 12.34, dy: 5.67, rot, pivot: pagePivot(pg) })), `${pg.name} ${rot}°`).toEqual(before);
     }
   });
 
