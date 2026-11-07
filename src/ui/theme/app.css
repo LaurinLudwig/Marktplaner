@@ -649,7 +649,7 @@ kbd {
 .world .area-body { fill: var(--area-fill); stroke: var(--area-stroke); stroke-width: 1; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
 .world .area-front { stroke: var(--front); stroke-width: 4; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
 .world .area.selected .area-body { stroke: var(--select); stroke-width: 1.5; stroke-dasharray: none; }
-.world .distance-zone polygon { fill: none; stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.world .distance-zone path, .world .distance-zone polygon { fill: none; stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .world .distance-line { stroke: var(--warn); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
 .world .stand { stroke: var(--stand-stroke); stroke-width: 1; fill-opacity: 0.88; vector-effect: non-scaling-stroke; }
 .world .stand.selected { stroke: var(--select); stroke-width: 2.5; }
@@ -670,6 +670,9 @@ kbd {
 .selection-overlay .edge-hit { stroke: transparent; stroke-width: 10; stroke-linecap: round; pointer-events: stroke; }
 .selection-overlay .edge-hit.hover { stroke: color-mix(in srgb, var(--front) 55%, transparent); stroke-width: 6; }
 .selection-overlay .group-box { fill: none; stroke: var(--select); stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
+/* Aktiver Teil der eigenen Form (#16): kräftig umrandet, Griffe gefüllt */
+.selection-overlay .part-active { fill: none; stroke: var(--select); stroke-width: 2.5; pointer-events: none; }
+.selection-overlay .part-handle { fill: var(--select); }
 .selection-overlay .paper-ghost { fill: none; stroke: var(--select); stroke-width: 1.5; stroke-dasharray: 6 3; pointer-events: none; }
 .selection-overlay .marquee { fill: color-mix(in srgb, var(--select) 12%, transparent); stroke: var(--select); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
 .create-overlay .create-ghost { fill: color-mix(in srgb, var(--select) 15%, transparent); stroke: var(--select); stroke-width: 1.2; stroke-dasharray: 5 3; pointer-events: none; }
@@ -694,6 +697,12 @@ kbd {
 
 /* Seitenleiste */
 .fields-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: end; }
+/* Teile der eigenen Form eines Stands (#16) */
+.stand-parts { display: grid; gap: 8px; }
+.stand-part-row { display: grid; gap: 4px; padding: 6px 0; border-top: 1px solid var(--border); }
+.stand-part-head { display: flex; gap: 6px; align-items: center; }
+.stand-part-head select { height: 24px; padding: 0 4px; }
+.stand-part-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .inp textarea, .field select {
   width: 100%;
   padding: 4px 7px;
@@ -784,6 +793,9 @@ kbd {
 .world .stand-group .stand-outline.warn-overlap { stroke: var(--err); stroke-width: 2.5; }
 .world .stand-group.selected .stand-outline.warn-outside, .world .stand-group.selected .stand-outline.warn-overlap { stroke-dasharray: 6 3; }
 .world .stand-hitbox { fill: none; stroke: var(--select); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+/* Belegung wie gezeichnet (#16): Teile des ausgewählten Stands dünn umrandet, das Hüllrechteck nur zur Orientierung blasser */
+.world .stand-part { fill: none; stroke: var(--select); stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
+.world .stand-hitbox.orientation { opacity: 0.5; }
 .world .overlap-region { fill: color-mix(in srgb, var(--err) 45%, transparent); stroke: var(--err); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .world .warn-icon.outside { fill: var(--warn); }
 .world .warn-icon.overlap { fill: var(--err); }
@@ -1003,13 +1015,13 @@ kbd {
 .shape-preview .sp-outline { fill: none; stroke: var(--text-strong); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
 .shape-preview .sp-front { stroke: #d97a00; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 .shape-preview .sp-label { fill: var(--muted); }
-.dialog.shape-editor { width: min(720px, calc(100vw - 32px)); }
+.dialog.shape-editor { width: min(800px, calc(100vw - 32px)); }
 .shape-editor .se-body { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; padding: 12px 16px 4px; }
 .shape-editor .se-form { display: grid; gap: 8px; align-content: start; }
 .shape-editor .se-form p, .shape-editor .se-preview p { padding: 0; }
 .shape-editor > p.hint { padding: 4px 16px 10px; }
 .shape-editor .se-parts { display: grid; gap: 4px; }
-.shape-editor .se-row { display: grid; grid-template-columns: 96px repeat(4, minmax(0, 1fr)) 26px; gap: 4px; align-items: center; }
+.shape-editor .se-row { display: grid; grid-template-columns: 96px repeat(5, minmax(0, 1fr)) 26px; gap: 4px; align-items: center; }
 .shape-editor .se-head { color: var(--muted); font-size: 11px; }
 .shape-editor .se-row select { height: 24px; padding: 0 4px; min-width: 0; }
 .shape-editor .se-num label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

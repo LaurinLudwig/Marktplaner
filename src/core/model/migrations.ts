@@ -29,10 +29,12 @@
  *  13  Nummerierung (#12): Page `numberingMode` auch `rightToLeft`, `topToBottom`, `bottomToTop`, `direction`,
  *      `counterClockwise`; Page `direction` (Start- und Zielpunkt der eigenen Richtung).
  *  14  Freies Blatt (#13): Blatt `format` auch 'plan' und 'region', dazu `margin`, `targetWidth`, `region`.
+ *  15  Zusammengesetzte Form (#16): Geschäft `parts` (eigene Form) und `frontOverride` (Frontmeter von Hand),
+ *      Formvorlage `occupies` („belegt wie gezeichnet“), Teil einer Form `rot` (Drehung je Teil).
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 14;
+export const CURRENT_SCHEMA_VERSION = 15;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -171,6 +173,19 @@ export const MIGRATIONS: Record<number, Migration> = {
       const format = typeof sheet.format === 'string' && DIN_FORMATS.includes(sheet.format) ? sheet.format : 'A3';
       return { ...pg, sheet: { orientation: 'landscape', scale: null, cx: 0, cy: 0, margin: null, targetWidth: 841, region: null, ...sheet, format } };
     }),
+  }),
+  /**
+   * 14 → 15 (#16): Kein Stand hat eine eigene Form oder Frontmeter von Hand, keine Vorlage belegt wie gezeichnet, kein
+   * Teil ist gedreht. Damit rechnet alles wie bisher mit dem Rechteck B × T.
+   */
+  14: (p) => ({
+    ...p,
+    ...('shapeTemplates' in p
+      ? { shapeTemplates: mapList(p.shapeTemplates, (t) => (isObj(t) ? { occupies: false, ...t, parts: mapList(t.parts, (q) => (isObj(q) ? { rot: 0, ...q } : q)) } : t)) }
+      : {}),
+    pages: mapList(p.pages, (pg) =>
+      isObj(pg) ? { ...pg, stands: mapList(pg.stands, (s) => (isObj(s) ? { parts: null, frontOverride: null, ...s } : s)) } : pg,
+    ),
   }),
 };
 

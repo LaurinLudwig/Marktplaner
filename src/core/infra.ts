@@ -11,6 +11,8 @@ import { vec } from './geometry/vec';
 import { newId } from './id';
 import type { FestplatzPage, Id, InfraGeometry, InfraObject, InfraTypeDef, Rect, Stand, Vec } from './model/types';
 import { MIN_DRAW_SIZE } from './objects';
+import { footprint, type PartsRect } from './footprint';
+import { partPolygon, partRect } from './shape';
 
 /**
  * Symbole, aus denen eigene Typen wählen können (Material Symbols, lokal gebündelt, siehe ui/icons/Icon.tsx).
@@ -161,10 +163,10 @@ export function occupyingRects(infra: readonly InfraObject[], types: ReadonlyMap
   return out;
 }
 
-const occupantCache = new WeakMap<readonly InfraObject[], { stands: readonly Stand[]; types: readonly InfraTypeDef[]; result: readonly (Rect & { id: Id })[] }>();
+const occupantCache = new WeakMap<readonly InfraObject[], { stands: readonly Stand[]; types: readonly InfraTypeDef[]; result: readonly (PartsRect & { id: Id })[] }>();
 
 /** Alles, was Grundflächen belegt: Stände und belegende Infrastruktur (zwischengespeichert je Page-Listen). */
-export function pageOccupants(page: Pick<FestplatzPage, 'stands' | 'infra'>, types: readonly InfraTypeDef[]): readonly (Rect & { id: Id })[] {
+export function pageOccupants(page: Pick<FestplatzPage, 'infra'> & { stands: readonly Stand[] }, types: readonly InfraTypeDef[]): readonly (PartsRect & { id: Id })[] {
   if (!page.infra.length) return page.stands;
   const hit = occupantCache.get(page.infra);
   if (hit && hit.stands === page.stands && hit.types === types) return hit.result;
@@ -203,16 +205,51 @@ export function segmentLengthInRect(r: Rect, a: Vec, b: Vec): number {
  */
 export function standInObject(stand: Stand, o: InfraObject, geometry: InfraGeometry): boolean {
   if (geometry === 'point') return false;
-  const sg = rectGeo(stand);
+  const sg = footprint(stand);
   if (geometry === 'line' && o.d <= EPS) {
     const [a, b] = lineEnds(o);
     const lb = { minX: Math.min(a.x, b.x), minY: Math.min(a.y, b.y), maxX: Math.max(a.x, b.x), maxY: Math.max(a.y, b.y) };
     const m = 2 * (TOL + EPS);
-    if (!boundsTouch(sg.bounds, lb) || stand.w <= m || stand.d <= m) return false;
+    if (!boundsTouch(sg.bounds, lb)) return false;
+    // Belegung wie gezeichnet (#16): jeder Teil um TOL verkleinert
+    if (stand.parts?.length)
+      return stand.parts.some((p) => {
+        const r = partRect(stand, p);
+        if (r.w <= m || r.d <= m) return false;
+        const inset = { ...p, w: (p.w * stand.w - m) / stand.w, h: (p.h * stand.d - m) / stand.d, x: p.x + m / 2 / stand.w, y: p.y + m / 2 / stand.d };
+        return segmentLengthInConvex(partPolygon(stand, inset), a, b) > EPS;
+      });
+    if (stand.w <= m || stand.d <= m) return false;
     return segmentLengthInRect({ ...stand, w: stand.w - m, d: stand.d - m }, a, b) > EPS;
   }
   const og = rectGeo(o);
-  return boundsTouch(sg.bounds, og.bounds) && exceedsTol(penetration(sg.poly, og.poly));
+  return boundsTouch(sg.bounds, og.bounds) && sg.polys.some((poly) => exceedsTol(penetration(poly, og.poly)));
+}
+
+/** Länge des Abschnitts a–b, der im konvexen Vieleck liegt (Cyrus–Beck, beide Umlaufrichtungen). */
+export function segmentLengthInConvex(poly: readonly Vec[], a: Vec, b: Vec): number {
+  const area = poly.reduce((n, p, i) => n + p.x * poly[(i + 1) % poly.length]!.y - poly[(i + 1) % poly.length]!.x * p.y, 0);
+  const orient = area >= 0 ? 1 : -1;
+  const d = { x: b.x - a.x, y: b.y - a.y };
+  let t0 = 0;
+  let t1 = 1;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i]!;
+    const q = poly[(i + 1) % poly.length]!;
+    const e = { x: q.x - p.x, y: q.y - p.y };
+    // Innen: orient · (e × (x − p)) ≥ 0
+    const num = orient * (e.x * (a.y - p.y) - e.y * (a.x - p.x));
+    const den = orient * (e.x * d.y - e.y * d.x);
+    if (Math.abs(den) < 1e-15) {
+      if (num < 0) return 0;
+      continue;
+    }
+    const t = -num / den;
+    if (den > 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 >= t1) return 0;
+  }
+  return (t1 - t0) * Math.hypot(d.x, d.y);
 }
 
 /** Objekte mit „freihalten“, in die ein Stand eindringt: Stand-ID → Objekt-IDs. */

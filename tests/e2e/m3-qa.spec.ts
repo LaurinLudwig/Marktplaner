@@ -45,7 +45,7 @@ async function drag(page: Page, from: P, to: P, steps = 12) {
 // suppressOverlapWarning (M4, Formatversion 2), suppressDuplicateWarning (M5, Formatversion 3), suppressInfraWarning (M7, Version 4) sowie shape und
 // shapeTemplateId (M12, Version 8): Teil des Modells,
 // nachgetragen vom Entwickler, siehe qa/M3.md
-const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9), seit #9 mit labelOffset (11)
+const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null, parts: null, frontOverride: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9), seit #9 mit labelOffset (11), seit #16 mit parts und frontOverride (15)
 async function seed(page: Page, objs: { areas?: any[]; stands?: any[]; categories?: any[] }) {
   await page.evaluate(
     ({ o, base }) => {

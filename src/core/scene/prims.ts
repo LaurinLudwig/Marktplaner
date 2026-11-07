@@ -16,6 +16,7 @@ export type StyleKey =
   | 'stand-fill'
   | 'stand-outline'
   | 'stand-hitbox'
+  | 'stand-part'
   | 'free-space'
   | 'free-hatch'
   | 'overlap-region'

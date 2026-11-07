@@ -28,7 +28,7 @@ const powers = (page: Page, idx = 0) => store(page, `s.project.pages[${idx}].sta
 const standCount = (page: Page, idx = 0) => store(page, `s.project.pages[${idx}].stands.length`) as Promise<number>;
 
 // suppressInfraWarning (M7, Formatversion 4), shape und shapeTemplateId (M12, Formatversion 8): Teil des Modells, ergänzt vom Entwickler
-const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9), seit #9 mit labelOffset (11)
+const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null, parts: null, frontOverride: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9), seit #9 mit labelOffset (11), seit #16 mit parts und frontOverride (15)
 
 /** Objekte auf die Page `idx` (Standard: aktive Page) legen, ein Undo-Schritt „Testdaten“. */
 async function seed(page: Page, objs: { areas?: any[]; stands?: any[]; pageIdx?: number; pagePatch?: Record<string, unknown> }) {
@@ -623,7 +623,7 @@ test.describe('QA M5: Dateiformat Version 3 (§10)', () => {
       const { unzipSync, strFromU8 } = await import('fflate');
       const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(path)))['project.json']!));
       // Seit M12 Formatversion 8 (Speichern schreibt die aktuelle Version), angepasst vom Entwickler (vorher 7)
-      expect(json.schemaVersion).toBe(14); // seit #13 Version 14, angepasst vom Entwickler (vorher 13, 12, 11, 10, 9, 8)
+      expect(json.schemaVersion).toBe(15); // seit #16 Version 15, angepasst vom Entwickler (vorher 14, 13, 12, 11, 10, 9, 8)
       expect(json.project.settings.numbering.digits).toBe(1);
       expect(errors).toEqual([]);
     });

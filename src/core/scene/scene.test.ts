@@ -222,7 +222,7 @@ describe('Export-Profile (M8-07)', () => {
 });
 
 describe('Geschäftsformen in der Szene (M12, #9)', () => {
-  const tpl = { id: 't', name: 'Karussell', w: 10, d: 12, parts: [{ kind: 'ellipse' as const, x: 0, y: 0, w: 1, h: 10 / 12 }, { kind: 'rect' as const, x: 0.35, y: 0.75, w: 0.3, h: 0.25 }] };
+  const tpl = { id: 't', name: 'Karussell', w: 10, d: 12, occupies: false, parts: [{ kind: 'ellipse' as const, x: 0, y: 0, w: 1, h: 10 / 12, rot: 0 }, { kind: 'rect' as const, x: 0.35, y: 0.75, w: 0.3, h: 0.25, rot: 0 }] };
 
   it('Rechteck wie bisher, Kreis/Oval als ein Pfad aus Bögen mit Stil „stand“ und Warnvariante', () => {
     const r = createStand({ cx: 0, cy: 0, w: 4, d: 2, rot: 0 });

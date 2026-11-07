@@ -13,6 +13,7 @@ import { clampMinPassage, clampPrice, clampSnapGap, VAT_LIMITS } from '../core/m
 import type { Area, Category, EdgeIndex, FestplatzPage, Id, InfraObject, PricingSettings, Project, Rect, Stand, Vec } from '../core/model/types';
 import { cloneObjects, createArea, createStand, findObjects, LIMITS, MIN_DRAW_SIZE, PALETTE, STAND_DEFAULT, type Clipboard, type ObjectKind } from '../core/objects';
 import { groupCenter, moveRects, type RectMap } from '../core/transform';
+import { stretchStand } from '../core/compound';
 import type { Bounds } from '../core/viewport';
 import { START_PAGE, useStore } from './store';
 
@@ -163,6 +164,13 @@ export function setRectField(pageId: Id, ids: Id[], field: 'w' | 'd' | 'rot', va
     if (!page) return;
     eachObject(page, ids, (o, kind) => {
       const v = field === 'rot' ? normAngle(value) : kind === 'infra' ? clampToLimits(value, INFRA_LIMITS[geometryOf(p, o as InfraObject)][field]) : clamp(value, kind);
+      // Eigene Form mit gedrehten Teilen (#16): Teile strecken, dann das Hüllrechteck neu einpassen
+      const fit = kind === 'stand' && field !== 'rot' ? stretchStand(o as Stand, field === 'w' ? v : o.w, field === 'd' ? v : o.d) : null;
+      if (fit) {
+        assignRect(o, fit.rect);
+        (o as Stand).parts = fit.parts;
+        return;
+      }
       assignObj(p, o, kind, { ...o, [field]: v });
     });
   });

@@ -1,9 +1,11 @@
 /**
  * Treffertest und Rechteckauswahl auf einer Page (M3). Nur Objekte auf sichtbaren, nicht gesperrten
  * Ebenen sind auswählbar. Infrastruktur liegt über Ständen, Stände über Grundflächen; innerhalb einer Art
- * gewinnt das zuletzt gezeichnete Objekt (Array-Ende).
+ * gewinnt das zuletzt gezeichnete Objekt (Array-Ende). Stände treffen mit ihrer belegten Fläche (#16, core/footprint.ts):
+ * Der Aufrufer übergibt die Page mit `pageStands`, damit Vorlagen mit „belegt wie gezeichnet“ mitzählen.
  */
 import { pointInRect, rectInBounds } from './geometry/rect';
+import { footprint, pointInFootprint } from './footprint';
 import { hitInfra } from './infra';
 import type { FestplatzPage, Id, InfraGeometry, Vec } from './model/types';
 import { selectable, type ObjectKind } from './objects';
@@ -32,7 +34,8 @@ export function pickObject(
   if (selectable(page, 'stand')) {
     for (let i = page.stands.length - 1; i >= 0; i--) {
       const s = page.stands[i]!;
-      if (pointInRect(s, p, tol)) return { kind: 'stand', id: s.id };
+      // Belegung wie gezeichnet (#16): nur die Teile treffen, nicht die freien Ecken des Hüllrechtecks
+      if (pointInFootprint(s, p, tol)) return { kind: 'stand', id: s.id };
     }
   }
   if (selectable(page, 'area')) {
@@ -44,11 +47,16 @@ export function pickObject(
   return null;
 }
 
-/** IDs aller auswählbaren Objekte, die vollständig im Bereich liegen. */
+const boundsInside = (a: Bounds, b: Bounds) => a.minX >= b.minX && a.maxX <= b.maxX && a.minY >= b.minY && a.maxY <= b.maxY;
+
+/**
+ * IDs aller auswählbaren Objekte, die vollständig im Bereich liegen. Stände mit Teilen (#16, über `pageStands`
+ * eingesetzt) zählen mit dem Hüllrechteck ihrer Teile.
+ */
 export function objectsInBounds(page: FestplatzPage, b: Bounds): Id[] {
   const out: Id[] = [];
   if (selectable(page, 'area')) for (const a of page.areas) if (rectInBounds(a, b)) out.push(a.id);
-  if (selectable(page, 'stand')) for (const s of page.stands) if (rectInBounds(s, b)) out.push(s.id);
+  if (selectable(page, 'stand')) for (const s of page.stands) if (boundsInside(footprint(s).bounds, b)) out.push(s.id);
   if (selectable(page, 'infra')) for (const o of page.infra) if (rectInBounds(o, b)) out.push(o.id);
   return out;
 }

@@ -12,7 +12,8 @@ import { withinTol } from './geometry/tolerance';
 import type { Polygon } from './geometry/polygon';
 import { pageOccupants } from './infra';
 import { activeAreas, usesAreas, type AreasOf } from './pageAreas';
-import type { FestplatzPage, HiddenFree, Id, InfraTypeDef, Project, Vec } from './model/types';
+import { pageStands } from './footprint';
+import type { FestplatzPage, HiddenFree, Id, InfraTypeDef, Project, ShapeTemplate, Vec } from './model/types';
 
 /** Gehört die Ausblendung `h` zu dieser Freifläche? Gleicher Schlüssel, Intervallenden bis 0,01 m verschoben. */
 export const matchesHidden = (fs: Pick<FreeSpace, 'key' | 'start' | 'end'>, h: HiddenFree) => fs.key === h.key && withinTol(Math.abs(fs.start - h.start)) && withinTol(Math.abs(fs.end - h.end));
@@ -42,6 +43,8 @@ export function applyHidden(all: readonly AreaFreeSpaces[], hidden: readonly Hid
 export interface FreeContext {
   minFreeWidth: number;
   infraTypes: readonly InfraTypeDef[];
+  /** Formvorlagen: Stände mit einer Vorlage mit „belegt wie gezeichnet“ belegen mit ihren Teilen (#16); fehlt = keine. */
+  shapeTemplates?: readonly ShapeTemplate[];
 }
 
 /**
@@ -51,7 +54,8 @@ export interface FreeContext {
  */
 export function pageFree(page: AreasOf & Pick<FestplatzPage, 'stands' | 'infra' | 'hiddenFree'>, ctx: FreeContext, cache?: FreeSpaceCache): AreaFreeSpaces[] {
   if (!usesAreas(page)) return [];
-  return applyHidden(pageFreeSpaces(activeAreas(page), pageOccupants(page, ctx.infraTypes), ctx.minFreeWidth, cache), page.hiddenFree);
+  const occupants = pageOccupants({ stands: pageStands(page, ctx.shapeTemplates ?? []), infra: page.infra }, ctx.infraTypes);
+  return applyHidden(pageFreeSpaces(activeAreas(page), occupants, ctx.minFreeWidth, cache), page.hiddenFree);
 }
 
 /**
@@ -76,8 +80,8 @@ const pruneCaches = new Map<Id, FreeSpaceCache>();
  */
 export function expiredHiddenFree(before: Project, after: Project): Map<Id, readonly HiddenFree[]> {
   const out = new Map<Id, readonly HiddenFree[]>();
-  const ctx = { minFreeWidth: after.settings.minFreeWidth, infraTypes: after.infraTypes };
-  const ctxChanged = before.settings.minFreeWidth !== ctx.minFreeWidth || before.infraTypes !== ctx.infraTypes;
+  const ctx = { minFreeWidth: after.settings.minFreeWidth, infraTypes: after.infraTypes, shapeTemplates: after.shapeTemplates };
+  const ctxChanged = before.settings.minFreeWidth !== ctx.minFreeWidth || before.infraTypes !== ctx.infraTypes || before.shapeTemplates !== ctx.shapeTemplates;
   const old = new Map(before.pages.map((p) => [p.id, p]));
   for (const page of after.pages) {
     if (!page.hiddenFree.length || !usesAreas(page)) continue;

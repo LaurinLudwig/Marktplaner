@@ -1,10 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { moveBy as moveBackground, worldToBg, type BgTransform } from '../../../core/background';
-import { boundsOfRects, resizeRect, type Handle } from '../../../core/geometry/rect';
+import { boundsOfRects, fromLocal, handlePoint, normAngle, resizeRect, RESIZE_HANDLES, type Handle } from '../../../core/geometry/rect';
+import { distToConvex, hasOwnForm, occupancyStands } from '../../../core/footprint';
+import { meterPartFromWorld, refitStand, standPartsInMeters } from '../../../core/compound';
+import { partPolygon, partRect } from '../../../core/shape';
+import { commitStandParts } from '../../../state/shapes';
 import { objectsInBounds, pickObject } from '../../../core/hit';
 import { isOutside, labelBounds } from '../../../core/labelLayout';
-import type { Area, EdgeIndex, Id, InfraObject, Stand, Vec } from '../../../core/model/types';
-import { computeMoveSnap, type Guide, type SnapState } from '../../../core/moveSnap';
+import type { Area, EdgeIndex, Id, InfraObject, Rect, Stand, Vec } from '../../../core/model/types';
+import { computeMoveSnap, initialSnapState, type Guide, type SnapState } from '../../../core/moveSnap';
 import { lineFromEnds } from '../../../core/infra';
 import { constrainAngle } from '../../../core/measure';
 import { findObjects, LIMITS } from '../../../core/objects';
@@ -20,7 +24,7 @@ import type { Bounds } from '../../../core/viewport';
 import { moveSheetTo, setPaperAnchor, setSheetRegion } from '../../../state/paper';
 import { IS_MAC } from '../../shortcuts/keys';
 import { tip } from '../../shortcuts/tip';
-import { hitHandle, resizeCursor, selectionGeometry, type HandleHit } from './selectionGeometry';
+import { HANDLE_HIT, hitHandle, resizeCursor, ROTATE_OFFSET, selectionGeometry, type HandleHit } from './selectionGeometry';
 import { SnapGuides } from './SnapGuides';
 import { SnapMarker } from './SnapMarker';
 import { SNAP_PX, type ToolContext, type ToolHandlers, type ToolPointer } from './types';
@@ -59,9 +63,15 @@ type Gesture =
   /** Ausgelagerte Standbeschriftung von Hand verschieben (#9). */
   | { kind: 'label'; id: Id; startWorld: Vec; start: Vec; box0: Bounds; moved: boolean; delta: Vec }
   /** Start- oder Zielpunkt der eigenen Nummerierungsrichtung ziehen (#12): eine Transaktion, ein Undo-Schritt. */
-  | { kind: 'direction'; end: 'from' | 'to'; start: Vec; moved: boolean; offset: Vec };
+  | { kind: 'direction'; end: 'from' | 'to'; start: Vec; moved: boolean; offset: Vec }
+  /**
+   * Teil der eigenen Form eines Stands verschieben, an einem Griff in der Größe ändern oder drehen (#16). Vorschau über
+   * den Store (Hüllrechteck und Teile), beim Loslassen ein Undo-Schritt.
+   */
+  | { kind: 'part'; mode: 'move' | 'resize' | 'rotate'; id: Id; index: number; stand0: Stand; rect0: Rect; handle: Handle | null; startWorld: Vec; start: Vec; moved: boolean; a0: number };
 
 const LABEL = { move: 'Verschieben', rotate: 'Drehen', resize: 'Größe ändern', end: 'Länge ändern' } as const;
+const PART_LABEL = { move: 'Teil verschieben', rotate: 'Teil drehen', resize: 'Teil ändern' } as const;
 /** Trefferabstand für Linien ohne Fläche in Bildschirmpixeln (M7). */
 const LINE_HIT_PX = 5;
 /** Ein eingerasteter Stand löst sich erst bei diesem Abstand von der Vorderseite (Hysterese, M4-06). */
@@ -75,7 +85,8 @@ const SHEET_HANDLE_PX = 6;
 
 /**
  * Auswahlwerkzeug (V): Objekte auswählen (Klick, Shift+Klick, Auswahlrechteck), verschieben,
- * drehen (Drehgriff, Shift = 15°), Grundflächen per Griff skalieren, Vorderseite per Kantenklick.
+ * drehen (Drehgriff, Shift = 15°), Grundflächen per Griff skalieren, Vorderseite per Kantenklick. Bei einem Stand mit
+ * eigener Form (#16) macht ein Klick einen Teil aktiv; er lässt sich dann ziehen, an Griffen ändern und drehen.
  * Jede Geste läuft über die Vorschau im Store und wird beim Loslassen als EIN Undo-Schritt übernommen;
  * Esc bricht sie ab. Ein nicht gesperrter Hintergrund wird wie in M2 verschoben.
  */
@@ -88,6 +99,8 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
   const [endSnap, setEndSnap] = useState<SnapResult | null>(null);
   const [paperGhost, setPaperGhost] = useState<Bounds | null>(null);
   const [labelGhost, setLabelGhost] = useState<Bounds | null>(null);
+  /** Aktiver Teil der eigenen Form (#16): per Klick auf einen Teil des ausgewählten Stands; zeigt Griffe je Teil. */
+  const [activePart, setActivePart] = useState<{ id: Id; index: number } | null>(null);
   const selection = useStore((s) => s.ui.selection);
   const ids = selection?.kind === 'objects' ? selection.ids : [];
   const geo = active ? selectionGeometry(ctx.page, ids, ctx.view, ctx.geometryOf) : null;
@@ -96,9 +109,84 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
   const pick = (w: Vec) => pickObject(ctx.page, w, 0, { geometry: ctx.geometryOf, tol: { line: LINE_HIT_PX / ctx.view.scale, point: Math.max(ctx.markerSize / 2, LINE_HIT_PX / ctx.view.scale) } });
 
   const rectsOf = (list: readonly Id[]): RectMap => {
-    // Ausgangsrechtecke aus dem Projekt (nicht aus einer womöglich laufenden Vorschau)
-    const page = useStore.getState().project.pages.find((p) => p.id === pageId);
-    return page ? Object.fromEntries(findObjects(page, list).map((o) => [o.obj.id, o.obj])) : {};
+    // Ausgangsrechtecke aus dem Projekt (nicht aus einer womöglich laufenden Vorschau); Stände mit den Teilen, mit
+    // denen sie belegen (#16), damit der Fang an den Kanten der Teile greift
+    const project = useStore.getState().project;
+    const page = project.pages.find((p) => p.id === pageId);
+    if (!page) return {};
+    const calc = new Map(occupancyStands(page.stands, project.shapeTemplates).map((x) => [x.id, x]));
+    return Object.fromEntries(findObjects(page, list).map((o) => [o.obj.id, o.kind === 'stand' ? (calc.get(o.obj.id) ?? o.obj) : o.obj]));
+  };
+
+  // ---------- Teile der eigenen Form (#16) ----------
+  /** Einzeln ausgewählter Stand mit eigener Form (Vorlagen zählen nicht, auch nicht mit „belegt wie gezeichnet“). */
+  const ownStand = active && ids.length === 1 ? ctx.page.stands.find((x) => x.id === ids[0] && hasOwnForm(x)) : undefined;
+  // Aktiven Teil verwerfen, sobald der Stand abgewählt oder gewechselt wird oder sich die Zahl seiner Teile ändert
+  // („Teil entfernen“ bzw. „hinzufügen“): sonst wäre beim nächsten Auswählen ein anderer Teil am selben Index aktiv
+  const partsKey = ownStand ? `${ownStand.id}:${ownStand.parts!.length}` : '';
+  const [seenPartsKey, setSeenPartsKey] = useState(partsKey);
+  if (seenPartsKey !== partsKey) {
+    setSeenPartsKey(partsKey);
+    if (activePart) setActivePart(null);
+  }
+  const partIndex = ownStand && activePart?.id === ownStand.id && activePart.index < ownStand.parts!.length ? activePart.index : null;
+  const partBox = ownStand && partIndex !== null ? partRect(ownStand, ownStand.parts![partIndex]!) : null;
+  const partHandles = partBox
+    ? (() => {
+        const top = ctx.toScreen(fromLocal(partBox, { x: 0, y: -partBox.d / 2 }));
+        const c = ctx.toScreen({ x: partBox.cx, y: partBox.cy });
+        const l = Math.hypot(top.x - c.x, top.y - c.y);
+        const rad = (partBox.rot * Math.PI) / 180;
+        const dir = l > 0.5 ? { x: (top.x - c.x) / l, y: (top.y - c.y) / l } : { x: Math.sin(rad), y: -Math.cos(rad) };
+        return {
+          outline: partPolygon(ownStand!, ownStand!.parts![partIndex!]!).map(ctx.toScreen),
+          rotateBase: top,
+          rotate: { x: top.x + dir.x * ROTATE_OFFSET, y: top.y + dir.y * ROTATE_OFFSET },
+          resize: RESIZE_HANDLES.map((handle) => ({ handle, p: ctx.toScreen(handlePoint(partBox, handle)) })),
+        };
+      })()
+    : null;
+  /** Griff des aktiven Teils unter dem Bildschirmpunkt (Drehgriff vor den Größengriffen, der nächste gewinnt). */
+  const hitPartHandle = (screen: Vec): { kind: 'rotate' } | { kind: 'resize'; handle: Handle } | null => {
+    if (!partHandles) return null;
+    if (Math.hypot(partHandles.rotate.x - screen.x, partHandles.rotate.y - screen.y) <= HANDLE_HIT) return { kind: 'rotate' };
+    let best: { handle: Handle; d: number } | null = null;
+    for (const r of partHandles.resize) {
+      const d = Math.hypot(r.p.x - screen.x, r.p.y - screen.y);
+      if (d <= HANDLE_HIT && (!best || d < best.d)) best = { handle: r.handle, d };
+    }
+    return best ? { kind: 'resize', handle: best.handle } : null;
+  };
+  /** Teil des Stands unter dem Weltpunkt (der zuletzt gezeichnete gewinnt) oder null. */
+  const partAt = (stand: Stand, w: Vec): number | null => {
+    const parts = stand.parts ?? [];
+    for (let i = parts.length - 1; i >= 0; i--) if (distToConvex(partPolygon(stand, parts[i]!), w) === 0) return i;
+    return null;
+  };
+  const startPart = (mode: 'move' | 'resize' | 'rotate', handle: Handle | null, p: ToolPointer) => {
+    if (!ownStand || partIndex === null || !partBox) return;
+    // Ausgangslage aus dem gespeicherten Projekt (nicht aus einer Vorschau)
+    const stored = useStore.getState().project.pages.find((x) => x.id === pageId)?.stands.find((x) => x.id === ownStand.id);
+    if (!stored?.parts) return;
+    const rect0 = partRect(stored, stored.parts[partIndex]!);
+    startGesture({ kind: 'part', mode, id: stored.id, index: partIndex, stand0: stored, rect0, handle, startWorld: p.world, start: p.screen, moved: false, a0: angleTo({ x: rect0.cx, y: rect0.cy }, p.world) });
+  };
+  /** Ein Schritt einer Geste am Teil: neues Rechteck des Teils → Hüllrechteck und Teile neu (Teile bleiben am Platz). */
+  const partStep = (g: Extract<Gesture, { kind: 'part' }>, p: ToolPointer) => {
+    const r0 = g.rect0;
+    let r: Rect = r0;
+    if (g.mode === 'move') r = { ...r0, cx: r0.cx + p.world.x - g.startWorld.x, cy: r0.cy + p.world.y - g.startWorld.y };
+    else if (g.mode === 'resize' && g.handle) r = resizeRect(r0, g.handle, p.world, LIMITS.stand.min, LIMITS.stand.max);
+    else if (g.mode === 'rotate') {
+      // Drehung relativ zum Stand; Shift = 15°-Schritte
+      const rel0 = normAngle(r0.rot - g.stand0.rot);
+      const rel = snapAngle(rel0 + angleTo({ x: r0.cx, y: r0.cy }, p.world) - g.a0, p.shiftKey ? 15 : 0.1);
+      r = { ...r0, rot: normAngle(g.stand0.rot + rel) };
+    }
+    const meters = standPartsInMeters(g.stand0);
+    meters[g.index] = meterPartFromWorld(g.stand0, g.stand0.parts![g.index]!.kind, r);
+    const fit = refitStand(g.stand0, meters);
+    if (fit) useStore.getState().setPreview({ pageId, rects: { [g.id]: fit.rect }, parts: { [g.id]: fit.parts } });
   };
   /** Liegt der Weltpunkt auf dem Hintergrundplan? (geometrisch: Der Plan liegt in einer eigenen Ebene unter der Klickfläche) */
   const onBackground = (w: Vec) => {
@@ -258,6 +346,14 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       else st.abortTransaction();
       return;
     }
+    if (g.kind === 'part') {
+      const preview = st.preview;
+      const rect = preview?.pageId === pageId ? preview.rects[g.id] : undefined;
+      const parts = preview?.parts?.[g.id];
+      if (commit && g.moved && rect && parts) commitStandParts(pageId, g.id, rect, parts, PART_LABEL[g.mode]);
+      st.setPreview(null);
+      return;
+    }
     if (g.kind === 'label') {
       setLabelGhost(null);
       const s = commit && g.moved ? ctx.page.stands.find((x) => x.id === g.id) : null;
@@ -298,6 +394,13 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       const st = useStore.getState();
       const current = st.ui.selection?.kind === 'objects' ? st.ui.selection.ids : [];
       const handle = hitHandle(geo, p.screen);
+
+      // Griffe des aktiven Teils der eigenen Form (#16) liegen über den Griffen des Stands
+      const ph = hitPartHandle(p.screen);
+      if (ph) {
+        startPart(ph.kind, ph.kind === 'resize' ? ph.handle : null, p);
+        return true;
+      }
 
       if (handle?.kind === 'rotate' && geo) {
         const rects0 = rectsOf(current);
@@ -373,6 +476,25 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       const hit = pick(p.world);
       if (hit) {
         const isSelected = current.includes(hit.id);
+        // Eigene Form (#16): Klick auf einen Teil des ausgewählten Stands macht ihn zum aktiven Teil; Ziehen am aktiven
+        // Teil verschiebt nur diesen, Ziehen an einem anderen Teil den ganzen Stand
+        if (!p.shiftKey && ownStand && hit.id === ownStand.id && isSelected && current.length === 1) {
+          const idx = partAt(ownStand, p.world);
+          if (partIndex !== null && idx === partIndex) {
+            startPart('move', null, p);
+            return true;
+          }
+          startGesture({
+            kind: 'pending',
+            start: p.screen,
+            startWorld: p.world,
+            shift: false,
+            grab: hit.id,
+            onDrag: 'move',
+            onClick: () => setActivePart(idx !== null ? { id: hit.id, index: idx } : null),
+          });
+          return true;
+        }
         if (p.shiftKey) {
           // Shift: umschalten; Ziehen auf einer schon ausgewählten Gruppe verschiebt sie
           const next = isSelected ? current.filter((x) => x !== hit.id) : [...current, hit.id];
@@ -433,7 +555,13 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       if (!active) return;
       const g = gesture.current;
       if (!g) {
-        const handle = hitHandle(geo, p.screen);
+        const ph = hitPartHandle(p.screen);
+        const handle: HandleHit | null = ph ? (ph.kind === 'rotate' ? { kind: 'rotate' } : null) : hitHandle(geo, p.screen);
+        const partCursor = ph?.kind === 'resize' && partBox ? cursorFor(ph.handle, partBox.rot) : null;
+        if (partCursor) {
+          if (hover?.sheet !== partCursor) setHover({ handle: null, object: false, alt: p.altKey, sheet: partCursor });
+          return;
+        }
         const sh = handle ? null : hitSheetHandle(p.screen);
         // Mauszeiger am Griff des Ausschnitts (#13): achsenparallel, also fest je Griff
         const sheet = sh ? (sh.hx && sh.hy ? (sh.hx === sh.hy ? 'cursor-nwse' : 'cursor-nesw') : sh.hx ? 'cursor-ew' : 'cursor-ns') : null;
@@ -451,7 +579,11 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
           if (g.onDrag === 'move') {
             const sel = st.ui.selection?.kind === 'objects' ? st.ui.selection.ids : [];
             const grabbed = g.grab && sel.includes(g.grab) ? g.grab : (sel[0] ?? null);
-            startGesture({ kind: 'move', startWorld: g.startWorld, rects0: rectsOf(sel), grabbed, snap: { frontAreaId: null }, copies: null, last: p });
+            const rects0 = rectsOf(sel);
+            // Steht der gegriffene Stand schon bündig an einer Vorderseite, ist er von Anfang an eingerastet (Hysterese)
+            const isStand = !!grabbed && ctx.page.stands.some((x) => x.id === grabbed);
+            const snap = initialSnapState(grabbed ? rects0[grabbed] : undefined, isStand, frontSnapAreas(ctx.page));
+            startGesture({ kind: 'move', startWorld: g.startWorld, rects0, grabbed, snap, copies: null, last: p });
           } else if (g.onDrag === 'marquee') {
             const base = g.shift && st.ui.selection?.kind === 'objects' ? st.ui.selection.ids : [];
             startGesture({ kind: 'marquee', start: g.startWorld, cur: g.startWorld, base });
@@ -530,6 +662,12 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
           setLabelGhost({ minX: g.box0.minX + g.delta.x, minY: g.box0.minY + g.delta.y, maxX: g.box0.maxX + g.delta.x, maxY: g.box0.maxY + g.delta.y });
           return;
         }
+        case 'part': {
+          if (!g.moved && Math.hypot(p.screen.x - g.start.x, p.screen.y - g.start.y) < DRAG_PX) return;
+          g.moved = true;
+          partStep(g, p);
+          return;
+        }
         case 'direction': {
           if (!g.moved && Math.hypot(p.screen.x - g.start.x, p.screen.y - g.start.y) < DRAG_PX) return;
           if (!g.moved) useStore.getState().beginTransaction('Richtung verschieben');
@@ -573,6 +711,11 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
 
     onKeyDown(e) {
       const g = gesture.current;
+      // Esc ohne Geste: aktiven Teil der eigenen Form verlassen (#16); die Auswahl bleibt
+      if (active && !g && e.key === 'Escape' && partIndex !== null) {
+        setActivePart(null);
+        return true;
+      }
       if (!active || !g) return false;
       if (e.key === 'Escape') {
         // bricht jede Geste ab, auch das Verschieben des Hintergrunds (QA-M4-04)
@@ -655,6 +798,16 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
             ))}
           </>
         )}
+        {partHandles && (
+          <g className="part-handles" data-testid="part-handles">
+            <polygon className="part-active" points={partHandles.outline.map((q) => `${q.x},${q.y}`).join(' ')} />
+            <line className="rotate-line" x1={partHandles.rotateBase.x} y1={partHandles.rotateBase.y} x2={partHandles.rotate.x} y2={partHandles.rotate.y} />
+            <circle className="rotate-handle" data-testid="part-rotate-handle" cx={partHandles.rotate.x} cy={partHandles.rotate.y} r={5} />
+            {partHandles.resize.map((r) => (
+              <rect key={`${r.handle.hx}${r.handle.hy}`} className="resize-handle part-handle" data-testid="part-handle" data-handle={`${r.handle.hx},${r.handle.hy}`} x={r.p.x - 4} y={r.p.y - 4} width={8} height={8} />
+            ))}
+          </g>
+        )}
         {sheetHandles.map((sh) => (
           <rect key={`${sh.hx}${sh.hy}`} className="resize-handle sheet-handle" data-testid="sheet-handle" data-handle={`${sh.hx},${sh.hy}`} x={sh.p.x - 4} y={sh.p.y - 4} width={8} height={8} />
         ))}
@@ -667,6 +820,12 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
     );
   }
   return handlers;
+}
+
+/** CSS-Mauszeiger für einen Größengriff eines Rechtecks mit Drehung `rot` (wie `resizeCursor`). */
+function cursorFor(handle: Handle, rot: number): string {
+  const ang = ((((Math.atan2(handle.hy, handle.hx) * 180) / Math.PI + rot) % 180) + 180) % 180;
+  return ['cursor-ew', 'cursor-nwse', 'cursor-ns', 'cursor-nesw'][Math.round(ang / 45) % 4]!;
 }
 
 const modifiersOf = (e: KeyboardEvent) => ({ shiftKey: e.shiftKey, altKey: e.altKey, modKey: IS_MAC ? e.metaKey : e.ctrlKey });

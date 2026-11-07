@@ -3,7 +3,7 @@ import { pageFree } from '../core/hiddenFree';
 import { defaultFreeSort, filterFreeSpaces, freeSpaceRows, isFitFilterActive, sortFreeSpaces, type FreeSpaceRow } from '../core/freeSpaceList';
 import { CONNECTION_LABEL } from '../core/label';
 import { filterInfraRows, infraRows, sortInfraRows, type InfraRow } from '../core/infraTable';
-import type { FestplatzPage, Id, InfraTypeDef, Project } from '../core/model/types';
+import type { FestplatzPage, Id, InfraTypeDef, Project, ShapeTemplate } from '../core/model/types';
 import { filterRows, sortRows, standRows, type StandRow } from '../core/standTable';
 import type { useStartPage } from '../state/startPage';
 
@@ -35,16 +35,16 @@ export function displayedStandRows(project: Project, st: Pick<StartState, 'stand
 
 /** Zwischenspeicher der Freiflächen je Page: nur geänderte Grundflächen werden neu berechnet. */
 const freeCaches = new Map<Id, FreeSpaceCache>();
-export function freeOf(minWidth: number, types: readonly InfraTypeDef[]) {
+export function freeOf(minWidth: number, types: readonly InfraTypeDef[], templates: readonly ShapeTemplate[]) {
   return (page: FestplatzPage) => {
     let c = freeCaches.get(page.id);
     if (!c) freeCaches.set(page.id, (c = createFreeSpaceCache()));
-    return pageFree(page, { minFreeWidth: minWidth, infraTypes: types }, c);
+    return pageFree(page, { minFreeWidth: minWidth, infraTypes: types, shapeTemplates: templates }, c);
   };
 }
 
 export function allFreeRows(project: Project): FreeSpaceRow[] {
-  return freeSpaceRows(project, freeOf(project.settings.minFreeWidth, project.infraTypes));
+  return freeSpaceRows(project, freeOf(project.settings.minFreeWidth, project.infraTypes, project.shapeTemplates));
 }
 
 export function displayedFreeRows(all: readonly FreeSpaceRow[], st: Pick<StartState, 'freeFilter' | 'freeSort'>): FreeSpaceRow[] {

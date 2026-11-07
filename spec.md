@@ -25,9 +25,10 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   Breite = Länge der Vorderseite, Tiefe = senkrecht dazu. [ANPASSEN: nur Rechtecke, keine Polygone]
 - **Geschäft (Stand)**: Rechteck B × T in Metern, Position, Rotation, Attribute (siehe unten). Seit M12 (#9) hat er
   eine **Form** (Rechteck, Kreis/Oval oder eine Formvorlage), die nur die Darstellung betrifft; für alle Berechnungen
-  bleibt er das Rechteck B × T (Hitbox, §3 „Form“).
+  bleibt er das Rechteck B × T (Hitbox, §3 „Form“). Ausnahme seit #16: Eine **eigene Form** des Stands und eine
+  Formvorlage mit „belegt wie gezeichnet“ belegen mit ihren Teilen (§3 „Form“); B × T ist dann ihr Hüllrechteck.
 - **Formvorlage**: projektweiter, aus Rechtecken und Kreisen/Ovalen zusammengesetzter Umriss mit Vorschlagsmaß
-  (§3 „Form“, M12).
+  (§3 „Form“, M12), seit #16 mit Drehung je Teil und dem Schalter „belegt wie gezeichnet“.
 - Position ist der Mittelpunkt; gedreht wird um den Mittelpunkt (Grad im Uhrzeigersinn, 0–360).
   Positionen und Maße werden auf 0,01 m gerundet, Drehungen auf 0,1° (beim Übernehmen, nicht während
   des Ziehens). Intern ist die Vorderseite immer die lokale Unterkante; so ist die Breite immer die
@@ -103,8 +104,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   - Start-Page: freie Frontmeter „–“ statt 0, sie zählen nicht in die Summe „Gesamt“ (verwendet keine Page
     Grundflächen, auch dort „–“); die Karte des Festplatzes zeigt den Hinweis „ohne Grundflächen“ (§7);
   - kein Fang der Vorderseite an Grundflächen (§3); Fang an Nachbarständen und Raster bleibt.
-  - Unverändert: Überlappung, Infrastruktur, Abstand, Nummerierung (§5), Strom, Standgeld (Frontmeter = Standbreite),
-    Export.
+  - Unverändert: Überlappung, Infrastruktur, Abstand, Nummerierung (§5), Strom, Standgeld (Frontmeter = Standbreite
+    bzw. bei Belegung wie gezeichnet wie in §3 „Form“), Export.
   Abschalten bei vorhandenen Grundflächen fragt nach: „Grundflächen behalten“ (sie bleiben gespeichert, sind aber
   ausgeblendet, nicht auswählbar und wirken nicht, auch nicht für „An Seite anpassen“, den Mittelpunkt der
   Nummerierung und die Platzierung der Beschriftung; ausgeblendete Freiflächen bleiben erhalten) oder „Grundflächen
@@ -124,7 +125,9 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   - Vorderkante (nur Stände): Liegt die Vorderseite des Stands bei gleicher Drehung wie die Grundfläche
     höchstens 8 px von deren Vorderseite entfernt, legt sie sich an die Vorderseite der Grundfläche und
     der Stand übernimmt deren Drehung. Danach gleitet er entlang der Vorderseite; gelöst wird er erst
-    bei mehr als 16 px Abstand, dann bekommt er seine ursprüngliche Drehung zurück. Eingerastet fängt er
+    bei mehr als 16 px Abstand, dann bekommt er seine ursprüngliche Drehung zurück. Ein Stand, der beim Greifen
+    schon bündig (bis 0,01 m) und parallel an einer Vorderseite steht, gilt von Anfang an als eingerastet; das
+    Ergebnis hängt so nicht davon ab, wie schnell die Maus bewegt wird (Nacharbeit #16). Eingerastet fängt er
     entlang der Vorderseite an deren Enden und (mit Nachbar-Fang) an den Kanten benachbarter Stände, dort mit
     dem Fang-Abstand (siehe unten). Auf einer Page ohne Grundflächen (§2, #17) entfällt dieser Fang.
   - Nachbarstände: Ein Stand rastet mit dem Fang-Abstand neben einer Kante eines parallel stehenden Nachbarn
@@ -153,8 +156,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
     dessen Typ „freihalten“ hat (§11). Die Seitenleiste nennt das Objekt.
   - Abstand (orange, Konkurrenzschutz, #3): Zwei Stände derselben Kategorie stehen näher als deren Mindestabstand
     (Projekteinstellungen, Bereich „Kategorien“, Feld „Mindestabstand“ in m; leer = keine Prüfung). Gemessen wird
-    Kante zu Kante: der kürzeste Abstand zwischen den beiden Standrechtecken (Hitbox B × T, auch bei Formen), als
-    Luftlinie, auf 0,01 m gerundet; genau der Mindestabstand ist erlaubt, Überschneidung zählt als 0 m. Geprüft wird
+    Kante zu Kante: der kürzeste Abstand zwischen den beiden Standrechtecken (Hitbox B × T, auch bei Kreis/Oval und
+    Vorlagen ohne „belegt wie gezeichnet“; bei Belegung wie gezeichnet zwischen den Teilen, #16), als Luftlinie, auf 0,01 m gerundet; genau der Mindestabstand ist erlaubt, Überschneidung zählt als 0 m. Geprüft wird
     nur innerhalb einer Festplatz-Page, live auch beim Ziehen. Die Seitenleiste nennt die zu nahen Stände mit Abstand
     („Zu nah an gleicher Kategorie: Schokofrüchte Meier, 23,40 m“); bei ausgewähltem Stand zeigt die Zeichenfläche
     den Mindestabstand als gestrichelten Umriss um den Stand (Ecken gerundet) und eine Linie zu jedem zu nahen Stand
@@ -171,25 +174,82 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 - Attribute (Seitenleiste rechts): Platznummer, Geschäftsname, Eigentümer, Typ/Ware,
   Breite, Tiefe, Stromverbrauch in kW [ANPASSEN], Anschlussart (230 V / CEE 16 A / CEE 32 A),
   Notiz, Farbe/Kategorie.
-- Form (M12, #9; Entscheidungen Laurin 2026-10-23): Rechteck (Standard), Kreis/Oval oder eine Formvorlage.
+- Form (M12, #9; Entscheidungen Laurin 2026-10-23, fortgeschrieben 2026-11-06 für #16): Rechteck (Standard),
+  Kreis/Oval, eine Formvorlage oder eine eigene Form.
   - Kreis/Oval ist die Ellipse im Rechteck B × T (Kreis bei B = T).
-  - Die Form betrifft nur die Darstellung (Zeichenfläche, PDF). Freiflächen (§4), Warnungen, Fang, Treffer (Klick in
-    eine Ecke außerhalb der Ellipse wählt den Stand trotzdem), Nummerierung, Frontmeter und Statistik rechnen mit dem
-    Rechteck B × T als Hitbox. Die Vorderseite bleibt die Unterkante dieses Rechtecks. Eine echte Belegung mit der
-    Form ist ausdrücklich nicht vorgesehen.
-  - Ist ein Stand mit anderer Form als Rechteck ausgewählt, zeigt die Zeichenfläche die Hitbox dünn gestrichelt;
-    im PDF erscheint sie nie.
+  - **Nur Darstellung** (Rechteck, Kreis/Oval, Formvorlage ohne „belegt wie gezeichnet“): Die Form betrifft nur
+    Zeichenfläche und PDF. Freiflächen (§4), Warnungen, Fang, Treffer (Klick in eine Ecke außerhalb der Ellipse wählt
+    den Stand trotzdem), Nummerierung, Frontmeter und Statistik rechnen mit dem Rechteck B × T als Hitbox. Einfache
+    Kreise/Ovale bleiben auch nach #16 beim Hüllrechteck.
+  - **Belegt wie gezeichnet** (#16, Entscheidung Laurin 2026-11-06; hebt für diese Formen die Regel von 2026-10-23
+    auf, dass eine echte Belegung nicht vorgesehen ist): Eine **eigene Form** belegt immer wie gezeichnet, eine
+    **Formvorlage** nur mit dem Schalter „belegt wie gezeichnet“ (Standard aus; bestehende Pläne ändern sich nicht).
+    Dann rechnen mit der Vereinigung der Teile statt mit B × T: Freiflächen (§4: jeder Teil, der mehr als 0,01 m in
+    die Grundfläche ragt, belegt die Projektion seines Teils innerhalb der Fläche; ein Teil, der die Fläche nicht
+    erreicht, belegt nichts), Überlappung, „außerhalb“, Infrastruktur und Abstand (je Teil, Toleranzen wie oben),
+    Treffer (nur auf den Teilen; ein Klick in eine freie Ecke des Hüllrechtecks trifft den Stand nicht), Fang (die
+    Kanten der Teile, beim Ziehen und für Mess- und Linienwerkzeuge) und die Auswahl per Rechteck (Hüllrechteck der
+    Teile). Ellipsen-Teile rechnen als Vieleck mit 64 Ecken. Die Beschriftung steht im größten Teil (Fläche; bei
+    gleicher Fläche der erste; bei einer Ellipse in deren eingeschriebenem Rechteck); ausgelagert wie unten. Die
+    Vorderseite bleibt die Unterkante des Hüllrechtecks B × T (Fang an der Vorderkante, Nummerierung, Beschriftung
+    „hinter dem Stand“).
+  - **Frontmeter** bei Belegung wie gezeichnet (Standgeld, Kennzahlen, Geschäftstabelle): automatisch die **belegte
+    Länge an der Vorderseite**. Ein Teil zählt, wenn er die Vorderseite (Unterkante des Hüllrechtecks) berührt, d. h.
+    sein vorderster Punkt höchstens 0,01 m hinter ihr liegt. Gezählt wird die Vereinigung der Projektionen dieser
+    Teile auf die Vorderseite, begrenzt auf die Breite B; Lücken bis 0,01 m werden zusammengefasst, Ergebnis auf
+    0,01 m gerundet. Begründung: Standgeld richtet sich nach der Front zur Gasse; zurückgesetzte Teile (Ausleger)
+    belegen dort nichts. Projektion statt Berührungslänge, damit ein schräger Teil wie in §4 seine volle Projektion
+    belegt und die Rechnung bei gedrehten Teilen stetig bleibt. Beispiel B-06 (Hauptkörper 20 × 12 m, links und
+    rechts je ein Ausleger 2,5 × 7 m, mittig in der Tiefe): 20 m statt 25 m. Dazu das optionale Feld **„Frontmeter“**
+    je Stand in der Seitenleiste (0–1000 m, auf 0,01 m gerundet; leer = automatisch, der automatische Wert steht als
+    Platzhalter darin), z. B. 24 m für B-06; ein Undo-Schritt. Ohne Belegung wie gezeichnet gibt es das Feld nicht
+    (Frontmeter = B); wechselt ein Stand zu einer solchen Form, entfällt ein gesetzter Wert.
+  - Ist ein Stand mit anderer Form als Rechteck ausgewählt, zeigt die Zeichenfläche die Hitbox dünn gestrichelt; bei
+    Belegung wie gezeichnet sind die Teile dünn umrandet und das Hüllrechteck nur blass zur Orientierung. Im PDF
+    erscheint beides nie.
   - Formvorlagen legt man in den Projekteinstellungen an (§7). Eine Vorlage besteht aus Teilen (Rechteck oder
-    Kreis/Oval, je mit X, Y, B, T in Metern, ohne Drehung); ihr Hüllrechteck ist das **Vorschlagsmaß**. Gespeichert
-    werden die Teile relativ zum Hüllrechteck: Ändert man B × T eines Stands, wird die Form gestreckt.
+    Kreis/Oval, je mit X, Y, B, T in Metern und seit #16 einer Drehung um die Mitte des Teils, Grad im Uhrzeigersinn
+    relativ zum Stand); ihr Hüllrechteck (es umschließt auch gedrehte Teile) ist das **Vorschlagsmaß**. Gespeichert
+    werden die Teile relativ zum Hüllrechteck: Ändert man B × T eines Stands, werden die Teile proportional gestreckt
+    (Mitte und Maße jedes Teils; die Drehung bleibt). Die Teile einer Vorlage gelten projektweit; ein gedrehter Teil
+    kann deshalb bei einem Stand, dessen Seitenverhältnis vom Vorschlagsmaß abweicht, leicht über dessen B × T
+    hinausragen. Der Editor hat das Häkchen „belegt wie gezeichnet“.
+  - **Eigene Form** (#16): Form je Stand ohne projektweite Vorlage, für Einzelstücke wie B-06. Teile wie bei Vorlagen
+    (relativ zum Hüllrechteck B × T, mit Drehung je Teil). Ändert man B × T (Seitenleiste, Steuerungsleiste,
+    Geschäftstabelle), werden die Teile proportional gestreckt und danach das Hüllrechteck neu eingepasst
+    (Entscheidung Laurin 2026-11-07): Bei gedrehten Teilen weicht B × T dann etwas vom eingegebenen Wert ab, umschließt
+    die Teile aber immer genau, sodass Vorderseite und Fang stimmen; ohne gedrehte Teile bleibt das eingegebene Maß.
+    Ein Undo-Schritt. Entsteht über „Eigene Form“ im Feld
+    „Form“ (übernimmt die bisher gezeichneten Teile: Vorlage oder Grundform als ein Teil) oder durch „Zu einem Stand
+    zusammenfassen“.
+    - Seitenleiste (nur ein Stand ausgewählt): Liste der Teile mit Art, X, Y (linke obere Ecke des ungedrehten Teils
+      ab der linken oberen Ecke von B × T), Breite, Tiefe und Drehung, „Teil hinzufügen“, Teil entfernen (nicht den
+      letzten) und „Form auflösen“. Jede Eingabe ist ein Undo-Schritt; B × T wird neu bestimmt (umschließt alle
+      Teile), der Stand verschiebt sich dabei so, dass alle Teile auf dem Plan an ihrem Platz bleiben.
+    - Zeichenfläche: Ein Klick auf einen Teil des ausgewählten Stands macht ihn zum aktiven Teil (kräftig umrandet,
+      acht Größengriffe und ein Drehgriff, Shift = 15°-Schritte). Ziehen am aktiven Teil verschiebt nur ihn, Ziehen
+      an einem anderen Teil den ganzen Stand. Jede Geste ist ein Undo-Schritt, Esc bricht sie ab; Esc ohne Geste
+      verlässt den aktiven Teil.
+    - **„Zu einem Stand zusammenfassen“** (Seitenleiste bei mehreren ausgewählten Ständen): Die Stände werden ein
+      Stand mit eigener Form; jeder bringt seine gezeichneten Teile mit (Rechteck, Kreis/Oval, Vorlage oder eigene
+      Form, gedreht wie er), an ihrem Platz auf dem Plan. Daten (Nummer, Fixierung, Name, Eigentümer, Ware, Strom,
+      Anschluss, Notiz, Kategorie, Farbe, ignorierte Warnungen), ID und Drehung kommen vom größten Stand (Fläche der
+      gezeichneten Form), bei gleicher Fläche vom zuerst ausgewählten; die übrigen Stände entfallen. Eine von Hand
+      verschobene Beschriftung und Frontmeter von Hand entfallen. Ein Undo-Schritt. So lassen sich importierte
+      Stände wie B-06 mit zwei Auslegern reparieren.
+    - **„Form auflösen“**: Jeder Teil wird ein eigener Stand (Rechteck bzw. Kreis/Oval, gedreht wie der Teil); der
+      größte Teil behält ID und alle Daten, die übrigen übernehmen nur Kategorie und eigene Farbe. Ein Undo-Schritt.
   - Zusammengesetzte Formen erscheinen als ein Umriss: eine gemeinsame Füllung ohne doppelte Tönung, eine Kontur nur
     außen (keine Innenkanten).
   - Auswahl in der Seitenleiste (Feld „Form“, auch bei Mehrfachauswahl, ein Undo-Schritt). Die Wahl einer Vorlage
-    übernimmt ihr Vorschlagsmaß (Mittelpunkt bleibt); Rechteck und Kreis/Oval ändern die Maße nicht. Kopieren und
-    Duplizieren übernehmen die Form; Händler „noch nicht platziert“ haben keine Form.
+    übernimmt ihr Vorschlagsmaß (Mittelpunkt bleibt); Rechteck und Kreis/Oval ändern die Maße nicht und entfernen eine
+    eigene Form. Kopieren und Duplizieren übernehmen die Form; Händler „noch nicht platziert“ haben keine Form.
   - Wird eine verwendete Vorlage gelöscht, fragt die App nach; die Stände fallen auf ihre Grundform (Rechteck bzw.
     Kreis/Oval) zurück, alles rückgängig machbar.
   - Die Legende ist unverändert (Farbfeld je Kategorie bleibt ein Rechteck).
+  - Formatversion 15 (#16): Geschäft `parts` (eigene Form, Teile relativ zu B × T oder null) und `frontOverride`
+    (Frontmeter von Hand oder null), Formvorlage `occupies`, Teil `rot`. Ältere Dateien: keine eigene Form, keine
+    Frontmeter von Hand, keine Vorlage belegt wie gezeichnet, Teile ungedreht – es ändert sich nichts.
 - Farbe: aus der Kategorie; optional eine eigene Farbe pro Stand, die die Kategoriefarbe überschreibt.
   Ohne beides die Standardfarbe des Projekts (Projekteinstellungen, Bereich „Kategorien“; Standard und nach der
   Migration alter Projekte neutrales Grau #a7adb3; M10, #3). Sie gilt auf Zeichenfläche, im PDF und in der Legende.
@@ -220,7 +280,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   #5); Dateien ohne
   diese Kennung, ohne gültige Kategorie oder mit neuerer Version weist die App mit deutscher Meldung ab, ungültige
   Einträge fallen beim Import weg. Ein Listeneintrag bringt seinen Sonderpreis mit wie den Mindestabstand.
-- **Standgeld** (#5, Entscheidungen 2026-10-30): Die App berechnet das Standgeld je Stand aus den Frontmetern (Breite).
+- **Standgeld** (#5, Entscheidungen 2026-10-30): Die App berechnet das Standgeld je Stand aus den Frontmetern (Breite;
+  bei Belegung wie gezeichnet die belegte Länge an der Vorderseite oder die Frontmeter von Hand, §3 „Form“, #16).
   - Projekteinstellungen, Bereich „Standgeld“: **Preis je Frontmeter** (netto in €, leer = keiner), **MwSt-Satz** (%,
     Standard 19) und der Schalter **„Angefangene Meter voll berechnen“** (4,30 m → 5 m, 4,00 m → 4 m; Standard aus =
     exakt auf 0,01 m). Darunter **Sonderpreise je Kategorie**: „wie Projekt“ (Standard, Preis je Frontmeter des Projekts),
@@ -269,7 +330,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 - Auf einer Page ohne Grundflächen (§2, #17) gibt es keine Freiflächen.
 - Jede Grundfläche hat eine Achse entlang ihrer Vorderseite, Bereich [0, Breite].
 - Jedes Geschäft, das die Grundfläche überlappt, belegt auf dieser Achse das Intervall seiner
-  Projektion (Schnittmenge mit der Grundfläche).
+  Projektion (Schnittmenge mit der Grundfläche). Bei Belegung wie gezeichnet (§3 „Form“, #16) zählen nur die Teile,
+  die die Grundfläche erreichen; belegt wird das Intervall von der kleinsten bis zur größten Projektion dieser Teile.
 - Infrastruktur-Objekte, deren Typ „belegt Fläche“ hat, belegen die Achse genau wie ein Geschäft (alle Regeln dieses
   Abschnitts gelten für sie mit). Bei Linien zählt das Rechteck aus Länge × Strichstärke, bei Linien ohne Stärke die
   Projektion der Linie (gerechnet als 5 cm breiter Streifen, damit die Eindringtiefe über der Toleranz liegt). Punkte (Marker) belegen nie (Entscheidung 2026-10-12).
@@ -427,7 +489,8 @@ Entscheidungen 2026-10-12 (M6-Planung).
   seit M7, Entscheidung 2026-10-12); deren Inhalt füllt die
   Resthöhe und scrollt selbst. Die Start-Page hat keine Werkzeug- und keine Seitenleiste.
 - **Kennzahlen** als Karten „Gesamt“ und je Festplatz (Reihenfolge der Tabs): Anzahl Geschäfte, Frontmeter
-  (Summe der Breiten; das ist die belegte Fläche, eine m²-Angabe gibt es nicht), freie Frontmeter (Summe der Breiten
+  (Summe der Breiten, bei Belegung wie gezeichnet der Frontmeter nach §3 „Form“, #16; das ist die belegte Fläche, eine
+  m²-Angabe gibt es nicht), freie Frontmeter (Summe der Breiten
   aller angezeigten Freiflächen, also ab der Mindestbreite; bei angeschnittenen die Hüllbreite; Entscheidung
   2026-10-12; ohne Grundflächen „–“ mit Hinweis „ohne Grundflächen“ und nicht in der Summe, §2), Strom wie in §6 (Balken mit
   Limit je Festplatz, gesamt nur die Summe), Anzahl und kW je Anschlussart, Zahl der Stände mit aktiver Warnung
@@ -493,8 +556,8 @@ Entscheidungen 2026-10-12 (M6-Planung).
   §3), Kategorien (§3). Seit M7 außerdem: Mindestbreite der Durchfahrt und die Schalter der Infrastruktur-Warnungen
   (§11), die Infrastruktur-Typen (§11) und das Schriftfeld (Datum, Version; §8). Seit M10: Fang-Abstand zu
   Nachbarständen (§3) und Standardfarbe der Geschäfte ohne Kategorie (§3). Seit M12: Formvorlagen (§3 „Form“) mit
-  einfachem Editor (Name, Tabelle der Teile mit Art, X, Y, B, T in Metern, Vorschau mit Vorderseite und
-  Hüllrechteck). Alles mit Undo. Seitenbezogenes (Präfix, Modus, Stromlimit, Blockieren) bleibt in der
+  einfachem Editor (Name, Tabelle der Teile mit Art, X, Y, B, T in Metern und seit #16 Drehung in Grad, Häkchen
+  „belegt wie gezeichnet“, Vorschau mit Vorderseite und Hüllrechteck). Alles mit Undo. Seitenbezogenes (Präfix, Modus, Stromlimit, Blockieren) bleibt in der
   Seitenleiste der Festplatz-Page.
 - **Export:** Geschäftstabelle und Freiflächenliste als CSV (gefilterte, sortierte Zeilen, sichtbare Spalten;
   UTF-8 mit BOM, Semikolon, Zahlen mit Komma, damit Excel in Deutschland die Datei direkt öffnet; Textzellen, die
@@ -787,7 +850,8 @@ Chromium und WebKit. Geprüft mit `npm run test:perf`.
   Standardwerten ergänzt. Dateien einer neueren Version, als die App kennt, werden mit einer
   verständlichen Meldung abgewiesen (Entscheidung 2026-10-11; Version 2 seit M4, Version 3 seit M5, Version 4 seit M7, Version 5 seit M8,
   Version 6 seit M10, Version 7 seit M11: ausgeblendete Freiflächen je Page, Version 8 seit M12: Form der Stände und
-  Formvorlagen, Version 14 seit #13: freies Blatt „Plan“/„Ausschnitt“ mit Rand, Zielbreite und Ausschnitt).
+  Formvorlagen, Version 14 seit #13: freies Blatt „Plan“/„Ausschnitt“ mit Rand, Zielbreite und Ausschnitt, Version 15
+  seit #16: eigene Form je Stand, Frontmeter von Hand, „belegt wie gezeichnet“ und Drehung je Teil).
 - Projekt als Vorlage fürs nächste Jahr duplizieren.
 - Import einer Händlerliste aus CSV/XLSX (Spalten zuordnen). Importierte Händler landen in einer
   Liste „noch nicht platziert“ und können per Drag & Drop platziert werden. [Phase 2]

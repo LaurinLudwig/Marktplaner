@@ -3,7 +3,7 @@
  * Vorlage); nichts wird gekürzt oder verkleinert, nur der Ort ändert sich:
  *
  * 1. **auf dem Stand:** jede Zeile an Leerzeichen und Bindestrichen auf die Breite des Stands umbrochen; passt der
- *    Block in den Stand, steht er wie bisher mittig darauf;
+ *    Block in den Stand, steht er wie bisher mittig darauf (bei Belegung wie gezeichnet, #16: im größten Teil);
  * 2. sonst **ausgelagert** mit Führungslinie, umbrochen auf `OUTSIDE_WRAP_EM` Schriftgrößen (mindestens Standbreite): zuerst **hinter** dem Stand (gegenüber der Vorderseite
  *    der Grundfläche, weg von der Gasse), dort auch seitlich versetzt und weiter weg; erst wenn hinter dem Stand
  *    nichts frei ist **davor** (ebenso gestaffelt). „Frei“ heißt: kein anderer Stand, kein Infrastruktur-Objekt, keine
@@ -16,6 +16,7 @@
  */
 import { fromLocal, rectCorners } from './geometry/rect';
 import { approxTextWidth, formatLabel } from './label';
+import { labelRect, snapRects } from './footprint';
 import type { Area, Category, Id, InfraObject, Rect, Stand, Vec } from './model/types';
 import type { Bounds } from './viewport';
 
@@ -271,8 +272,10 @@ export interface LabelLayoutInput {
 }
 
 function outsidePlacement(stand: Stand, lines: string[], w: number, h: number, cx: number, cy: number, mode: LabelMode): LabelPlacement {
-  const a = exitRect(stand, { x: cx, y: cy });
-  const b = exitBox(cx, cy, w, h, { x: stand.cx, y: stand.cy });
+  // Führungslinie vom größten Teil (#16) bzw. vom Stand
+  const r = labelRect(stand);
+  const a = exitRect(r, { x: cx, y: cy });
+  const b = exitBox(cx, cy, w, h, { x: r.cx, y: r.cy });
   return { lines, cx, cy, w, h, mode, leader: Math.hypot(b.x - a.x, b.y - a.y) > 1e-6 ? { a, b } : null };
 }
 
@@ -280,7 +283,8 @@ function outsidePlacement(stand: Stand, lines: string[], w: number, h: number, c
 export function layoutStandLabels({ stands, areas, infra, fontSize: fs, linesOf, blocked = [] }: LabelLayoutInput): Map<Id, LabelPlacement> {
   const out = new Map<Id, LabelPlacement>();
   const obstacles = new Obstacles(Math.max(5, fs * 10));
-  for (const s of stands) obstacles.addRect(s, s.id);
+  // Bei Belegung wie gezeichnet (#16) sind nur die Teile Hindernisse, die freien Ecken nicht
+  for (const s of stands) for (const r of snapRects(s)) obstacles.addRect(r, s.id);
   for (const b of blocked) obstacles.addBox(b);
   for (const o of infra) if (o.w > 0) obstacles.addRect({ ...o, d: Math.max(o.d, 0.05) }, null);
 
@@ -309,8 +313,10 @@ export function layoutStandLabels({ stands, areas, infra, fontSize: fs, linesOf,
   for (const s of stands) {
     const l = lines.get(s.id);
     if (!l || out.has(s.id)) continue;
-    const fit = fitInside(s, l, fs);
-    if (fit) out.set(s.id, { ...fit, cx: s.cx, cy: s.cy, mode: 'inside', leader: null });
+    // Bei Belegung wie gezeichnet steht sie im größten Teil (#16)
+    const r = labelRect(s);
+    const fit = fitInside(r, l, fs);
+    if (fit) out.set(s.id, { ...fit, cx: r.cx, cy: r.cy, mode: 'inside', leader: null });
     else outside.push(s);
   }
   // 3. Auslagern: hinter, vor, weiter weg; sonst direkt hinter dem Stand

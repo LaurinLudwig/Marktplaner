@@ -9,14 +9,15 @@
  *   erst bei `release`). Entlang der Vorderseite fängt er an den Achsenenden und an Nachbarständen.
  *   Grundlage ist `snapToFront` aus prototype/freiflaechen.html.
  * - Nachbarstände: anliegen (mit dem Abstand `gap`, #2) oder fluchten (ohne Abstand), nur mit parallel stehenden
- *   Nachbarn.
+ *   Nachbarn. Bei Belegung wie gezeichnet (#16) zählen die Kanten der Teile (des gezogenen Stands und der Nachbarn).
  * - Raster: Rand oder Mitte des Hüllrechtecks der Auswahl je Achse an der nächsten Rasterlinie.
  * Bei Mehrfachauswahl gilt der Fang für das gegriffene Objekt; die Gruppe wird nur parallel verschoben.
  */
 import { occupiedInterval } from './freeSpace';
 import { boundsTouch, polyBounds, projectOn, rectGeo } from './geometry/polygon';
+import { footprint, snapRects, type PartsRect } from './footprint';
 import { frameAngle, fromFrame, frontFrame, normAngle, rectCorners, toFrame } from './geometry/rect';
-import { atLeast, atMost, greaterThan, lessThan, sameAngle } from './geometry/tolerance';
+import { atLeast, atMost, greaterThan, lessThan, sameAngle, withinTol } from './geometry/tolerance';
 import { add, mul, rotate, vec } from './geometry/vec';
 import type { Area, Id, Rect, Vec } from './model/types';
 import { constrainDelta, moveRects, type RectMap } from './transform';
@@ -48,7 +49,8 @@ export interface MoveSnapInput {
   standIds: ReadonlySet<Id>;
   /** Übrige (nicht bewegte) Grundflächen und Stände. */
   areas: readonly Area[];
-  stands: readonly (Rect & { id: Id })[];
+  /** Bei Belegung wie gezeichnet (#16) mit `parts` (siehe core/footprint.ts `pageStands`). */
+  stands: readonly (PartsRect & { id: Id })[];
   options: SnapOptions;
   /** Fangabstand und Lösen-Abstand in Metern (Bildschirm-Pixel / Zoom). */
   tol: number;
@@ -64,6 +66,27 @@ export interface MoveSnapResult {
 }
 
 const NO_SNAP: SnapState = { frontAreaId: null };
+
+/**
+ * Zustand zu Beginn einer Geste: Steht der gegriffene Stand schon bündig (höchstens TOL) und parallel an der
+ * Vorderseite einer Grundfläche, gilt er von Anfang an als eingerastet. Er gleitet dann sofort entlang und löst sich
+ * erst bei `release`. Ohne das hinge das Ergebnis davon ab, wie viele Mausbewegungen bis zum ersten Bild
+ * zusammengefasst werden: Liegt die erste verarbeitete Position schon weiter als `tol` von der Vorderseite weg, rastete
+ * ein eben noch bündiger Stand nicht mehr ein (WebKit unter Last, #16).
+ */
+export function initialSnapState(rect: Rect | undefined, isStand: boolean, areas: readonly Area[]): SnapState {
+  if (!rect || !isStand) return NO_SNAP;
+  const center = vec(rect.cx, rect.cy);
+  for (const area of areas) {
+    const f = frontFrame(area);
+    if (!sameAngle(rect.rot, frameAngle(f), 360)) continue;
+    const { s, t } = toFrame(f, center);
+    if (!withinTol(Math.abs(t - rect.d / 2))) continue;
+    if (atMost(s + rect.w / 2, 0) || atLeast(s - rect.w / 2, f.length)) continue;
+    return { frontAreaId: area.id };
+  }
+  return NO_SNAP;
+}
 
 const translate = (rects: RectMap, off: Vec): RectMap => (off.x || off.y ? moveRects(rects, off) : rects);
 
@@ -157,7 +180,7 @@ function frontSnap(input: MoveSnapInput, g: Rect, multi: boolean, keepFront: boo
     const gap = input.options.gap ?? 0;
     const ab = rectGeo(area).bounds;
     for (const st of input.stands) {
-      if (!boundsTouch(ab, rectGeo(st).bounds)) continue;
+      if (!boundsTouch(ab, footprint(st).bounds)) continue;
       const iv = occupiedInterval(area, f, st);
       if (iv) edges.push({ e: iv[0], kind: 'contact', gap, gapSide: 1 }, { e: iv[1], kind: 'contact', gap, gapSide: -1 });
     }
@@ -187,45 +210,53 @@ interface AxisHit {
   other: [number, number];
 }
 
-function neighborSnap(input: MoveSnapInput, g: Rect): { offset: Vec; guides: Guide[]; fixedX: boolean; fixedY: boolean } | null {
+/**
+ * Kanten, an denen ein Stand anliegt bzw. fluchtet: bei Belegung wie gezeichnet (#16) die Teile (parallel zum Stand
+ * `rot` bzw. um 90° gedreht), sonst das Rechteck.
+ */
+const snapPieces = (r: PartsRect, rot: number): Vec[][] =>
+  r.parts?.length ? snapRects(r).filter((q) => sameAngle(q.rot, rot, 90)).map((q) => rectCorners(q)) : [rectCorners(r)];
+
+function neighborSnap(input: MoveSnapInput, g: PartsRect): { offset: Vec; guides: Guide[]; fixedX: boolean; fixedY: boolean } | null {
   const { tol } = input;
   const gap = input.options.gap ?? 0;
   const A = rotate(vec(1, 0), g.rot);
   const B = rotate(vec(0, 1), g.rot);
   const O = vec(0, 0);
-  const gp = rectCorners(g);
-  const gb = polyBounds(gp);
-  const [ga0, ga1] = projectOn(gp, O, A);
-  const [gb0, gb1] = projectOn(gp, O, B);
+  const gb = footprint(g).bounds;
+  const gPieces = snapPieces(g, g.rot).map((gp) => ({ a: projectOn(gp, O, A), b: projectOn(gp, O, B) }));
   let hitA: AxisHit | null = null;
   let hitB: AxisHit | null = null;
   const better = (h: AxisHit | null, c: AxisHit) =>
     !h || lessThan(Math.abs(c.off), Math.abs(h.off)) || (atMost(Math.abs(c.off), Math.abs(h.off)) && c.kind === 'contact' && h.kind === 'align');
   for (const n of input.stands) {
-    const ng = rectGeo(n);
     // Vorauswahl: nur Nachbarn in Reichweite; der Fang-Abstand verschiebt die Ziel-Lage entsprechend weiter weg (QA-M10-01)
-    if (!boundsTouch(gb, ng.bounds, tol * 6 + gap)) continue;
-    if (!sameAngle(g.rot, n.rot, 90)) continue;
-    const [na0, na1] = projectOn(ng.poly, O, A);
-    const [nb0, nb1] = projectOn(ng.poly, O, B);
-    const overlapA = Math.min(ga1, na1) - Math.max(ga0, na0);
-    const overlapB = Math.min(gb1, nb1) - Math.max(gb0, nb0);
-    const axis = (g0: number, g1: number, n0: number, n1: number, crossOverlap: number, cross: [number, number], ncross: [number, number]): AxisHit[] => {
-      const out: AxisHit[] = [];
-      const push = (off: number, kind: 'contact' | 'align', at: number) => {
-        if (atMost(Math.abs(off), tol)) out.push({ off, kind, at, span: cross, other: ncross });
-      };
-      // Anliegen nur, wenn sich die beiden quer dazu überdecken (sonst wäre es keine gemeinsame Kante)
-      if (greaterThan(crossOverlap, -tol)) {
-        push(n1 + gap - g0, 'contact', n1);
-        push(n0 - gap - g1, 'contact', n0);
+    if (!boundsTouch(gb, footprint(n).bounds, tol * 6 + gap)) continue;
+    if (!n.parts?.length && !sameAngle(g.rot, n.rot, 90)) continue;
+    for (const np of snapPieces(n, g.rot)) {
+      const [na0, na1] = projectOn(np, O, A);
+      const [nb0, nb1] = projectOn(np, O, B);
+      for (const { a: [ga0, ga1], b: [gb0, gb1] } of gPieces) {
+        const overlapA = Math.min(ga1, na1) - Math.max(ga0, na0);
+        const overlapB = Math.min(gb1, nb1) - Math.max(gb0, nb0);
+        const axis = (g0: number, g1: number, n0: number, n1: number, crossOverlap: number, cross: [number, number], ncross: [number, number]): AxisHit[] => {
+          const out: AxisHit[] = [];
+          const push = (off: number, kind: 'contact' | 'align', at: number) => {
+            if (atMost(Math.abs(off), tol)) out.push({ off, kind, at, span: cross, other: ncross });
+          };
+          // Anliegen nur, wenn sich die beiden quer dazu überdecken (sonst wäre es keine gemeinsame Kante)
+          if (greaterThan(crossOverlap, -tol)) {
+            push(n1 + gap - g0, 'contact', n1);
+            push(n0 - gap - g1, 'contact', n0);
+          }
+          push(n0 - g0, 'align', n0);
+          push(n1 - g1, 'align', n1);
+          return out;
+        };
+        for (const c of axis(ga0, ga1, na0, na1, overlapB, [gb0, gb1], [nb0, nb1])) if (better(hitA, c)) hitA = c;
+        for (const c of axis(gb0, gb1, nb0, nb1, overlapA, [ga0, ga1], [na0, na1])) if (better(hitB, c)) hitB = c;
       }
-      push(n0 - g0, 'align', n0);
-      push(n1 - g1, 'align', n1);
-      return out;
-    };
-    for (const c of axis(ga0, ga1, na0, na1, overlapB, [gb0, gb1], [nb0, nb1])) if (better(hitA, c)) hitA = c;
-    for (const c of axis(gb0, gb1, nb0, nb1, overlapA, [ga0, ga1], [na0, na1])) if (better(hitB, c)) hitB = c;
+    }
   }
   if (!hitA && !hitB) return null;
   const offA = hitA?.off ?? 0;

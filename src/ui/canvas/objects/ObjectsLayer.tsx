@@ -2,9 +2,10 @@ import { memo, useMemo } from 'react';
 import type { AreaFreeSpaces, FreeSpace } from '../../../core/freeSpace';
 import type { Area, Category, FestplatzPage, Id, InfraTypeDef, ShapeTemplate, Stand, Vec } from '../../../core/model/types';
 import { resolveStandColor } from '../../../core/objects';
-import { isShaped, templateOf } from '../../../core/shape';
+import { isShaped, templateOf, unionOutline } from '../../../core/shape';
 import type { Bounds } from '../../../core/viewport';
-import { areaLabelPrim, areaPrims, freeLabelPrim, freePrims, overlapPrim, standHitboxPrim, standLabelPrims, standPrims, warnIconPrims, warnKind, type WarnKind } from '../../../core/scene/objects';
+import { areaLabelPrim, areaPrims, freeLabelPrim, freePrims, overlapPrim, standHitboxPrim, standLabelPrims, standPartPrims, standPrims, warnIconPrims, warnKind, type WarnKind } from '../../../core/scene/objects';
+import { dilateConvex, footprint } from '../../../core/footprint';
 import { dilateRect } from '../../../core/geometry/polygon';
 import { formatLabel } from '../../../core/label';
 import { layoutStandLabels, movedPlacement, type LabelPlacement } from '../../../core/labelLayout';
@@ -188,18 +189,24 @@ export const ObjectsLayer = memo(function ObjectsLayer({
 const NO_STANDS: Stand[] = [];
 
 /**
- * Konkurrenzschutz (#3): Um jeden ausgewählten Stand einer Kategorie mit Mindestabstand dessen Umriss (Rechteck um den
- * Mindestabstand aufgeweitet, Ecken gerundet) und eine Linie zu jedem zu nahen Stand derselben Kategorie.
+ * Konkurrenzschutz (#3): Um jeden ausgewählten Stand einer Kategorie mit Mindestabstand dessen Umriss (Rechteck bzw.
+ * bei Belegung wie gezeichnet die Teile um den Mindestabstand aufgeweitet, Ecken gerundet, #16) und eine Linie zu jedem
+ * zu nahen Stand derselben Kategorie.
  */
 function DistanceZones({ stands, selected, catById, conflicts }: { stands: Stand[]; selected: ReadonlySet<Id>; catById: Map<Id, Category>; conflicts: DistanceWarnings }) {
   if (!selected.size) return null;
   return stands.map((s) => {
     const min = selected.has(s.id) && s.categoryId ? catById.get(s.categoryId)?.minDistance : null;
     if (!min) return null;
-    const zone = dilateRect(s, min);
+    // Bei Belegung wie gezeichnet (#16) um die Teile: Umriss der Vereinigung der aufgeweiteten Teile
+    const zone = s.parts?.length
+      ? unionOutline(footprint(s).polys.map((poly) => dilateConvex(poly, min)), 1e-6)
+          .map(([a, b]) => `M${a.x} ${a.y}L${b.x} ${b.y}`)
+          .join('')
+      : null;
     return (
       <g key={s.id} className="distance-zone" data-testid="distance-zone">
-        <polygon points={zone.map((p) => `${p.x},${p.y}`).join(' ')} />
+        {zone !== null ? <path d={zone} /> : <polygon points={dilateRect(s, min).map((p) => `${p.x},${p.y}`).join(' ')} />}
         {conflicts.get(s.id)?.map((c) => <line key={c.id} className="distance-line" data-testid="distance-line" x1={c.from.x} y1={c.from.y} x2={c.to.x} y2={c.to.y} />)}
       </g>
     );
@@ -240,7 +247,7 @@ const StandList = memo(function StandList({
 const OverlapRegions = memo(function OverlapRegions({ regions, warnKinds }: { regions: PageWarnings['regions']; warnKinds: Map<Id, WarnKind> }) {
   return regions
     .filter((r) => warnKinds.get(r.a) === 'overlap' || warnKinds.get(r.b) === 'overlap')
-    .map((r) => <PrimView key={`${r.a}|${r.b}`} p={overlapPrim(r.polygon)} />);
+    .map((r, i) => <PrimView key={`${r.a}|${r.b}|${i}`} p={overlapPrim(r.polygon)} />);
 });
 
 const WarnIcons = memo(function WarnIcons({ stands, warnKinds, size }: { stands: Stand[]; warnKinds: Map<Id, WarnKind>; size: number }) {
@@ -290,7 +297,15 @@ const StandShape = memo(function StandShape({
   warn: WarnKind;
 }) {
   const prims = standPrims(stand, color, warn, template);
-  const hitbox = selected && isShaped(stand, template) ? <PrimView p={standHitboxPrim(stand)} /> : null;
+  // Belegung wie gezeichnet (#16): Teile dünn umrandet, das Hüllrechteck nur zur Orientierung
+  const parts = selected && stand.parts?.length ? standPartPrims(stand, stand.parts) : null;
+  const hitbox =
+    selected && isShaped(stand, template) ? (
+      <>
+        <PrimView p={standHitboxPrim(stand)} className={parts ? 'orientation' : undefined} />
+        {parts?.map((p, i) => <PrimView key={i} p={p} data-part={String(i)} />)}
+      </>
+    ) : null;
   const sel = selected ? 'selected' : undefined;
   if (prims.length === 1)
     return (

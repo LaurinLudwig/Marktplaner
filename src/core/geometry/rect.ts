@@ -47,6 +47,9 @@ const round = (n: number, f: number) => {
 };
 
 /** Genauigkeit beim Übernehmen ins Projekt: Positionen und Maße 0,01 m, Drehung 0,1°. */
+/** Drehung auf 0,1° gerundet, im Bereich [0, 360). */
+export const roundAngle = (deg: number) => normAngle(round(normAngle(deg), 10));
+
 export function roundRect<T extends Rect>(r: T): T {
   // Erst normieren, dann runden: Das Ergebnis ist exakt die nächste Zehntelzahl (12.3, nicht 12.300000000000011)
   return { ...r, cx: round(r.cx, 100), cy: round(r.cy, 100), w: round(r.w, 100), d: round(r.d, 100), rot: normAngle(round(normAngle(r.rot), 10)) };

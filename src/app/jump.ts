@@ -78,7 +78,7 @@ export function jumpToFreeSpace(ref: FreeSpaceRef): boolean {
     notify('Diesen Festplatz gibt es nicht mehr.', 'error');
     return false;
   }
-  const all = pageFree(page, { minFreeWidth: project.settings.minFreeWidth, infraTypes: project.infraTypes });
+  const all = pageFree(page, { minFreeWidth: project.settings.minFreeWidth, infraTypes: project.infraTypes, shapeTemplates: project.shapeTemplates });
   const free = resolveFreeSpace(all, ref);
   if (free) {
     go(page.id, free.polygons, null);

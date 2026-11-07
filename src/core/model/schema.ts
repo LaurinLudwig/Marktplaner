@@ -1,4 +1,4 @@
-import { normAngle } from '../geometry/rect';
+import { normAngle, roundAngle } from '../geometry/rect';
 import { newId } from '../id';
 import { UserError } from '../errors';
 import { createPage, defaultLayers, DEFAULT_INFRA_TYPES, DEFAULT_LEGEND_ANCHOR, DEFAULT_NORTH_ARROW_ANCHOR, DEFAULT_SCALE_BAR_ANCHOR, DEFAULT_SETTINGS, DEFAULT_SHEET, DEFAULT_TITLE_BLOCK_ANCHOR } from './defaults';
@@ -327,6 +327,7 @@ function normalizeStand(raw: unknown, ids: Set<string>, categoryIds: Set<string>
   const r = rectOf(raw);
   if (!r) return null;
   const cat = typeof raw.categoryId === 'string' && categoryIds.has(raw.categoryId) ? raw.categoryId : null;
+  const parts = normalizeOwnParts(raw.parts);
   return {
     id: objectId(raw.id, ids),
     nr: str(raw.nr, ''),
@@ -345,10 +346,26 @@ function normalizeStand(raw: unknown, ids: Set<string>, categoryIds: Set<string>
     suppressInfraWarning: bool(raw.suppressInfraWarning, false),
     suppressDistanceWarning: bool(raw.suppressDistanceWarning, false),
     shape: isShape(raw.shape) ? raw.shape : 'rect',
-    shapeTemplateId: typeof raw.shapeTemplateId === 'string' && templateIds.has(raw.shapeTemplateId) ? raw.shapeTemplateId : null,
+    // Eine eigene Form (#16) hat Vorrang; die Vorlage entfällt dann
+    shapeTemplateId: !parts && typeof raw.shapeTemplateId === 'string' && templateIds.has(raw.shapeTemplateId) ? raw.shapeTemplateId : null,
     labelOffset: normalizeLabelOffset(raw.labelOffset),
+    parts,
+    frontOverride: clampFrontOverride(raw.frontOverride),
     ...r,
   };
+}
+
+/** Frontmeter von Hand (#16): 0–1000 m, auf 0,01 m gerundet; sonst null (automatisch). */
+export const FRONT_OVERRIDE_LIMITS = { min: 0, max: 1000 } as const;
+export function clampFrontOverride(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? clampTo(v, FRONT_OVERRIDE_LIMITS) : null;
+}
+
+/** Eigene Form eines Stands (#16): brauchbare Teile oder null (keine eigene Form). */
+function normalizeOwnParts(raw: unknown): ShapePart[] | null {
+  if (!Array.isArray(raw)) return null;
+  const parts = raw.map(normalizeShapePart).filter((x): x is ShapePart => !!x);
+  return parts.length ? parts : null;
 }
 
 const isShape = (v: unknown): v is StandShape => v === 'rect' || v === 'ellipse';
@@ -364,7 +381,7 @@ function normalizeShapeTemplates(raw: unknown): ShapeTemplate[] {
     const parts = arr(t.parts).map(normalizeShapePart).filter((x): x is ShapePart => !!x);
     if (!(w > 0) || !(d > 0) || !parts.length) continue;
     seen.add(t.id);
-    out.push({ id: t.id, name: str(t.name, 'Form'), w, d, parts });
+    out.push({ id: t.id, name: str(t.name, 'Form'), w, d, parts, occupies: bool(t.occupies, false) });
   }
   return out;
 }
@@ -373,7 +390,8 @@ function normalizeShapePart(raw: unknown): ShapePart | null {
   if (!isObj(raw) || !isShape(raw.kind)) return null;
   const [x, y, w, h] = [raw.x, raw.y, raw.w, raw.h].map((v) => num(v, NaN)) as [number, number, number, number];
   if (![x, y].every(Number.isFinite) || !(w > 0) || !(h > 0)) return null;
-  return { kind: raw.kind, x, y, w, h };
+  // Drehung je Teil (#16): wie alle Drehungen auf 0,1° gerundet
+  return { kind: raw.kind, x, y, w, h, rot: roundAngle(num(raw.rot, 0)) };
 }
 
 export const MIN_PASSAGE_LIMITS = { min: 0.5, max: 50 } as const;

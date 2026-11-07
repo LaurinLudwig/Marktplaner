@@ -1,27 +1,35 @@
 /**
- * Geschäftsformen (M12, #9, spec.md §3 „Form“): Umriss eines Stands als Rechteck, Ellipse oder Formvorlage.
+ * Geschäftsformen (M12, #9, spec.md §3 „Form“): Umriss eines Stands als Rechteck, Ellipse, Formvorlage oder eigene
+ * Form (#16).
  *
- * Die Form betrifft nur die Darstellung (Zeichenfläche, PDF). Freiflächen, Warnungen, Fang, Treffer und Statistik
- * rechnen weiter mit dem Rechteck B × T (Hitbox). Alle Teile einer Vorlage sind konvex (Rechteck, Ellipse als
- * Vieleck); daraus entstehen die Füllung und die äußere Kontur einer zusammengesetzten Form.
+ * Grundformen und Vorlagen ohne „belegt wie gezeichnet“ betreffen nur die Darstellung (Zeichenfläche, PDF);
+ * Freiflächen, Warnungen, Fang, Treffer und Statistik rechnen dann mit dem Rechteck B × T (Hitbox). Eine eigene Form
+ * und eine Vorlage mit „belegt wie gezeichnet“ belegen mit ihren Teilen (core/footprint.ts). Alle Teile sind konvex
+ * (Rechteck, Ellipse als Vieleck) und können gedreht sein (#16); daraus entstehen die Füllung und die äußere Kontur
+ * einer zusammengesetzten Form.
  */
-import { fromLocal, rectCorners } from './geometry/rect';
+import { fromLocal, normAngle, rectCorners } from './geometry/rect';
 import { polyD } from './scene/prims';
 import type { Id, Rect, ShapePart, ShapeTemplate, Stand, StandShape, Vec } from './model/types';
 
-/** Ecken, mit denen eine Ellipse gezeichnet wird. */
+/** Ecken, mit denen eine Ellipse gezeichnet (und bei Belegung wie gezeichnet gerechnet) wird. */
 export const ELLIPSE_SEGMENTS = 64;
 
 /** Anzeigenamen der Grundformen. */
 export const SHAPE_LABEL: Record<StandShape, string> = { rect: 'Rechteck', ellipse: 'Kreis/Oval' };
 
-/** Formvorlage eines Stands, falls gesetzt und vorhanden. */
+/** Formvorlage eines Stands, falls gesetzt und vorhanden (eine eigene Form hat Vorrang, siehe `drawnParts`). */
 export function templateOf(stand: Pick<Stand, 'shapeTemplateId'>, templates: ReadonlyMap<Id, ShapeTemplate>): ShapeTemplate | undefined {
   return stand.shapeTemplateId ? templates.get(stand.shapeTemplateId) : undefined;
 }
 
+/** Teile, aus denen ein Stand gezeichnet wird: eigene Form (#16), sonst die Vorlage; null = Grundform. */
+export const drawnParts = (stand: { parts?: readonly ShapePart[] | null }, template: ShapeTemplate | undefined): readonly ShapePart[] | null =>
+  stand.parts?.length ? stand.parts : (template?.parts ?? null);
+
 /** Hat der Stand eine andere Form als das Rechteck B × T (dann zeigt die Zeichenfläche bei Auswahl die Hitbox)? */
-export const isShaped = (stand: Pick<Stand, 'shape'>, template: ShapeTemplate | undefined): boolean => !!template || stand.shape === 'ellipse';
+export const isShaped = (stand: Pick<Stand, 'shape'> & { parts?: readonly ShapePart[] | null }, template: ShapeTemplate | undefined): boolean =>
+  !!stand.parts?.length || !!template || stand.shape === 'ellipse';
 
 /** Ellipse mit Halbachsen rx, ry um (cx, cy), im selben Umlaufsinn wie `rectCorners`. */
 function ellipsePts(cx: number, cy: number, rx: number, ry: number): Vec[] {
@@ -33,27 +41,29 @@ function ellipsePts(cx: number, cy: number, rx: number, ry: number): Vec[] {
   return out;
 }
 
-/** Teil im lokalen System eines Rechtecks w × d (Mittelpunkt 0/0, y nach unten). */
-function partLocal(part: ShapePart, w: number, d: number): Vec[] {
-  const x0 = (part.x - 0.5) * w;
-  const y0 = (part.y - 0.5) * d;
-  const pw = part.w * w;
-  const ph = part.h * d;
-  if (part.kind === 'ellipse') return ellipsePts(x0 + pw / 2, y0 + ph / 2, pw / 2, ph / 2);
-  return [
-    { x: x0, y: y0 },
-    { x: x0 + pw, y: y0 },
-    { x: x0 + pw, y: y0 + ph },
-    { x: x0, y: y0 + ph },
-  ];
+/**
+ * Teil in Weltkoordinaten als gedrehtes Rechteck: Mitte und Maße aus dem Hüllrechteck B × T gestreckt, Drehung =
+ * Drehung des Stands plus Drehung des Teils (um seine Mitte, #16). Bei einer Ellipse das Rechteck um sie herum.
+ */
+export function partRect(stand: Rect, part: ShapePart): Rect {
+  const c = fromLocal(stand, { x: (part.x + part.w / 2 - 0.5) * stand.w, y: (part.y + part.h / 2 - 0.5) * stand.d });
+  return { cx: c.x, cy: c.y, w: part.w * stand.w, d: part.h * stand.d, rot: normAngle(stand.rot + (part.rot || 0)) };
+}
+
+/** Teil als konvexes Vieleck in Weltkoordinaten: Rechteck = `rectCorners`, Ellipse mit `ELLIPSE_SEGMENTS` Ecken. */
+export function partPolygon(stand: Rect, part: ShapePart): Vec[] {
+  const r = partRect(stand, part);
+  if (part.kind === 'ellipse') return ellipsePts(0, 0, r.w / 2, r.d / 2).map((q) => fromLocal(r, q));
+  return rectCorners(r);
 }
 
 /**
  * Umriss eines Stands in Weltkoordinaten: ein konvexes Vieleck je Teil. Rechteck = `rectCorners` (eine Liste),
- * Ellipse = eine Liste mit `ELLIPSE_SEGMENTS` Ecken, Vorlage = ein Vieleck je Teil, gestreckt auf B × T.
+ * Ellipse = eine Liste mit `ELLIPSE_SEGMENTS` Ecken, Teile (Vorlage oder eigene Form) = ein Vieleck je Teil, gestreckt
+ * auf B × T.
  */
-export function standOutline(stand: Rect & Pick<Stand, 'shape'>, template?: ShapeTemplate): Vec[][] {
-  if (template) return template.parts.map((p) => partLocal(p, stand.w, stand.d).map((q) => fromLocal(stand, q)));
+export function standOutline(stand: Rect & Pick<Stand, 'shape'>, parts?: readonly ShapePart[] | null): Vec[][] {
+  if (parts?.length) return parts.map((p) => partPolygon(stand, p));
   if (stand.shape === 'ellipse') return [ellipsePts(0, 0, stand.w / 2, stand.d / 2).map((q) => fromLocal(stand, q))];
   return [rectCorners(stand)];
 }
@@ -161,11 +171,10 @@ interface WorldEllipse {
 }
 
 function worldEllipse(stand: Rect, part: ShapePart | null): WorldEllipse {
-  const cx = part ? (part.x + part.w / 2 - 0.5) * stand.w : 0;
-  const cy = part ? (part.y + part.h / 2 - 0.5) * stand.d : 0;
-  const rx = ((part?.w ?? 1) * stand.w) / 2;
-  const ry = ((part?.h ?? 1) * stand.d) / 2;
-  return { at: (a) => fromLocal(stand, { x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }), rx, ry, rot: stand.rot };
+  const r = part ? partRect(stand, part) : stand;
+  const rx = r.w / 2;
+  const ry = r.d / 2;
+  return { at: (a) => fromLocal(r, { x: rx * Math.cos(a), y: ry * Math.sin(a) }), rx, ry, rot: r.rot };
 }
 
 /** Elliptischer Bogen von Winkel a0 nach a1 (a1 > a0, im Umlaufsinn von `ellipsePts`) in Stücken bis 90°. */
@@ -182,18 +191,19 @@ const fullEllipseD = (e: WorldEllipse) => `${arcD(e, Math.PI, 3 * Math.PI, true)
  * Pfade eines Stands mit Form für Zeichenfläche und PDF: `fill` (alle Teile im selben Umlaufsinn, als ein Pfad also
  * ohne doppelte Tönung) und `outline` (nur der äußere Umriss). Ellipsen sind echte Bögen statt Vielecke; das hält die
  * Zeichenfläche bei vielen runden Ständen flüssig (WebKit zeichnet beim Ziehen die ganze Ebene neu). Die Vielecke aus
- * `standOutline` bestimmen nur, welche Abschnitte einer Ellipse außen liegen.
+ * `standOutline` bestimmen nur, welche Abschnitte einer Ellipse außen liegen. `parts` = Teile einer Vorlage oder der
+ * eigenen Form (`drawnParts`), sonst die Grundform.
  */
-export function shapePaths(stand: Rect & Pick<Stand, 'shape'>, template?: ShapeTemplate): { fill: string; outline: string } {
-  if (!template) {
+export function shapePaths(stand: Rect & Pick<Stand, 'shape'>, parts?: readonly ShapePart[] | null): { fill: string; outline: string } {
+  if (!parts?.length) {
     const d = stand.shape === 'ellipse' ? fullEllipseD(worldEllipse(stand, null)) : polyD(rectCorners(stand));
     return { fill: d, outline: d };
   }
-  const polys = standOutline(stand, template);
+  const polys = standOutline(stand, parts);
   const orients = polys.map(orientation);
   let fill = '';
   let outline = '';
-  template.parts.forEach((part, i) => {
+  parts.forEach((part, i) => {
     const poly = polys[i]!;
     if (part.kind === 'rect') {
       fill += polyD(poly);
@@ -253,20 +263,44 @@ export function shapePaths(stand: Rect & Pick<Stand, 'shape'>, template?: ShapeT
   return { fill, outline };
 }
 
-/**
- * Teile einer Formvorlage aus Maßen in Metern (Editor): linke obere Ecke x/y, Breite w, Tiefe h. Liefert die auf das
- * Hüllrechteck normierten Teile und das Hüllrechteck (= Vorschlagsmaß) oder null ohne brauchbares Teil.
- */
-export function normalizeParts(parts: readonly ShapePart[]): { w: number; d: number; parts: ShapePart[] } | null {
-  const ok = parts.filter((p) => p.w > 0 && p.h > 0 && [p.x, p.y, p.w, p.h].every(Number.isFinite));
-  if (!ok.length) return null;
-  const minX = Math.min(...ok.map((p) => p.x));
-  const minY = Math.min(...ok.map((p) => p.y));
-  const w = Math.max(...ok.map((p) => p.x + p.w)) - minX;
-  const d = Math.max(...ok.map((p) => p.y + p.h)) - minY;
-  return { w, d, parts: ok.map((p) => ({ kind: p.kind, x: (p.x - minX) / w, y: (p.y - minY) / d, w: p.w / w, h: p.h / d })) };
+/** Halbe Ausdehnung eines (gedrehten) Teils in Metern entlang x und y (Hüllrechteck um den gedrehten Teil). */
+function partExtent(kind: StandShape, w: number, h: number, rot: number): { ex: number; ey: number } {
+  const a = (rot * Math.PI) / 180;
+  const c = Math.abs(Math.cos(a));
+  const s = Math.abs(Math.sin(a));
+  if (kind === 'ellipse') return { ex: Math.hypot((w / 2) * c, (h / 2) * s), ey: Math.hypot((w / 2) * s, (h / 2) * c) };
+  return { ex: (w * c + h * s) / 2, ey: (w * s + h * c) / 2 };
 }
 
-/** Teile einer Vorlage in Metern (Gegenstück zu `normalizeParts`, für den Editor). */
-export const partsInMeters = (t: Pick<ShapeTemplate, 'w' | 'd' | 'parts'>): ShapePart[] =>
-  t.parts.map((p) => ({ kind: p.kind, x: p.x * t.w, y: p.y * t.d, w: p.w * t.w, h: p.h * t.d }));
+/**
+ * Teile einer Form aus Maßen in Metern (Editor): linke obere Ecke x/y des ungedrehten Teils, Breite w, Tiefe h,
+ * Drehung rot um die Mitte. Liefert die auf das Hüllrechteck normierten Teile, das Hüllrechteck (= Vorschlagsmaß bzw.
+ * B × T) und dessen linke obere Ecke `x0`/`y0` im Eingabesystem, oder null ohne brauchbares Teil. Das Hüllrechteck
+ * umschließt auch gedrehte Teile.
+ */
+export function normalizeParts(parts: readonly ShapePart[]): { w: number; d: number; x0: number; y0: number; parts: ShapePart[] } | null {
+  const ok = parts.filter((p) => p.w > 0 && p.h > 0 && [p.x, p.y, p.w, p.h].every(Number.isFinite));
+  if (!ok.length) return null;
+  const boxes = ok.map((p) => {
+    const { ex, ey } = partExtent(p.kind, p.w, p.h, p.rot || 0);
+    const cx = p.x + p.w / 2;
+    const cy = p.y + p.h / 2;
+    return { minX: cx - ex, maxX: cx + ex, minY: cy - ey, maxY: cy + ey };
+  });
+  const minX = Math.min(...boxes.map((b) => b.minX));
+  const minY = Math.min(...boxes.map((b) => b.minY));
+  const w = Math.max(...boxes.map((b) => b.maxX)) - minX;
+  const d = Math.max(...boxes.map((b) => b.maxY)) - minY;
+  if (!(w > 0) || !(d > 0)) return null;
+  return {
+    w,
+    d,
+    x0: minX,
+    y0: minY,
+    parts: ok.map((p) => ({ kind: p.kind, x: (p.x - minX) / w, y: (p.y - minY) / d, w: p.w / w, h: p.h / d, rot: normAngle(p.rot || 0) })),
+  };
+}
+
+/** Teile einer Vorlage bzw. eines Stands in Metern relativ zur linken oberen Ecke von B × T (Gegenstück zu `normalizeParts`). */
+export const partsInMeters = (t: Pick<ShapeTemplate, 'w' | 'd'> & { parts: readonly ShapePart[] }): ShapePart[] =>
+  t.parts.map((p) => ({ kind: p.kind, x: p.x * t.w, y: p.y * t.d, w: p.w * t.w, h: p.h * t.d, rot: p.rot || 0 }));

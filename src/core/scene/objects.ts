@@ -10,8 +10,8 @@ import { fmt } from '../format';
 import { lineEnds, PASSAGE_TYPE_ID } from '../infra';
 import { approxTextWidth, areaLabel, freeSpaceLabel } from '../label';
 import { firstBaseline, type LabelPlacement } from '../labelLayout';
-import type { Area, InfraObject, InfraTypeDef, ShapeTemplate, Stand, Vec } from '../model/types';
-import { shapePaths } from '../shape';
+import type { Area, InfraObject, InfraTypeDef, ShapePart, ShapeTemplate, Stand, Vec } from '../model/types';
+import { drawnParts, partPolygon, shapePaths } from '../shape';
 import type { ActiveWarnings } from '../warnings';
 import type { Bounds } from '../viewport';
 import { iconPrim, type LinePrim, type PathPrim, type PolyPrim, type Prim, type StyleVariant, type TextPrim } from './prims';
@@ -91,13 +91,14 @@ export function standPrim(stand: Stand, color: string, warn: WarnKind): PolyPrim
 
 /**
  * Stand in seiner Form (M12, §3 „Form“). Rechteck: Vieleck, Kreis/Oval: ein Pfad aus Bögen, beide mit Stil `stand`.
- * Eine Vorlage wird zu einer gemeinsamen Füllung (ein Pfad, alle Teile im selben Umlaufsinn, also ohne doppelte
- * Tönung) und einer Kontur nur außen (`shapePaths`).
+ * Eine Vorlage oder eigene Form (#16) wird zu einer gemeinsamen Füllung (ein Pfad, alle Teile im selben Umlaufsinn,
+ * also ohne doppelte Tönung) und einer Kontur nur außen (`shapePaths`).
  */
 export function standPrims(stand: Stand, color: string, warn: WarnKind, template?: ShapeTemplate): Prim[] {
-  if (!template && stand.shape !== 'ellipse') return [standPrim(stand, color, warn)];
-  const { fill, outline } = shapePaths(stand, template);
-  if (!template) return [{ t: 'path', s: 'stand', d: fill, color, ...warnVariant(warn) }];
+  const parts = drawnParts(stand, template);
+  if (!parts && stand.shape !== 'ellipse') return [standPrim(stand, color, warn)];
+  const { fill, outline } = shapePaths(stand, parts);
+  if (!parts) return [{ t: 'path', s: 'stand', d: fill, color, ...warnVariant(warn) }];
   return [
     { t: 'path', s: 'stand-fill', d: fill, color },
     { t: 'path', s: 'stand-outline', d: outline, ...warnVariant(warn) },
@@ -106,6 +107,12 @@ export function standPrims(stand: Stand, color: string, warn: WarnKind, template
 
 /** Hitbox eines Stands mit Form: das Rechteck B × T gestrichelt, nur auf der Zeichenfläche bei Auswahl (§3). */
 export const standHitboxPrim = (stand: Stand): PolyPrim => ({ t: 'poly', s: 'stand-hitbox', pts: rectCorners(stand) });
+
+/**
+ * Teile eines ausgewählten Stands mit Belegung wie gezeichnet (#16): jeder Teil dünn umrandet (auch die Innenkanten),
+ * nur auf der Zeichenfläche. Das Hüllrechteck zeigt `standHitboxPrim` nur noch zur Orientierung.
+ */
+export const standPartPrims = (stand: Stand, parts: readonly ShapePart[]): PolyPrim[] => parts.map((p) => ({ t: 'poly', s: 'stand-part', pts: partPolygon(stand, p) }));
 
 /**
  * Standbeschriftung an ihrem Platz (#9, labelLayout.ts): horizontal, feste Schriftgröße; auf dem Stand umbrochen oder
