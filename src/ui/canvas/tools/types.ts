@@ -3,6 +3,7 @@ import type { LabelPlacement } from '../../../core/labelLayout';
 import type { FestplatzPage, Id, InfraGeometry, Vec, View } from '../../../core/model/types';
 import type { SnapResult } from '../../../core/snap';
 import type { PagePaper } from '../../../core/paper';
+import type { Neighbours } from '../../../core/verbund';
 
 /** Fangradius in Bildschirmpixeln (Messen, Kalibrieren und Fang beim Ziehen, M4). */
 export const SNAP_PX = 8;
@@ -25,6 +26,8 @@ export interface ToolContext {
   paper: PagePaper;
   /** Platz der Standbeschriftungen (#9) der gespeicherten Page. */
   labels: ReadonlyMap<Id, LabelPlacement>;
+  /** Nachbarn aus dem Festplatz-Verbund (#15): nur sichtbar, aber Fangziele (Stände wie sie belegen). */
+  neighbours: Neighbours;
 }
 
 export interface ToolPointer {

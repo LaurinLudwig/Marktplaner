@@ -13,26 +13,45 @@ import { CM, PrimView, Prims } from '../scene/Prim';
  * - Punkt (Marker): Symbol mit der Spitze auf dem Punkt.
  */
 interface Props {
-  infra: InfraObject[];
+  infra: readonly InfraObject[];
   types: ReadonlyMap<Id, InfraTypeDef>;
   selected: ReadonlySet<Id>;
   fontSize: number;
   markerSize: number;
   /** Objekte mit aktiver Warnung („Durchfahrt zu eng“). */
   warn: ReadonlySet<Id>;
+  /** Nachbarn aus dem Festplatz-Verbund (#15): `data-neighbour` statt `data-id` (sie gehören einer anderen Page). */
+  neighbour?: boolean;
 }
 
-export const InfraList = memo(function InfraList({ infra, types, selected, fontSize, markerSize, warn }: Props) {
+export const InfraList = memo(function InfraList({ infra, types, selected, fontSize, markerSize, warn, neighbour = false }: Props) {
   return infra.map((o) => {
     const t = types.get(o.typeId);
-    return t ? <InfraShape key={o.id} obj={o} type={t} selected={selected.has(o.id)} fontSize={fontSize} markerSize={markerSize} warn={warn.has(o.id)} /> : null;
+    return t ? <InfraShape key={o.id} obj={o} type={t} selected={selected.has(o.id)} fontSize={fontSize} markerSize={markerSize} warn={warn.has(o.id)} neighbour={neighbour} /> : null;
   });
 });
 
-const InfraShape = memo(function InfraShape({ obj: o, type: t, selected, fontSize, markerSize, warn }: { obj: InfraObject; type: InfraTypeDef; selected: boolean; fontSize: number; markerSize: number; warn: boolean }) {
-  const cls = `infra infra-${t.geometry}${selected ? ' selected' : ''}${warn ? ' warn-narrow' : ''}`;
+const InfraShape = memo(function InfraShape({
+  obj: o,
+  type: t,
+  selected,
+  fontSize,
+  markerSize,
+  warn,
+  neighbour,
+}: {
+  obj: InfraObject;
+  type: InfraTypeDef;
+  selected: boolean;
+  fontSize: number;
+  markerSize: number;
+  warn: boolean;
+  neighbour: boolean;
+}) {
+  const cls = `infra infra-${t.geometry}${selected ? ' selected' : ''}${warn ? ' warn-narrow' : ''}${neighbour ? ' neighbour' : ''}`;
+  const id = neighbour ? { 'data-neighbour': o.id } : { 'data-id': o.id };
   return (
-    <g className={cls} data-id={o.id} data-type={t.id} style={{ color: t.color }}>
+    <g className={cls} {...id} data-type={t.id} style={{ color: t.color }}>
       <Prims prims={infraPrims(o, t, fontSize, markerSize, warn)} />
     </g>
   );

@@ -55,6 +55,8 @@ export function deletePage(id: Id) {
   const neighbor = s.project.pages[index + 1]?.id ?? s.project.pages[index - 1]?.id ?? START_PAGE;
   s.change('Festplatz löschen', (p) => {
     p.pages.splice(index, 1);
+    // Auch aus ihrem Festplatz-Verbund (#15)
+    for (const g of p.groups) if (g.pageIds.includes(id)) g.pageIds = g.pageIds.filter((x) => x !== id);
   });
   if (s.ui.activePage === id) useStore.getState().setUi({ activePage: neighbor });
 }

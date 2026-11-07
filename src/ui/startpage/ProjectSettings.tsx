@@ -9,6 +9,7 @@ import { CategoryPanel, FreeSpacePanel, LabelPanel, PricingPanel, SnapPanel } fr
 import { TextField } from '../panels/TextField';
 import { InfraTypesPanel, InfraWarningsPanel, TitleBlockSettingsPanel } from './InfraSettings';
 import { ShapeTemplatesPanel } from './ShapeTemplates';
+import { VerbundPanel } from './VerbundSettings';
 
 /**
  * Projekteinstellungen (M6-05, spec.md §7): alles Projektweite an einer Stelle. Seitenbezogenes (Präfix, Modus,
@@ -30,6 +31,7 @@ const PANELS: { key: string; panel: ReactNode }[] = [
   { key: 'pricing', panel: <PricingPanel /> },
   { key: 'shapes', panel: <ShapeTemplatesPanel /> },
   { key: 'infraTypes', panel: <InfraTypesPanel /> },
+  { key: 'verbund', panel: <VerbundPanel /> },
 ];
 const MIN_COL = 340;
 const GAP = 16;
