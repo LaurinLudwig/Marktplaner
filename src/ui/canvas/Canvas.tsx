@@ -504,7 +504,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
    * ihn dort aus. Eigene Objekte haben Vorrang (sie liegen darüber).
    */
   const onDoubleClick = (e: React.MouseEvent<HTMLElement>) => {
-    if (!onCanvas(e) || tool !== 'select' || (!neighbours.stands.length && !neighbours.infra.length)) return;
+    // Nach einem Klick des Auswahlwerkzeugs hält <main> den Zeiger (setPointerCapture): Dann ist <main> selbst das Ziel
+    if (!(onCanvas(e) || e.target === e.currentTarget) || tool !== 'select' || (!neighbours.stands.length && !neighbours.infra.length)) return;
     const r = svgRef.current!.getBoundingClientRect();
     const v = viewRef.current;
     const w = screenToWorld(v, { x: e.clientX - r.left, y: e.clientY - r.top });
