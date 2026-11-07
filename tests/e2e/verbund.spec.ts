@@ -100,6 +100,39 @@ test.describe('#15 Festplatz-Verbund (Teil a)', () => {
     expect(errors).toEqual([]);
   });
 
+  test('Lage: Drehen per Zahlenfeld ohne Enter, „Anwenden“ dreht die ganze Page um ihre Mitte, ein Undo-Schritt', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page, { verbund: true });
+    await openSettings(page);
+    const row = page.getByTestId('verbund-panel').getByTestId('verbund-row');
+    await row.getByTestId('verbund-member').nth(1).getByTestId('verbund-lage').click();
+    const editor = row.getByTestId('verbund-lage-editor');
+    // Drehpunkt: Mitte von Grundfläche (x 45–95, y −10–0) und SE-02
+    await expect(editor).toContainText('70 / -5 m');
+    await editor.getByLabel('Drehen').fill('90');
+    const n0 = (await st(page)).history.past.length;
+    // direkt klicken: Das Feld übernimmt beim Verlassen, „Anwenden“ sieht schon den neuen Wert
+    await editor.getByTestId('verbund-lage-apply').click();
+    let s = await st(page);
+    expect(s.history.past.length).toBe(n0 + 1);
+    const sp = () => s.project.pages.find((p: any) => p.id === 'S');
+    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5, rot: 90 });
+    expect(sp().stands[0]).toMatchObject({ rot: 90 });
+    expect(Math.hypot(sp().stands[0].cx - 70, sp().stands[0].cy + 5)).toBeCloseTo(Math.hypot(22.5, 3.5), 6);
+    expect(sp().northAngle).toBe(90);
+    // Felder zurückgesetzt; der Ziegelturm bleibt, wie er war
+    await expect(editor.getByLabel('Drehen')).toHaveValue('0');
+    expect(s.project.pages[0].areas[0]).toMatchObject({ cx: 25, cy: -5, rot: 0 });
+    await page.getByTestId('verbund-panel').locator('.panel-head').click();
+    await page.keyboard.press(`${MOD}+z`);
+    s = await st(page);
+    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5, rot: 0 });
+    expect(sp().stands[0]).toMatchObject({ cx: 47.5, cy: -1.5, rot: 0 });
+    expect(sp().northAngle).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
   test('Stand im Überschneidungsbereich: blass beim Nachbarn, belegt dort die Freifläche, zählt nur in einer Statistik; Doppelklick springt', async ({ page }) => {
     const errors = collectErrors(page);
     await openApp(page);
