@@ -8,7 +8,8 @@ import { pageStands } from './footprint';
 import { cachedDuplicates, nrKey, type NrRef } from './numbering';
 import { CONNECTION_KEYS, sumPower, type ConnectionKey } from './power';
 import { outsideRef } from './pageAreas';
-import { activeWarnings, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, NO_INFRA_WARNINGS, type ActiveWarnings, type DistanceConflict } from './warnings';
+import { pageEnv } from './verbund';
+import { activeWarnings, cachedDistanceWarnings, cachedPageWarnings, cachedWarningData, NO_INFRA_WARNINGS, type ActiveWarnings, type DistanceConflict } from './warnings';
 import type { Id, Project, Stand } from './model/types';
 
 export interface StandRow {
@@ -27,16 +28,19 @@ export interface StandRow {
   fee: Fee | null;
 }
 
-export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categories'> & Partial<Pick<Project, 'infraTypes' | 'shapeTemplates'>>): StandRow[] {
+export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categories'> & Partial<Pick<Project, 'infraTypes' | 'shapeTemplates' | 'groups'>>): StandRow[] {
   const cats = new Map(project.categories.map((c) => [c.id, c.name]));
   const dups = cachedDuplicates(project.pages, project.settings.numbering.scope);
   const rows: StandRow[] = [];
   project.pages.forEach((page, pageIndex) => {
     // Stände, wie sie belegen (#16): Vorlagen mit „belegt wie gezeichnet“ eingesetzt
     const stands = pageStands(page, project.shapeTemplates ?? []);
-    const w = cachedPageWarnings(outsideRef(page), stands);
-    const iw = project.infraTypes ? cachedInfraWarnings({ stands, infra: page.infra }, project.infraTypes, project.settings.minPassageWidth) : NO_INFRA_WARNINGS;
-    const dw = cachedDistanceWarnings(stands, project.categories);
+    // Nachbarn aus dem Verbund (#15) zählen für Überlappung, Abstand und Infrastruktur, „außerhalb“ über den Verbund
+    const env = pageEnv(project, page);
+    const data = project.infraTypes ? cachedWarningData(stands, page.infra, env, { ...project, infraTypes: project.infraTypes }) : null;
+    const w = data?.page ?? cachedPageWarnings(outsideRef(page), stands);
+    const iw = data?.infra ?? NO_INFRA_WARNINGS;
+    const dw = data?.distance ?? cachedDistanceWarnings(stands, project.categories);
     const fees = feesOf(stands, project.categories, project.settings.pricing);
     stands.forEach((s, i) => {
       const d = dups.get(s.id);

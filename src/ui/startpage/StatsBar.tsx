@@ -22,14 +22,15 @@ const CONN_SHORT: Record<ConnectionKey, string> = { ...CONNECTION_LABEL, none: '
  */
 export function StatsBar() {
   const pages = useStore((s) => s.project.pages);
+  const groups = useStore((s) => s.project.groups);
   const settings = useStore((s) => s.project.settings);
   const infraTypes = useStore((s) => s.project.infraTypes);
   const categories = useStore((s) => s.project.categories);
   const shapeTemplates = useStore((s) => s.project.shapeTemplates);
   const setUi = useStore((s) => s.setUi);
   const stats = useMemo(
-    () => projectStats({ pages, settings, infraTypes, categories, shapeTemplates }, freeOf(settings.minFreeWidth, infraTypes, shapeTemplates)),
-    [pages, settings, infraTypes, categories, shapeTemplates],
+    () => projectStats({ pages, groups, settings, infraTypes, categories, shapeTemplates }, freeOf(settings.minFreeWidth, infraTypes, shapeTemplates, { pages, groups, categories })),
+    [pages, groups, settings, infraTypes, categories, shapeTemplates],
   );
   const t = stats.total;
   const withFee = hasPricing(settings.pricing, categories);

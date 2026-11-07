@@ -16,7 +16,9 @@ import { boundsTouch, clipConvex, dilateRect, distToRect, penetration, rectGeo, 
 import { footprint, footprintGap, overlapPolygons } from './footprint';
 import { exceedsTol, greaterThan, lessThan, TOL, withinTol } from './geometry/tolerance';
 import { infraConflicts, passageTooNarrow, typeMap } from './infra';
-import type { Area, Category, Id, InfraObject, InfraTypeDef, ProjectSettings, Stand, Vec } from './model/types';
+import type { Area, Category, Id, InfraObject, InfraTypeDef, ProjectSettings, ShapeTemplate, Stand, Vec } from './model/types';
+import { occupancyStands } from './footprint';
+import { withNeighbours, type PageEnv } from './verbund';
 
 export interface StandWarning {
   outside: boolean;
@@ -292,4 +294,32 @@ export function cachedPageWarnings(areas: readonly Area[] | null, stands: readon
   const result = pageWarnings(areas, stands);
   pageCache.set(stands, { areas, result });
   return result;
+}
+
+/** Rohdaten aller Warnungen einer Page (Überlappung/außerhalb, Infrastruktur, Abstand). */
+export interface WarningData {
+  page: PageWarnings;
+  infra: InfraWarnings;
+  distance: DistanceWarnings;
+}
+
+/**
+ * Rohdaten der Warnungen einer Page mit ihren Nachbarn aus dem Verbund (#15): Überlappung, Abstand und Infrastruktur
+ * (freihalten) rechnen über eigene und Nachbarstände bzw. -objekte, „außerhalb“ über die Grundflächen des Verbunds
+ * (`env.outside`). Die Ergebnisse enthalten auch Einträge der Nachbarn; angezeigt und gezählt werden nur die eigenen
+ * Stände (die Aufrufer gehen über `stands`). `stands` = eigene Stände, wie sie belegen (`pageStands`).
+ */
+export function cachedWarningData(
+  stands: readonly Stand[],
+  infra: readonly InfraObject[],
+  env: PageEnv,
+  project: { infraTypes: readonly InfraTypeDef[]; categories: readonly Category[]; shapeTemplates?: readonly ShapeTemplate[]; settings: Pick<ProjectSettings, 'minPassageWidth'> },
+): WarningData {
+  const nb = env.neighbours;
+  const all = withNeighbours(stands, occupancyStands(nb.stands, project.shapeTemplates ?? []));
+  return {
+    page: cachedPageWarnings(env.outside, all),
+    infra: cachedInfraWarnings({ stands, infra: withNeighbours(infra, nb.infra) }, project.infraTypes, project.settings.minPassageWidth),
+    distance: cachedDistanceWarnings(all, project.categories),
+  };
 }

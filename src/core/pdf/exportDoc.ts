@@ -104,7 +104,7 @@ function standTable(project: Project, profile: ExportProfile): AppendixTable {
 }
 
 function freeTable(project: Project): AppendixTable {
-  const freeOf = (p: Project['pages'][number]) => pageFree(p, { minFreeWidth: project.settings.minFreeWidth, infraTypes: project.infraTypes, shapeTemplates: project.shapeTemplates });
+  const freeOf = (p: Project['pages'][number]) => pageFree(p, { minFreeWidth: project.settings.minFreeWidth, infraTypes: project.infraTypes, shapeTemplates: project.shapeTemplates, verbund: project });
   // Ausgeblendete Freiflächen (#8) fehlen im Anhang
   const rows = sortFreeSpaces(freeSpaceRows(project, freeOf).filter((r) => !r.hidden), [
     { col: 'page', dir: 'asc' },

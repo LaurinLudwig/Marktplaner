@@ -12,8 +12,9 @@ import { pagePaper, type PaperKind } from '../paper';
 import { boundsOfRects } from '../geometry/rect';
 import { mmToM, shownOnPaper, type SheetFrame } from '../sheet';
 import type { Bounds } from '../viewport';
-import { activeAreas, outsideRef } from '../pageAreas';
-import { activeNarrow, activeWarnings, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings } from '../warnings';
+import { activeAreas } from '../pageAreas';
+import { pageEnv } from '../verbund';
+import { activeNarrow, activeWarnings, cachedWarningData } from '../warnings';
 import { cachedStandLabels } from '../labelLayout';
 import { areaLabelBounds, areaLabelPrim, areaPrims, freeLabelPrim, freePrims, infraLabelPrim, infraPrims, overlapPrim, standLabelPrims, standPrims, warnIconPrims, warnKind, type WarnKind } from './objects';
 import { legendPrims, northArrowPrims, scaleBarPrims, titleBlockPrims } from './paper';
@@ -59,7 +60,8 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
   const settings = project.settings;
   const fontSize = settings.labelFontSize;
   const mSize = markerSize(fontSize);
-  const free = L.areas && L.free ? pageFree(page, { minFreeWidth: settings.minFreeWidth, infraTypes: project.infraTypes, shapeTemplates: project.shapeTemplates }) : [];
+  // Nachbarn aus dem Verbund (#15) belegen Freiflächen und zählen für die Warnungen; gezeichnet werden sie im PDF nicht
+  const free = L.areas && L.free ? pageFree(page, { minFreeWidth: settings.minFreeWidth, infraTypes: project.infraTypes, shapeTemplates: project.shapeTemplates, verbund: project }) : [];
   const freeShown = free.some((a) => a.free.length > 0);
   const pp = pagePaper(page, project, profileLayers(profile), freeShown);
   const frame = pp.frame;
@@ -77,10 +79,11 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
   const mode = profile.warnings;
   // Stände, wie sie belegen (#16): Vorlagen mit „belegt wie gezeichnet“ eingesetzt
   const calc = pageStands(page, project.shapeTemplates);
-  const pw = cachedPageWarnings(outsideRef(page), calc);
-  const iw = cachedInfraWarnings({ stands: calc, infra: page.infra }, project.infraTypes, settings.minPassageWidth);
+  const wd = cachedWarningData(calc, page.infra, pageEnv(project, page), project);
+  const pw = wd.page;
+  const iw = wd.infra;
   const dups = mode === 'all' ? cachedDuplicates(project.pages, settings.numbering.scope) : null;
-  const dw = mode === 'all' ? cachedDistanceWarnings(calc, project.categories) : null;
+  const dw = mode === 'all' ? wd.distance : null;
   const kinds = new Map<string, WarnKind>(
     stands.map((s) => {
       if (mode === 'none') return [s.id, null];

@@ -12,8 +12,9 @@ import type { AreaFreeSpaces } from './freeSpace';
 import { cachedDuplicates, type NrRef } from './numbering';
 import { CONNECTION_KEYS, pagePower, type ConnectionKey, type PowerSummary } from './power';
 import { outsideRef, usesAreas } from './pageAreas';
-import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, countWarnings, NO_WARNINGS, type WarningCount, type WarnSettings } from './warnings';
+import { cachedWarningData, countWarnings, NO_WARNINGS, type WarningCount, type WarnSettings } from './warnings';
 import { frontMeters, pageStands, type FrontStand } from './footprint';
+import { NO_NEIGHBOURS, pageEnv, type PageEnv } from './verbund';
 import type { FestplatzPage, Id, Project, ProjectSettings, Stand } from './model/types';
 
 /** Summe auf 0,01 m gerundet (Speichergenauigkeit), ohne Gleitkomma-Reste. */
@@ -90,12 +91,24 @@ export interface ProjectStats {
 }
 
 /** Was die Kennzahlen aus dem Projekt brauchen. */
-export type StatsProject = Pick<Project, 'pages' | 'infraTypes' | 'categories'> & Partial<Pick<Project, 'shapeTemplates'>> & { settings: WarnSettings & Pick<ProjectSettings, 'minPassageWidth' | 'numbering' | 'pricing'> };
+export type StatsProject = Pick<Project, 'pages' | 'infraTypes' | 'categories'> & Partial<Pick<Project, 'shapeTemplates' | 'groups'>> & { settings: WarnSettings & Pick<ProjectSettings, 'minPassageWidth' | 'numbering' | 'pricing'> };
 
-export function pageStats(page: FestplatzPage, project: Omit<StatsProject, 'pages'>, duplicates: ReadonlyMap<Id, readonly NrRef[]>, freeOf: FreeOf, categoryIds: ReadonlySet<Id> = new Set(project.categories.map((c) => c.id))): PageStats {
+/**
+ * Kennzahlen einer Page. Nur eigene Objekte zählen (Anzahl, Frontmeter, Strom, Standgeld, Kategorien); Nachbarn aus dem
+ * Verbund (#15, `env`) wirken nur auf die Warnungen der eigenen Stände.
+ */
+export function pageStats(
+  page: FestplatzPage,
+  project: Omit<StatsProject, 'pages'>,
+  duplicates: ReadonlyMap<Id, readonly NrRef[]>,
+  freeOf: FreeOf,
+  categoryIds: ReadonlySet<Id> = new Set(project.categories.map((c) => c.id)),
+  env: PageEnv = { neighbours: NO_NEIGHBOURS, outside: outsideRef(page) },
+): PageStats {
   const { settings } = project;
   // Stände, wie sie belegen (#16): Vorlagen mit „belegt wie gezeichnet“ eingesetzt
   const stands = pageStands(page, project.shapeTemplates ?? []);
+  const w = cachedWarningData(stands, page.infra, env, project);
   const infraByType: Record<Id, number> = {};
   for (const o of page.infra) infraByType[o.typeId] = (infraByType[o.typeId] ?? 0) + 1;
   return {
@@ -105,10 +118,7 @@ export function pageStats(page: FestplatzPage, project: Omit<StatsProject, 'page
     frontM: sumFront(stands),
     freeFrontM: usesAreas(page) ? freeFrontMeters(freeOf(page)) : null,
     power: pagePower(page),
-    warnings: countWarnings(cachedPageWarnings(outsideRef(page), stands), stands, settings, duplicates, {
-      warnings: cachedInfraWarnings({ stands, infra: page.infra }, project.infraTypes, settings.minPassageWidth),
-      objects: page.infra,
-    }, cachedDistanceWarnings(stands, project.categories)),
+    warnings: countWarnings(w.page, stands, settings, duplicates, { warnings: w.infra, objects: page.infra }, w.distance),
     infraByType,
     byCategory: categoryFigures(stands, categoryIds),
     fee: sumFees(feesOf(stands, project.categories, settings.pricing)),
@@ -120,7 +130,7 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 export function projectStats(project: StatsProject, freeOf: FreeOf): ProjectStats {
   const dups = cachedDuplicates(project.pages, project.settings.numbering.scope);
   const categoryIds = new Set(project.categories.map((c) => c.id));
-  const pages = project.pages.map((p) => pageStats(p, project, dups, freeOf, categoryIds));
+  const pages = project.pages.map((p) => pageStats(p, project, dups, freeOf, categoryIds, pageEnv(project, p)));
   const byCategory: ByCategory = {};
   const infraByType: Record<Id, number> = {};
   let infraKw = 0;
