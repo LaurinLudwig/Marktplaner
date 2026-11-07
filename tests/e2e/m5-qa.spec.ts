@@ -28,7 +28,7 @@ const powers = (page: Page, idx = 0) => store(page, `s.project.pages[${idx}].sta
 const standCount = (page: Page, idx = 0) => store(page, `s.project.pages[${idx}].stands.length`) as Promise<number>;
 
 // suppressInfraWarning (M7, Formatversion 4), shape und shapeTemplateId (M12, Formatversion 8): Teil des Modells, ergänzt vom Entwickler
-const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9), seit #9 mit labelOffset (11)
+const BASE = { nr: '', nrLocked: false, name: '', owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null, parts: null, frontOverride: null }; // seit #3 mit suppressDistanceWarning (Formatversion 9), seit #9 mit labelOffset (11), seit #16 mit parts und frontOverride (15)
 
 /** Objekte auf die Page `idx` (Standard: aktive Page) legen, ein Undo-Schritt „Testdaten“. */
 async function seed(page: Page, objs: { areas?: any[]; stands?: any[]; pageIdx?: number; pagePatch?: Record<string, unknown> }) {
