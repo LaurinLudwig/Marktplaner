@@ -4,6 +4,7 @@ import { DEFAULT_STAND_COLOR } from '../objects';
 import {
   LAYER_IDS,
   type FestplatzPage,
+  type Id,
   type InfraTypeDef,
   type LayerId,
   type LayerState,
@@ -11,6 +12,7 @@ import {
   type Project,
   type ProjectSettings,
   type Sheet,
+  type Verbund,
 } from './types';
 
 export const DEFAULT_SETTINGS: ProjectSettings = {
@@ -100,5 +102,23 @@ export function createProject(name = 'Neues Projekt', list: CategoryList | null 
     shapeTemplates: [],
     titleBlock: { dateText: '', version: '' },
     unplaced: [],
+    groups: [],
+  };
+}
+
+/** Neuer Festplatz-Verbund (#15): Blatt und Papier-Elemente wie bei einer neuen Page, keine Ansicht. */
+export function createVerbund(name: string, pageIds: Id[] = []): Verbund {
+  return {
+    id: newId(),
+    name,
+    pageIds: [...pageIds],
+    sheet: structuredClone(DEFAULT_SHEET),
+    titleBlock: { ...DEFAULT_TITLE_BLOCK_ANCHOR },
+    titleBlockText: '',
+    legend: { ...DEFAULT_LEGEND_ANCHOR },
+    scaleBar: { ...DEFAULT_SCALE_BAR_ANCHOR },
+    northArrow: { ...DEFAULT_NORTH_ARROW_ANCHOR },
+    layers: defaultLayers(),
+    view: null,
   };
 }
