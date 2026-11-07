@@ -26,6 +26,20 @@ export function refitStand(stand: Rect, meters: readonly ShapePart[]): { rect: R
   return { rect: roundRect({ cx: c.x, cy: c.y, w: clampSize(n.w), d: clampSize(n.d), rot: stand.rot }), parts: n.parts };
 }
 
+/**
+ * B × T einer eigenen Form ändern (Entscheidung Laurin 2026-11-07): Die Teile werden proportional auf das eingegebene
+ * Maß gestreckt (Mitte und Maße jedes Teils, die Drehung bleibt), danach wird das Hüllrechteck neu eingepasst. Bei
+ * gedrehten Teilen weicht B × T dann etwas vom eingegebenen Wert ab, dafür umschließt es die Teile immer genau
+ * (Vorderseite und Fang stimmen). Ohne gedrehte Teile bleibt das eingegebene Maß.
+ */
+export function stretchStand(stand: Rect & Pick<Stand, 'parts'>, w: number, d: number): { rect: Rect; parts: ShapePart[] } | null {
+  if (!stand.parts?.length) return null;
+  const target = { ...stand, w, d };
+  // Ungedrehte (bzw. um 180° gedrehte) Teile füllen das gestreckte Hüllrechteck genau aus
+  if (stand.parts.every((p) => (p.rot || 0) % 180 === 0)) return { rect: roundRect({ cx: stand.cx, cy: stand.cy, w, d, rot: stand.rot }), parts: stand.parts };
+  return refitStand(target, partsInMeters({ w, d, parts: stand.parts }));
+}
+
 /** Teile eines Stands in Metern ab der linken oberen Ecke von B × T (für Seitenleiste und Gesten). */
 export const standPartsInMeters = (stand: Pick<Stand, 'w' | 'd' | 'parts'>): ShapePart[] => (stand.parts ? partsInMeters({ w: stand.w, d: stand.d, parts: stand.parts }) : []);
 

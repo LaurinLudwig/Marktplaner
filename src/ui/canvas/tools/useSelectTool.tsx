@@ -8,7 +8,7 @@ import { commitStandParts } from '../../../state/shapes';
 import { objectsInBounds, pickObject } from '../../../core/hit';
 import { isOutside, labelBounds } from '../../../core/labelLayout';
 import type { Area, EdgeIndex, Id, InfraObject, Rect, Stand, Vec } from '../../../core/model/types';
-import { computeMoveSnap, type Guide, type SnapState } from '../../../core/moveSnap';
+import { computeMoveSnap, initialSnapState, type Guide, type SnapState } from '../../../core/moveSnap';
 import { lineFromEnds } from '../../../core/infra';
 import { constrainAngle } from '../../../core/measure';
 import { findObjects, LIMITS } from '../../../core/objects';
@@ -121,6 +121,14 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
   // ---------- Teile der eigenen Form (#16) ----------
   /** Einzeln ausgewählter Stand mit eigener Form (Vorlagen zählen nicht, auch nicht mit „belegt wie gezeichnet“). */
   const ownStand = active && ids.length === 1 ? ctx.page.stands.find((x) => x.id === ids[0] && hasOwnForm(x)) : undefined;
+  // Aktiven Teil verwerfen, sobald der Stand abgewählt oder gewechselt wird oder sich die Zahl seiner Teile ändert
+  // („Teil entfernen“ bzw. „hinzufügen“): sonst wäre beim nächsten Auswählen ein anderer Teil am selben Index aktiv
+  const partsKey = ownStand ? `${ownStand.id}:${ownStand.parts!.length}` : '';
+  const [seenPartsKey, setSeenPartsKey] = useState(partsKey);
+  if (seenPartsKey !== partsKey) {
+    setSeenPartsKey(partsKey);
+    if (activePart) setActivePart(null);
+  }
   const partIndex = ownStand && activePart?.id === ownStand.id && activePart.index < ownStand.parts!.length ? activePart.index : null;
   const partBox = ownStand && partIndex !== null ? partRect(ownStand, ownStand.parts![partIndex]!) : null;
   const partHandles = partBox
@@ -571,7 +579,11 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
           if (g.onDrag === 'move') {
             const sel = st.ui.selection?.kind === 'objects' ? st.ui.selection.ids : [];
             const grabbed = g.grab && sel.includes(g.grab) ? g.grab : (sel[0] ?? null);
-            startGesture({ kind: 'move', startWorld: g.startWorld, rects0: rectsOf(sel), grabbed, snap: { frontAreaId: null }, copies: null, last: p });
+            const rects0 = rectsOf(sel);
+            // Steht der gegriffene Stand schon bündig an einer Vorderseite, ist er von Anfang an eingerastet (Hysterese)
+            const isStand = !!grabbed && ctx.page.stands.some((x) => x.id === grabbed);
+            const snap = initialSnapState(grabbed ? rects0[grabbed] : undefined, isStand, frontSnapAreas(ctx.page));
+            startGesture({ kind: 'move', startWorld: g.startWorld, rects0, grabbed, snap, copies: null, last: p });
           } else if (g.onDrag === 'marquee') {
             const base = g.shift && st.ui.selection?.kind === 'objects' ? st.ui.selection.ids : [];
             startGesture({ kind: 'marquee', start: g.startWorld, cur: g.startWorld, base });

@@ -125,7 +125,9 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   - Vorderkante (nur Stände): Liegt die Vorderseite des Stands bei gleicher Drehung wie die Grundfläche
     höchstens 8 px von deren Vorderseite entfernt, legt sie sich an die Vorderseite der Grundfläche und
     der Stand übernimmt deren Drehung. Danach gleitet er entlang der Vorderseite; gelöst wird er erst
-    bei mehr als 16 px Abstand, dann bekommt er seine ursprüngliche Drehung zurück. Eingerastet fängt er
+    bei mehr als 16 px Abstand, dann bekommt er seine ursprüngliche Drehung zurück. Ein Stand, der beim Greifen
+    schon bündig (bis 0,01 m) und parallel an einer Vorderseite steht, gilt von Anfang an als eingerastet; das
+    Ergebnis hängt so nicht davon ab, wie schnell die Maus bewegt wird (Nacharbeit #16). Eingerastet fängt er
     entlang der Vorderseite an deren Enden und (mit Nachbar-Fang) an den Kanten benachbarter Stände, dort mit
     dem Fang-Abstand (siehe unten). Auf einer Page ohne Grundflächen (§2, #17) entfällt dieser Fang.
   - Nachbarstände: Ein Stand rastet mit dem Fang-Abstand neben einer Kante eines parallel stehenden Nachbarn
@@ -209,10 +211,15 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
     Kreis/Oval, je mit X, Y, B, T in Metern und seit #16 einer Drehung um die Mitte des Teils, Grad im Uhrzeigersinn
     relativ zum Stand); ihr Hüllrechteck (es umschließt auch gedrehte Teile) ist das **Vorschlagsmaß**. Gespeichert
     werden die Teile relativ zum Hüllrechteck: Ändert man B × T eines Stands, werden die Teile proportional gestreckt
-    (Mitte und Maße jedes Teils; die Drehung bleibt, ein gedrehter Teil kann bei ungleichem Strecken leicht über das
-    Hüllrechteck hinausragen). Der Editor hat das Häkchen „belegt wie gezeichnet“.
+    (Mitte und Maße jedes Teils; die Drehung bleibt). Die Teile einer Vorlage gelten projektweit; ein gedrehter Teil
+    kann deshalb bei einem Stand, dessen Seitenverhältnis vom Vorschlagsmaß abweicht, leicht über dessen B × T
+    hinausragen. Der Editor hat das Häkchen „belegt wie gezeichnet“.
   - **Eigene Form** (#16): Form je Stand ohne projektweite Vorlage, für Einzelstücke wie B-06. Teile wie bei Vorlagen
-    (relativ zum Hüllrechteck B × T, mit Drehung je Teil), gestreckt wie dort. Entsteht über „Eigene Form“ im Feld
+    (relativ zum Hüllrechteck B × T, mit Drehung je Teil). Ändert man B × T (Seitenleiste, Steuerungsleiste,
+    Geschäftstabelle), werden die Teile proportional gestreckt und danach das Hüllrechteck neu eingepasst
+    (Entscheidung Laurin 2026-11-07): Bei gedrehten Teilen weicht B × T dann etwas vom eingegebenen Wert ab, umschließt
+    die Teile aber immer genau, sodass Vorderseite und Fang stimmen; ohne gedrehte Teile bleibt das eingegebene Maß.
+    Ein Undo-Schritt. Entsteht über „Eigene Form“ im Feld
     „Form“ (übernimmt die bisher gezeichneten Teile: Vorlage oder Grundform als ein Teil) oder durch „Zu einem Stand
     zusammenfassen“.
     - Seitenleiste (nur ein Stand ausgewählt): Liste der Teile mit Art, X, Y (linke obere Ecke des ungedrehten Teils

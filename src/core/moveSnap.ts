@@ -17,7 +17,7 @@ import { occupiedInterval } from './freeSpace';
 import { boundsTouch, polyBounds, projectOn, rectGeo } from './geometry/polygon';
 import { footprint, snapRects, type PartsRect } from './footprint';
 import { frameAngle, fromFrame, frontFrame, normAngle, rectCorners, toFrame } from './geometry/rect';
-import { atLeast, atMost, greaterThan, lessThan, sameAngle } from './geometry/tolerance';
+import { atLeast, atMost, greaterThan, lessThan, sameAngle, withinTol } from './geometry/tolerance';
 import { add, mul, rotate, vec } from './geometry/vec';
 import type { Area, Id, Rect, Vec } from './model/types';
 import { constrainDelta, moveRects, type RectMap } from './transform';
@@ -66,6 +66,27 @@ export interface MoveSnapResult {
 }
 
 const NO_SNAP: SnapState = { frontAreaId: null };
+
+/**
+ * Zustand zu Beginn einer Geste: Steht der gegriffene Stand schon bündig (höchstens TOL) und parallel an der
+ * Vorderseite einer Grundfläche, gilt er von Anfang an als eingerastet. Er gleitet dann sofort entlang und löst sich
+ * erst bei `release`. Ohne das hinge das Ergebnis davon ab, wie viele Mausbewegungen bis zum ersten Bild
+ * zusammengefasst werden: Liegt die erste verarbeitete Position schon weiter als `tol` von der Vorderseite weg, rastete
+ * ein eben noch bündiger Stand nicht mehr ein (WebKit unter Last, #16).
+ */
+export function initialSnapState(rect: Rect | undefined, isStand: boolean, areas: readonly Area[]): SnapState {
+  if (!rect || !isStand) return NO_SNAP;
+  const center = vec(rect.cx, rect.cy);
+  for (const area of areas) {
+    const f = frontFrame(area);
+    if (!sameAngle(rect.rot, frameAngle(f), 360)) continue;
+    const { s, t } = toFrame(f, center);
+    if (!withinTol(Math.abs(t - rect.d / 2))) continue;
+    if (atMost(s + rect.w / 2, 0) || atLeast(s - rect.w / 2, f.length)) continue;
+    return { frontAreaId: area.id };
+  }
+  return NO_SNAP;
+}
 
 const translate = (rects: RectMap, off: Vec): RectMap => (off.x || off.y ? moveRects(rects, off) : rects);
 

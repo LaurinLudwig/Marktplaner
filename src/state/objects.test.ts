@@ -403,6 +403,22 @@ describe('#16 Zusammengesetzte Form', () => {
     expect(page().stands).toHaveLength(1);
   });
 
+  it('B × T ändern: gedrehte Teile gestreckt, Hüllrechteck neu eingepasst (ein Undo-Schritt)', () => {
+    const pid = page().id;
+    const id = addStand(pid, { cx: 0, cy: 0, w: 4, d: 4, rot: 0 });
+    setStandShape(pid, [id], { own: true });
+    setStandParts(pid, id, [{ kind: 'rect', x: 0, y: 0, w: 4, h: 4, rot: 0 }, { kind: 'rect', x: 5, y: 1, w: 2, h: 2, rot: 45 }]);
+    const w0 = page().stands[0]!.w;
+    const n = past();
+    setRectField(pid, [id], 'w', 2 * w0);
+    expect(past()).toBe(n + 1);
+    const st = page().stands[0]!;
+    expect(st.w).not.toBe(Math.round(2 * w0 * 100) / 100);
+    expect(st.parts).toHaveLength(2);
+    s().undo();
+    expect(page().stands[0]!.w).toBe(w0);
+  });
+
   it('„Eigene Form“ übernimmt die gezeichneten Teile; eine Grundform entfernt sie und die Frontmeter von Hand', () => {
     const pid = page().id;
     const id = addStand(pid, { cx: 0, cy: 0, w: 8, d: 4, rot: 0 });

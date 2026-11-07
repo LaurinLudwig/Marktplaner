@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createFreeSpaceCache, pageFreeSpaces, resolveFreeSpace, TOL } from './freeSpace';
 import { freeSpaceLabel } from './label';
 import type { Area, Rect, Stand } from './model/types';
-import { computeMoveSnap, type MoveSnapInput, type SnapOptions } from './moveSnap';
+import { computeMoveSnap, initialSnapState, type MoveSnapInput, type SnapOptions } from './moveSnap';
 import { createStand } from './objects';
 import { constrainDelta } from './transform';
 import { countWarnings, pageWarnings } from './warnings';
@@ -430,5 +430,64 @@ describe('M4 Schraffur der Freiflächen', () => {
       for (const v of [...p, ...q]) expect(v >= -1e-9 && v <= 4 + 1e-9).toBe(true);
     }
     expect(hatchPath(square, 0)).toBe('');
+  });
+});
+
+describe('Fang: Hysterese ab Gestenbeginn (Nacharbeit #16, E2E m4-qa „Vorderkante einer gedrehten Grundfläche“)', () => {
+  // Grundfläche 40 × 10 m, 30° gedreht, um den Ursprung; Stand 3 × 3 m bündig an der Vorderseite (lokal y = 3,5)
+  const R = (30 * Math.PI) / 180;
+  const L = (lx: number, ly: number) => ({ x: lx * Math.cos(R) - ly * Math.sin(R), y: lx * Math.sin(R) + ly * Math.cos(R) });
+  const toL = (p: { x: number; y: number }) => ({ x: p.x * Math.cos(R) + p.y * Math.sin(R), y: -p.x * Math.sin(R) + p.y * Math.cos(R) });
+  const A: Area = { id: 'A', name: 'Nord', cx: 0, cy: 0, w: 40, d: 10, rot: 30 };
+  // gespeichert auf 0,01 m gerundet wie nach dem Einrasten
+  const c = L(1, 3.5);
+  const s0: Rect = { cx: Math.round(c.x * 100) / 100, cy: Math.round(c.y * 100) / 100, w: 3, d: 3, rot: 30 };
+  const g0 = L(1, 3.5);
+  const g1 = L(10, 3.5 - 1.2);
+  const at = (f: number) => ({ x: (g1.x - g0.x) * f, y: (g1.y - g0.y) * f });
+  const input = (delta: { x: number; y: number }, state: { frontAreaId: string | null }): MoveSnapInput => ({
+    rects0: { s: s0 },
+    delta,
+    grabbed: 's',
+    standIds: new Set(['s']),
+    areas: [A],
+    stands: [],
+    options: { front: true, neighbors: true, grid: null, gap: 0 },
+    tol: 0.8,
+    release: 1.6,
+    state,
+    shift: false,
+  });
+
+  it('bündig und parallel → von Anfang an eingerastet; schräg, zu weit weg oder neben der Fläche nicht', () => {
+    expect(initialSnapState(s0, true, [A])).toEqual({ frontAreaId: 'A' });
+    expect(initialSnapState({ ...s0, rot: 17 }, true, [A]).frontAreaId).toBeNull();
+    const back = L(1, 3.4);
+    expect(initialSnapState({ ...s0, cx: back.x, cy: back.y }, true, [A]).frontAreaId).toBeNull();
+    const off = L(25, 3.5);
+    expect(initialSnapState({ ...s0, cx: off.x, cy: off.y }, true, [A]).frontAreaId).toBeNull();
+    expect(initialSnapState(s0, false, [A]).frontAreaId).toBeNull();
+    expect(initialSnapState(undefined, true, [A]).frontAreaId).toBeNull();
+  });
+
+  it('gleitet unabhängig davon, wie viele Mausbewegungen bis zum ersten Bild zusammengefasst werden', () => {
+    // Ursache des Rückschritts: Die erste verarbeitete Position lag schon 70 % des Wegs weit (1,2 m · 0,7 = 0,84 m
+    // quer zur Vorderseite > Fangabstand 0,8 m); ohne Startzustand rastete der Stand dann nicht mehr ein
+    expect(computeMoveSnap(input(at(0.7), { frontAreaId: null })).state.frontAreaId).toBeNull();
+    for (const f of [0.1, 0.5, 0.7, 0.9, 1]) {
+      const r = computeMoveSnap(input(at(f), initialSnapState(s0, true, [A])));
+      const l = toL({ x: r.rects.s!.cx, y: r.rects.s!.cy });
+      expect(r.state.frontAreaId).toBe('A');
+      expect(l.y).toBeCloseTo(3.5, 1);
+      expect(l.x).toBeCloseTo(1 + 9 * f, 1);
+    }
+    // auch in vielen kleinen Schritten (Zustand jeweils weitergereicht) bleibt er eingerastet
+    let state = initialSnapState(s0, true, [A]);
+    let r = computeMoveSnap(input(at(0), state));
+    for (let k = 1; k <= 25; k++) {
+      r = computeMoveSnap(input(at(k / 25), state));
+      state = r.state;
+    }
+    expect(toL({ x: r.rects.s!.cx, y: r.rects.s!.cy }).y).toBeCloseTo(3.5, 1);
   });
 });

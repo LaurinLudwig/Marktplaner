@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dissolveStand, mergeStands, refitStand, standPartsInMeters } from './compound';
+import { dissolveStand, mergeStands, refitStand, standPartsInMeters, stretchStand } from './compound';
 import { standFee } from './fee';
 import { areaFreeSpaces } from './freeSpace';
 import { autoFrontMeters, footprint, footprintGap, frontMeters, labelRect, occupancyStands, pointInFootprint } from './footprint';
@@ -265,6 +265,31 @@ describe('Formvorlage mit „belegt wie gezeichnet“', () => {
 });
 
 describe('Eigene Form bearbeiten, zusammenfassen, auflösen', () => {
+  it('B × T ändern bei gedrehtem Teil: Teile gestreckt, Hüllrechteck neu eingepasst (Entscheidung 2026-11-07)', () => {
+    // Hauptkörper 4 × 4 m und ein um 45° gedrehter Teil 2 × 2 m rechts daneben
+    const n = normalizeParts([
+      { kind: 'rect', x: 0, y: 0, w: 4, h: 4, rot: 0 },
+      { kind: 'rect', x: 5, y: 1, w: 2, h: 2, rot: 45 },
+    ])!;
+    const s = createStand({ cx: 0, cy: 0, w: n.w, d: n.d, rot: 20 }, { parts: n.parts });
+    const r = stretchStand(s, 2 * s.w, s.d)!;
+    const t = { ...s, ...r.rect, parts: r.parts };
+    // Das Hüllrechteck umschließt die gestreckten Teile genau (Rundung 0,01 m): Vorderseite und Fang stimmen
+    const loc = footprint(t).polys.flat().map((p) => toLocal(t, p));
+    expect(Math.min(...loc.map((p) => p.x))).toBeCloseTo(-t.w / 2, 1);
+    expect(Math.max(...loc.map((p) => p.x))).toBeCloseTo(t.w / 2, 1);
+    expect(Math.min(...loc.map((p) => p.y))).toBeCloseTo(-t.d / 2, 1);
+    expect(Math.max(...loc.map((p) => p.y))).toBeCloseTo(t.d / 2, 1);
+    // Der Hauptkörper ist auf die doppelte Breite gestreckt; B × T weicht dafür etwas vom eingegebenen Maß ab
+    const main = footprint(t).polys[0]!.map((p) => toLocal(t, p));
+    expect(Math.max(...main.map((p) => p.x)) - Math.min(...main.map((p) => p.x))).toBeCloseTo(8, 1);
+    expect(t.w).not.toBe(Math.round(2 * s.w * 100) / 100);
+    expect(Math.abs(t.w - 2 * s.w)).toBeLessThan(2);
+    // ohne gedrehte Teile bleibt das eingegebene Maß
+    expect(stretchStand(b06(), 50, 12)!.rect).toMatchObject({ w: 50, d: 12 });
+    expect(stretchStand(hull(), 50, 12)).toBeNull();
+  });
+
   it('refitStand: Teil verschieben – B × T passt sich an, die übrigen Teile bleiben auf dem Plan', () => {
     const s = b06();
     const meters = standPartsInMeters(s);
