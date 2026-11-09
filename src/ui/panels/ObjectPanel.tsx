@@ -157,7 +157,7 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
   const infraTypes = useStore((s) => s.project.infraTypes);
   const groups = useStore((s) => s.project.groups);
   const categories = useStore((s) => s.project.categories);
-  // Nachbarn aus dem Verbund (#15) zählen für Überlappung, Abstand und Infrastruktur, „außerhalb“ über den Verbund
+  // Nachbarn aus dem Verbund (#15) zählen für Überlappung und Abstand (nicht Infrastruktur), „außerhalb“ über den Verbund
   const env = pageEnv({ pages, groups, categories }, page);
   const wd = cachedWarningData(calc, page.infra, env, { infraTypes, categories, shapeTemplates, settings });
   const w = wd.page;
@@ -165,7 +165,6 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
   const dups = cachedDuplicates(pages, settings.numbering.scope);
   const dw = wd.distance;
   const byId = new Map([...page.stands, ...env.neighbours.stands].map((s) => [s.id, s]));
-  const allInfra = env.neighbours.infra.length ? [...page.infra, ...env.neighbours.infra] : page.infra;
   /** Platzname eines Nachbarn („ (Seestraße)“), bei eigenen Objekten leer. */
   const ownerSuffix = (id: Id) => {
     const owner = ownerOf({ pages }, id);
@@ -188,9 +187,9 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
     iw.byStand
       .get(s.id)!
       .map((id) => {
-        const o = allInfra.find((x) => x.id === id);
+        const o = page.infra.find((x) => x.id === id);
         const t = o && infraTypes.find((x) => x.id === o.typeId);
-        return (t ? (o.label ? `${t.label} „${o.label}“` : t.label) : 'Infrastruktur') + ownerSuffix(id);
+        return t ? (o.label ? `${t.label} „${o.label}“` : t.label) : 'Infrastruktur';
       })
       .join(', ');
   const rows: { kind: WarningKind; label: string; hit: Stand[]; ignored: boolean; enabled: boolean }[] = [

@@ -1,6 +1,6 @@
 import { createVerbund } from '../core/model/defaults';
 import type { Id, Project } from '../core/model/types';
-import { shiftView, transformPageContent, type PageTransform } from '../core/verbund';
+import { transformPageContent, type PageTransform } from '../core/verbund';
 import { useStore } from './store';
 
 /**
@@ -81,20 +81,32 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /**
  * Lage einer Page im Verbund ändern (#15): die ganze Page samt Hintergrund und allen Objekten verschieben bzw. drehen
- * (`transformPageContent`). Verschiebung auf 0,01 m, Drehung auf 0,1° gerundet; ein Undo-Schritt. Die Ansicht der Page
- * folgt (der Drehpunkt bleibt an seiner Bildschirmstelle; kein Teil der Historie).
+ * (`transformPageContent`). Verschiebung auf 0,01 m, Drehung auf 0,1° gerundet; ein Undo-Schritt.
+ *
+ * Die Ansicht der Page folgt dem Inhalt (der Drehpunkt bleibt an seiner Bildschirmstelle), auch bei Undo/Redo: Die
+ * aktuelle Ansicht wird zuerst ohne Undo-Schritt in `page.view` übernommen, dann verschiebt der Undo-Schritt sie mit
+ * dem Inhalt; Undo/Redo setzen die Ansicht aus `page.view` zurück (store.ts `syncViews`). Ohne das bliebe nach Undo die
+ * verschobene Ansicht stehen und der Inhalt erschiene versetzt. „An Fenster anpassen“ wäre keine Lösung: Es ginge nur
+ * auf der sichtbaren Zeichenfläche (die Lage wird in den Projekteinstellungen geändert) und verlöre den Ausschnitt.
  */
 export function movePageContent(pageId: Id, t: PageTransform): boolean {
   const s = useStore.getState();
   const tr: PageTransform = { dx: r2(t.dx), dy: r2(t.dy), rot: r1(t.rot), pivot: t.pivot };
   const page = s.project.pages.find((x) => x.id === pageId);
   if (!page || (!tr.dx && !tr.dy && !tr.rot)) return false;
-  const next = transformPageContent(page, tr);
-  const ok = s.change('Lage im Verbund ändern', (p) => {
+  const view = s.views[pageId];
+  // Aktuelle Ansicht ohne Undo-Schritt und ohne Änderungsmarkierung in die Page (Ausgangspunkt für Undo)
+  if (view && page.view !== view)
+    s.changeView((p) => {
+      const pg = p.pages.find((x) => x.id === pageId);
+      if (pg) pg.view = view;
+    });
+  const current = useStore.getState().project.pages.find((x) => x.id === pageId)!;
+  const next = transformPageContent(current, tr);
+  const ok = useStore.getState().change('Lage im Verbund ändern', (p) => {
     const i = p.pages.findIndex((x) => x.id === pageId);
     if (i >= 0) p.pages[i] = next;
   });
-  const view = useStore.getState().views[pageId];
-  if (ok && view) useStore.getState().setView(pageId, shiftView(view, tr));
+  if (ok && next.view) useStore.getState().setView(pageId, next.view);
   return ok;
 }

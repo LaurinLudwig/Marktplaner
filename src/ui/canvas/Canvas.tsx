@@ -210,7 +210,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const areas = activeAreas(page);
   const free = useMemo(() => applyHidden(pageFreeSpaces(areas, occupants, minFreeWidth, freeCache), page.hiddenFree), [areas, occupants, minFreeWidth, freeCache, page.hiddenFree]);
   // Warnungen live aus der Page mit Vorschau (Konkurrenzschutz #3: Warnung und Linien folgen dem gezogenen Stand);
-  // Überlappung, Abstand und Infrastruktur auch mit Nachbarn (#15), angezeigt nur an eigenen Ständen
+  // Überlappung und Abstand auch mit Nachbarn (#15, Infrastruktur nur eigene), angezeigt nur an eigenen Ständen
   const warnData = useMemo(
     () => cachedWarningData(page.stands, page.infra, env, { infraTypes, categories, shapeTemplates, settings: { minPassageWidth } }),
     [page.stands, page.infra, env, infraTypes, categories, shapeTemplates, minPassageWidth],

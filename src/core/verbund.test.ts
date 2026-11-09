@@ -165,19 +165,33 @@ describe('#15 Nachbarn in der Einzelansicht', () => {
     expect(standRows(p).find((r) => r.stand.id === 'z1')!.warnings.overlap).toBe(false);
   });
 
-  it('Abstand (Konkurrenzschutz) über die Platzgrenze; Infrastruktur „freihalten“ eines Nachbarn', () => {
+  it('Abstand (Konkurrenzschutz) über die Platzgrenze; Infrastruktur eines Nachbarn warnt nicht (Entscheidung 2026-11-09)', () => {
     const categories = [{ id: 'c', name: 'Crêpes', color: '#ffffff', minDistance: 20, price: null }];
     const Z3 = st('z3', 30, { categoryId: 'c', name: 'Waffeln' });
     const SE2c = { ...SE2, categoryId: 'c' };
     const z = zPage([Z1, Z3]);
     const infraTypes = createProject().infraTypes;
     const rtw = { ...createInfra(infraTypes.find((t) => t.id === 'ambulance')!, { cx: 10, cy: -3, w: 8, d: 3.5, rot: 0 }), id: 'rtw' };
-    const p = proj([z, sPage([SE2c, SE3], { infra: [rtw] })], [verbund], { categories });
-    const w = cachedWarningData(z.stands, z.infra, pageEnv(p, z), p);
+    // Enge Durchfahrt der Seestraße unter der Mindestbreite, ebenfalls in der Ausdehnung des Ziegelturms
+    const passage = { ...createInfra(infraTypes.find((t) => t.id === 'narrowPassage')!, { cx: 20, cy: -8, w: 2, d: 0, rot: 0 }), id: 'eng' };
+    const p = proj([z, sPage([SE2c, SE3], { infra: [rtw, passage] })], [verbund], { categories });
+    const env = pageEnv(p, z);
+    // Beide Objekte sind Nachbarn (blass sichtbar) …
+    expect(env.neighbours.infra.map((o) => o.id)).toEqual(['rtw', 'eng']);
+    const w = cachedWarningData(z.stands, z.infra, env, p);
     expect(w.distance.get('z3')!.map((c) => [c.id, c.dist])).toEqual([['se2', 14.5]]);
-    // Das RTW-Feld gehört der Seestraße, liegt aber auf Z-01: Warnung „Infrastruktur“ an Z-01
-    expect(w.infra.byStand.get('z1')).toEqual(['rtw']);
-    expect(countWarnings(w.page, z.stands, p.settings, undefined, { warnings: w.infra, objects: z.infra }, w.distance)).toMatchObject({ stands: 2, distance: 1, infra: 1, narrow: 0 });
+    // … aber das RTW-Feld der Seestraße auf Z-01 und ihre zu enge Durchfahrt warnen auf dem Ziegelturm nicht
+    expect(w.infra.byStand.has('z1')).toBe(false);
+    expect(w.infra.narrow.size).toBe(0);
+    expect(countWarnings(w.page, z.stands, p.settings, undefined, { warnings: w.infra, objects: z.infra }, w.distance)).toMatchObject({ stands: 1, distance: 1, infra: 0, narrow: 0 });
+    // Das RTW-Feld belegt aber die Freifläche unter sich (Achse 6–14 m)
+    const free = pageFree(z, { minFreeWidth: 0.5, infraTypes, verbund: p })[0]!.free.map((f) => [f.start, f.end]);
+    expect(free[0]).toEqual([0, 6]);
+    // Dasselbe Feld als eigenes Objekt des Ziegelturms warnt wie bisher
+    const own = zPage([Z1, Z3], { infra: [rtw] });
+    const p2 = proj([own, sPage([SE2c, SE3])], [verbund], { categories });
+    const w2 = cachedWarningData(own.stands, own.infra, pageEnv(p2, own), p2);
+    expect(w2.infra.byStand.get('z1')).toEqual(['rtw']);
   });
 
   it('„außerhalb“ über alle wirkenden Grundflächen des Verbunds; ohne Grundflächen keine', () => {

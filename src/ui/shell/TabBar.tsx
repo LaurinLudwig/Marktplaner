@@ -254,7 +254,7 @@ function WarnBadge({ pageId }: { pageId: Id }) {
     const dups = cachedDuplicates(s.project.pages, s.project.settings.numbering.scope);
     // Stände, wie sie belegen (#16)
     const stands = pageStands(page, s.project.shapeTemplates);
-    // Nachbarn aus dem Verbund (#15) zählen für Überlappung, Abstand und Infrastruktur; gezählt werden nur eigene
+    // Nachbarn aus dem Verbund (#15) zählen für Überlappung und Abstand; gezählt werden nur eigene
     const w = cachedWarningData(stands, page.infra, pageEnv(s.project, page), s.project);
     const n = countWarnings(w.page, stands, s.project.settings, dups, { warnings: w.infra, objects: page.infra }, w.distance);
     return warningTotal(n) ? `${warningTotal(n)}|${n.overlap}|${n.outside}|${n.duplicate}|${n.infra}|${n.narrow}|${warningSevere(n) ? 1 : 0}|${n.distance}` : '';

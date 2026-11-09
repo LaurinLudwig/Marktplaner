@@ -163,8 +163,9 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
     „A-12“ = „A-012“, aber „A-12“ ≠ „B-12“. Leere Nummern sind nie doppelt.
     Die Seitenleiste nennt die anderen Stände mit dieser Nummer (auch auf anderen Pages).
   - Infrastruktur (rot, Entscheidung 2026-10-12): Der Stand dringt mehr als 0,01 m in ein Infrastruktur-Objekt ein,
-    dessen Typ „freihalten“ hat (§11). Die Seitenleiste nennt das Objekt. Im Festplatz-Verbund (#15, §12) zählen auch
-    die Infrastruktur-Objekte der Nachbarplätze (eine Rettungsgasse endet nicht an der Platzgrenze).
+    dessen Typ „freihalten“ hat (§11). Die Seitenleiste nennt das Objekt. Im Festplatz-Verbund (#15, §12) zählt nur die
+    eigene Infrastruktur der Page: Infrastruktur eines Nachbarplatzes löst an eigenen Ständen keine Warnung aus
+    (Entscheidung Laurin 2026-11-09).
   - Abstand (orange, Konkurrenzschutz, #3): Zwei Stände derselben Kategorie stehen näher als deren Mindestabstand
     (Projekteinstellungen, Bereich „Kategorien“, Feld „Mindestabstand“ in m; leer = keine Prüfung). Gemessen wird
     Kante zu Kante: der kürzeste Abstand zwischen den beiden Standrechtecken (Hitbox B × T, auch bei Kreis/Oval und
@@ -987,7 +988,8 @@ des Hintergrunds), „Anwenden“ = ein Undo-Schritt. Der Hinweis nennt, dass di
   nach einer Drehung zeigt er also nicht mehr genau denselben Inhalt);
 - Mittelpunkt der Nummerierung im bzw. gegen den Uhrzeigersinn (die Startrichtung gilt relativ zum Norden und dreht mit
   ihm), Start- und Zielpunkt der eigenen Richtung (A/B folgen der Bewegung), die Nordrichtung (+ Drehung);
-- die Ansicht der Page (der Drehpunkt bleibt an seiner Bildschirmstelle).
+- die Ansicht der Page (der Drehpunkt bleibt an seiner Bildschirmstelle); Undo und Redo führen sie mit zurück bzw.
+  wieder vor, damit der Inhalt danach nicht versetzt erscheint.
 Unverändert bleiben Papier-Elemente (mm auf dem Papier), Raster und ausgeblendete Freiflächen (Schlüssel und Intervall
 beziehen sich auf die Achse der Grundfläche). Die bewegten Positionen werden nicht auf 0,01 m gerundet (nur Gleitkomma-Reste
 unter 10⁻⁸ m entfallen): Würde jedes Objekt nach einer Drehung einzeln gerundet, verschöben sich Stand und Grundfläche
@@ -1003,8 +1005,10 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   und der Platz) in der Mitte des Stands; auf den Ebenen „Geschäfte“ bzw. „Infrastruktur“ der Page.
 - Nur sichtbar, nicht bearbeitbar: Klick, Auswahlrechteck und „Alles auswählen“ treffen sie nicht. Ein **Doppelklick**
   (Auswahlwerkzeug) springt zum Besitzer-Platz, zoomt auf das Objekt und wählt es dort aus.
-- Sie belegen Freiflächen (§4), zählen für Überlappung, Abstand und Infrastruktur „freihalten“ (§3; Warnungen nur an
-  eigenen Ständen) und sind Fangziele (§3). Für Statistik, Strom, Nummerierung, Standgeld und CSV zählen sie nicht.
+- Sie belegen Freiflächen (§4), zählen für Überlappung und Abstand (§3; Warnungen nur an eigenen Ständen) und sind
+  Fangziele (§3). Infrastruktur eines Nachbarplatzes löst an eigenen Ständen keine Warnung aus, auch nicht
+  „freihalten“ (Entscheidung Laurin 2026-11-09); sie wird nur blass angezeigt und belegt Freiflächen. Für Statistik,
+  Strom, Nummerierung, Standgeld und CSV zählen Nachbarn nicht.
 - „außerhalb“: über alle wirkenden Grundflächen des Verbunds (§3); auf einer Page ohne Grundflächen (#17) bleibt es aus.
 - Im PDF einer Page werden Nachbarn nicht gezeichnet (§9).
 

@@ -304,10 +304,12 @@ export interface WarningData {
 }
 
 /**
- * Rohdaten der Warnungen einer Page mit ihren Nachbarn aus dem Verbund (#15): Überlappung, Abstand und Infrastruktur
- * (freihalten) rechnen über eigene und Nachbarstände bzw. -objekte, „außerhalb“ über die Grundflächen des Verbunds
- * (`env.outside`). Die Ergebnisse enthalten auch Einträge der Nachbarn; angezeigt und gezählt werden nur die eigenen
- * Stände (die Aufrufer gehen über `stands`). `stands` = eigene Stände, wie sie belegen (`pageStands`).
+ * Rohdaten der Warnungen einer Page mit ihren Nachbarn aus dem Verbund (#15): Überlappung und Abstand rechnen über
+ * eigene und Nachbarstände, „außerhalb“ über die Grundflächen des Verbunds (`env.outside`). Infrastruktur („freihalten“,
+ * „Durchfahrt zu eng“) zählt nur mit den eigenen Objekten (Entscheidung Laurin 2026-11-09: Infrastruktur eines
+ * Nachbarplatzes löst an eigenen Ständen keine Warnung aus). Die Ergebnisse enthalten auch Einträge der Nachbarn;
+ * angezeigt und gezählt werden nur die eigenen Stände (die Aufrufer gehen über `stands`). `stands` = eigene Stände, wie
+ * sie belegen (`pageStands`).
  */
 export function cachedWarningData(
   stands: readonly Stand[],
@@ -319,7 +321,7 @@ export function cachedWarningData(
   const all = withNeighbours(stands, occupancyStands(nb.stands, project.shapeTemplates ?? []));
   return {
     page: cachedPageWarnings(env.outside, all),
-    infra: cachedInfraWarnings({ stands, infra: withNeighbours(infra, nb.infra) }, project.infraTypes, project.settings.minPassageWidth),
+    infra: cachedInfraWarnings({ stands, infra }, project.infraTypes, project.settings.minPassageWidth),
     distance: cachedDistanceWarnings(all, project.categories),
   };
 }

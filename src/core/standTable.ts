@@ -35,7 +35,7 @@ export function standRows(project: Pick<Project, 'pages' | 'settings' | 'categor
   project.pages.forEach((page, pageIndex) => {
     // Stände, wie sie belegen (#16): Vorlagen mit „belegt wie gezeichnet“ eingesetzt
     const stands = pageStands(page, project.shapeTemplates ?? []);
-    // Nachbarn aus dem Verbund (#15) zählen für Überlappung, Abstand und Infrastruktur, „außerhalb“ über den Verbund
+    // Nachbarn aus dem Verbund (#15) zählen für Überlappung und Abstand, „außerhalb“ über den Verbund
     const env = pageEnv(project, page);
     const data = project.infraTypes ? cachedWarningData(stands, page.infra, env, { ...project, infraTypes: project.infraTypes }) : null;
     const w = data?.page ?? cachedPageWarnings(outsideRef(page), stands);

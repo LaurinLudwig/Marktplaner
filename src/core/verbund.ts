@@ -8,8 +8,8 @@
  * - Besitz eines Objekts = die Liste der Page, in der es steht (`ownerOf`); es gibt kein eigenes Feld.
  * - Eine Page gehört zu höchstens einem Verbund (`groupOf`).
  * - Nachbarn in der Einzelansicht (`neighbourObjects`): Fremdobjekte der anderen Mitglieder in der Ausdehnung der
- *   Page. Sie sind nur sichtbar, belegen Freiflächen und zählen für Überlappung, Abstand und Infrastruktur
- *   (freihalten); Warnungen erscheinen nur an eigenen Ständen. Für Statistik, Strom, Nummerierung, Standgeld und CSV
+ *   Page. Sie sind nur sichtbar, belegen Freiflächen und zählen für Überlappung und Abstand; Warnungen erscheinen nur
+ *   an eigenen Ständen. Infrastruktur eines Nachbarplatzes löst keine Warnung aus (Entscheidung 2026-11-09). Für Statistik, Strom, Nummerierung, Standgeld und CSV
  *   zählen sie nicht (diese Rechnungen lesen weiter nur `page.stands`).
  * - „außerhalb“: Ein Stand ist innerhalb, wenn er in irgendeiner wirkenden Grundfläche des Verbunds steht
  *   (`PageEnv.outside`); auf einer Page ohne Grundflächen (#17) bleibt „außerhalb“ aus.
@@ -260,7 +260,7 @@ export function pageEnv(project: VerbundProject, page: FestplatzPage): PageEnv {
 const combineCache = new WeakMap<readonly object[], { extra: readonly object[]; out: readonly object[] }>();
 
 /**
- * Eigene Objekte und Nachbarn in einer Liste (für Freiflächen, Überlappung, Abstand, Infrastruktur). Ohne Nachbarn die
+ * Eigene Objekte und Nachbarn in einer Liste (für Freiflächen, Überlappung und Abstand). Ohne Nachbarn die
  * eigene Liste selbst; sonst zwischengespeichert, solange beide Listen gleich bleiben.
  */
 export function withNeighbours<T extends object>(own: readonly T[], extra: readonly T[]): readonly T[] {

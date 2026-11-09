@@ -69,5 +69,25 @@ describe('#15 Verbünde verwalten (je ein Undo-Schritt)', () => {
     expect(movePageContent(a, { dx: 0.001, dy: 0, rot: 0, pivot: { x: 0, y: 0 } })).toBe(false);
     st().undo();
     expect(st().project.pages[0]!.stands[0]).toMatchObject({ cx: 10, cy: 5, rot: 0 });
+    // Undo und Redo führen die Ansicht mit dem Inhalt mit (sonst erschiene er danach versetzt)
+    expect(st().views[a]).toEqual({ scale: 10, tx: 0, ty: 0 });
+    st().redo();
+    expect(st().views[a]).toEqual({ scale: 10, tx: -50, ty: 20 });
+    // Nach Verschieben der Ansicht von Hand gilt bei Undo die Ansicht vor dem Anwenden
+    st().setView(a, { scale: 20, tx: 7, ty: 8 });
+    st().undo();
+    expect(st().views[a]).toEqual({ scale: 10, tx: 0, ty: 0 });
+  });
+
+  it('Lage ändern ohne gespeicherte Ansicht: keine Ansicht, Undo ohne Ansicht', () => {
+    const a = st().project.pages[0]!.id;
+    expect(st().views[a]).toBeUndefined();
+    st().change('Stand', (p) => {
+      p.pages[0]!.stands.push({ ...createStand({ cx: 10, cy: 5, w: 3, d: 3, rot: 0 }), id: 's' });
+    });
+    expect(movePageContent(a, { dx: 5, dy: 0, rot: 0, pivot: { x: 0, y: 0 } })).toBe(true);
+    st().undo();
+    expect(st().views[a]).toBeUndefined();
+    expect(st().project.pages[0]!.stands[0]!.cx).toBe(10);
   });
 });
