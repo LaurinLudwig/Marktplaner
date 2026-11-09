@@ -15,7 +15,9 @@ import { findSnap, rectSnapSource } from '../../core/snap';
 import { defaultView, fitBounds, focusBounds, screenToWorld, worldToScreen, zoomAt, type Bounds } from '../../core/viewport';
 import { cachedDuplicates } from '../../core/numbering';
 import { activeAreas, usesAreas } from '../../core/pageAreas';
-import { neighbourCaption, ownerOf, pageEnv, withNeighbours, type Neighbours } from '../../core/verbund';
+import { memberPages, neighbourCaption, ownerOf, pageEnv, withNeighbours, type Neighbours } from '../../core/verbund';
+import { verbundOfRef } from '../../core/verbundView';
+import { useAlignTool } from './tools/useAlignTool';
 import { activeNarrow, cachedWarningData } from '../../core/warnings';
 import { jumpToInfra, jumpToStand } from '../../app/jump';
 import { hideFreeSpace } from '../../state/freeSpaces';
@@ -195,6 +197,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   // Festplatz-Verbund (#15): Nachbarn der anderen Mitglieder (nur sichtbar) und „außerhalb“ über den Verbund
   const pages = useStore((s) => s.project.pages);
   const groups = useStore((s) => s.project.groups);
+  // Gesamtansicht (#15): keine Nachbarn (alle Objekte sind eigene), ein Hintergrund je Mitglied
+  const verbund = useMemo(() => verbundOfRef({ groups }, storedPage.id), [groups, storedPage.id]);
   const env = useMemo(() => pageEnv({ pages, groups, categories }, page), [pages, groups, categories, page]);
   const nb = env.neighbours;
   const nbStands = occupancyStands(nb.stands, shapeTemplates) as Stand[];
@@ -301,7 +305,14 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
     labels: standLabels,
   };
   const measureTool = useMeasureTool(ctx, tool === 'measure');
-  const calibrateTool = useCalibrateTool(ctx, tool === 'calibrate');
+  // Gesamtansicht eines Verbunds (#15): Kalibrieren, Schriftfeld, Ausschnitt, Mittelpunkt und Richtung der Nummerierung
+  // sind gesperrt; „Ausrichten“ gibt es nur hier. Ein gesperrtes Werkzeug fällt auf das Auswahlwerkzeug zurück
+  const overview = verbund !== null;
+  const lockedHere = overview ? OVERVIEW_LOCKED_TOOLS.has(tool) : tool === 'align';
+  useEffect(() => {
+    if (lockedHere) setUi({ tool: 'select' });
+  }, [lockedHere, setUi]);
+  const calibrateTool = useCalibrateTool(ctx, tool === 'calibrate' && !overview);
   const selectTool = useSelectTool(ctx, tool === 'select' && !spaceDown);
   // Werkzeug „Grundfläche“ ist ohne Grundflächen gesperrt (#17); beim Umschalten oder Seitenwechsel gilt die Auswahl
   const areasOff = !usesAreas(storedPage);
@@ -311,12 +322,16 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const areaTool = useCreateTool(ctx, 'area', tool === 'area' && !areasOff && !spaceDown);
   const standTool = useCreateTool(ctx, 'stand', tool === 'stand' && !spaceDown);
   const infraTool = useInfraTool(ctx, tool === 'infra' && !spaceDown);
-  const titleBlockTool = useTitleBlockTool(ctx, tool === 'titleBlock' && !spaceDown);
-  const centerTool = useCenterTool(ctx, tool === 'numberCenter' && !spaceDown);
-  const directionTool = useDirectionTool(ctx, tool === 'numberDirection' && !spaceDown);
-  const regionTool = useRegionTool(ctx, tool === 'sheetRegion' && !spaceDown);
-  const activeTool =
-    tool === 'measure'
+  const titleBlockTool = useTitleBlockTool(ctx, tool === 'titleBlock' && !overview && !spaceDown);
+  const centerTool = useCenterTool(ctx, tool === 'numberCenter' && !overview && !spaceDown);
+  const directionTool = useDirectionTool(ctx, tool === 'numberDirection' && !overview && !spaceDown);
+  const regionTool = useRegionTool(ctx, tool === 'sheetRegion' && !overview && !spaceDown);
+  const alignTool = useAlignTool(ctx, tool === 'align' && overview && !spaceDown);
+  const activeTool = lockedHere
+    ? null
+    : tool === 'align'
+      ? alignTool
+      : tool === 'measure'
       ? measureTool
       : tool === 'calibrate'
         ? calibrateTool
@@ -567,6 +582,17 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
     [view, size.w, size.h, page.grid.size, page.grid.visible],
   );
   const bg = page.background;
+  const bgOverride = tool === 'align' ? alignTool.backgrounds : null;
+  const memberBgs = useMemo(
+    () =>
+      verbund
+        ? memberPages({ pages }, verbund).flatMap((m) => {
+            const b = bgOverride && m.id in bgOverride ? bgOverride[m.id] : m.background;
+            return b ? [{ id: m.id, bg: b }] : [];
+          })
+        : [],
+    [verbund, pages, bgOverride],
+  );
   const origin = { x: view.tx, y: view.ty };
 
   const classes = ['stage', `tool-${tool}`];
@@ -594,7 +620,16 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
           <BackgroundLayer background={bg} bytes={assets[bg.assetId]} view={rv} viewport={size} selected={selection?.kind === 'background'} interactive={false} />
         </WorldLayer>
       )}
-      <svg ref={svgRef} className={`canvas${bg && page.layers.background.visible ? ' has-bg' : ''}`} aria-label={`Zeichenfläche ${page.name}`}>
+      {/* Gesamtansicht (#15): Hintergründe der Mitglieder übereinander, in der Reihenfolge des Verbunds (keine Masken);
+          „Ausrichten“ zeigt den bewegten Hintergrund als Vorschau */}
+      {memberBgs.length > 0 && page.layers.background.visible && (
+        <WorldLayer className="layer-plan" rv={rv} view={view} size={size}>
+          {memberBgs.map(({ id, bg: b }) => (
+            <BackgroundLayer key={id} background={b} bytes={assets[b.assetId]} view={rv} viewport={size} selected={false} interactive={false} />
+          ))}
+        </WorldLayer>
+      )}
+      <svg ref={svgRef} className={`canvas${(bg || memberBgs.length) && page.layers.background.visible ? ' has-bg' : ''}`} aria-label={`Zeichenfläche ${verbund ? `${verbund.name} (gesamt)` : page.name}`}>
         <g className="grid" opacity={gridOpacity}>
           <path className="grid-minor" d={grid.minor} />
           <path className="grid-major" d={grid.major} />
@@ -684,6 +719,9 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
     </main>
   );
 }
+
+/** In der Gesamtansicht eines Verbunds gesperrte Werkzeuge (#15, spec.md §12). */
+const OVERVIEW_LOCKED_TOOLS: ReadonlySet<string> = new Set(['calibrate', 'titleBlock', 'numberCenter', 'numberDirection', 'sheetRegion']);
 
 /** Fangquelle ohne ein Objekt (Endpunkt-Griffe einer Linie fangen nicht an der Linie selbst). */
 function snapSourceWithout(page: FestplatzPage, exclude: Id, neighbours: Neighbours) {

@@ -7,6 +7,7 @@ import type { PreparedBackground } from '../core/pdf/writePdf';
 import { platform } from '../platform';
 import { currentProfile, useExportSettings } from '../state/exportSettings';
 import { useStore } from '../state/store';
+import { verbundOfRef } from '../core/verbundView';
 import { showError } from './dialogs';
 import { notify } from './notify';
 import { bitmapCanvas, engineJpegQuality, prepareBackground } from './pdfBackground';
@@ -48,7 +49,9 @@ export function openExportDialog() {
     notify('Es gibt noch keinen Festplatz zum Exportieren.');
     return;
   }
-  const active = s.project.pages.find((p) => p.id === s.ui.activePage);
+  // Gesamtansicht eines Verbunds (#15): Vorschau auf sein erstes Mitglied (das PDF der Gesamtansicht folgt mit Teil c)
+  const ref = verbundOfRef(s.project, s.ui.activePage)?.pageIds[0] ?? s.ui.activePage;
+  const active = s.project.pages.find((p) => p.id === ref);
   useExportUi.setState({ open: true, previewPageId: active?.id ?? s.project.pages[0]!.id });
 }
 

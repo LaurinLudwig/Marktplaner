@@ -15,7 +15,14 @@ export interface ToolbarItem {
   disabledHint?: string;
   /** Aufklappbare Werkzeuggruppe (Infrastruktur, M7): Symbol des zuletzt genutzten Typs, Liste per Dreieck. */
   flyout?: boolean;
+  /** Tooltip-Zusatz, wenn das Werkzeug in der Gesamtansicht eines Verbunds gesperrt ist (#15). */
+  overviewHint?: string;
+  /** Nur in der Gesamtansicht eines Verbunds sichtbar (#15, Werkzeug „Ausrichten“). */
+  overviewOnly?: boolean;
 }
+
+/** Begründung der Sperren in der Gesamtansicht (#15, spec.md §12). */
+export const OVERVIEW_LOCK = 'In der Gesamtansicht gesperrt: nur in der Einzelansicht des Festplatzes möglich';
 
 export const TOOL_GROUPS: ToolbarItem[][] = [
   [
@@ -37,13 +44,42 @@ export const TOOL_GROUPS: ToolbarItem[][] = [
   ],
   [
     { shortcut: 'tool.measure', icon: 'measure', kind: 'tool', tool: 'measure', description: 'Zwei Punkte klicken, Abstand in Metern ablesen' },
-    { shortcut: 'tool.calibrate', icon: 'calibrate', kind: 'tool', tool: 'calibrate', description: 'Hintergrund über zwei Punkte und einen bekannten Abstand skalieren', disabledHint: 'Zuerst einen Hintergrund importieren (Cmd/Strg+Shift+P)' },
-    { shortcut: 'tool.titleBlock', icon: 'titleBlock', kind: 'tool', tool: 'titleBlock', description: 'Klick setzt das Schriftfeld an diese Stelle; verschieben mit dem Auswahlwerkzeug' },
+    {
+      shortcut: 'tool.calibrate',
+      icon: 'calibrate',
+      kind: 'tool',
+      tool: 'calibrate',
+      description: 'Hintergrund über zwei Punkte und einen bekannten Abstand skalieren',
+      disabledHint: 'Zuerst einen Hintergrund importieren (Cmd/Strg+Shift+P)',
+      overviewHint: `${OVERVIEW_LOCK} (jeder Platz hat seinen eigenen Hintergrund)`,
+    },
+    {
+      shortcut: 'tool.titleBlock',
+      icon: 'titleBlock',
+      kind: 'tool',
+      tool: 'titleBlock',
+      description: 'Klick setzt das Schriftfeld an diese Stelle; verschieben mit dem Auswahlwerkzeug',
+      overviewHint: 'In der Gesamtansicht gesperrt: Blatt, Schriftfeld und Legende des Verbunds kommen mit dem PDF der Gesamtansicht',
+    },
+    {
+      shortcut: 'tool.align',
+      icon: 'align',
+      kind: 'tool',
+      tool: 'align',
+      overviewOnly: true,
+      description: 'Festplatz im Verbund ausrichten: Platz wählen, dann ziehen; Drehung als Zahl oder über zwei Punktpaare',
+    },
   ],
   [
     { shortcut: 'snap.front', icon: 'snapFront', kind: 'toggle', snap: 'front', description: 'Stände rasten an der Vorderseite einer Grundfläche ein. Cmd/Strg beim Ziehen: Fang aus' },
     { shortcut: 'snap.grid', icon: 'snapGrid', kind: 'toggle', snap: 'grid', description: 'Objekte rasten am eingeblendeten Raster ein. Cmd/Strg beim Ziehen: Fang aus' },
     { shortcut: 'snap.neighbors', icon: 'snapNeighbors', kind: 'toggle', snap: 'neighbors', description: 'Stände rasten bündig an benachbarten Ständen ein. Cmd/Strg beim Ziehen: Fang aus' },
-    { shortcut: 'view.grid', icon: 'grid', kind: 'toggle', description: 'Raster ein- oder ausblenden; Weite in der Seitenleiste' },
+    {
+      shortcut: 'view.grid',
+      icon: 'grid',
+      kind: 'toggle',
+      description: 'Raster ein- oder ausblenden; Weite in der Seitenleiste',
+      overviewHint: 'In der Gesamtansicht gilt das Raster des ersten Platzes; ein- und ausblenden in dessen Einzelansicht',
+    },
   ],
 ];

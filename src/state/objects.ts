@@ -15,19 +15,25 @@ import { cloneObjects, createArea, createStand, findObjects, LIMITS, MIN_DRAW_SI
 import { groupCenter, moveRects, type RectMap } from '../core/transform';
 import { stretchStand } from '../core/compound';
 import type { Bounds } from '../core/viewport';
+import { assignObjects, copyFallback, fallbackPage, ownerPages, pageView, verbundOfRef } from '../core/verbundView';
 import { START_PAGE, useStore } from './store';
 
 /**
  * Befehle für Grundflächen, Geschäfte, Infrastruktur (M7) und Kategorien (M3). Jede Änderung ist genau ein Undo-Schritt;
  * Werte werden beim Übernehmen gerundet (`roundRect`: 0,01 m bzw. 0,1°).
+ *
+ * `pageId` darf die Gesamtansicht eines Verbunds sein (`verbund:<id>`, #15): Dann wirkt eine Änderung auf die Objekte
+ * mit diesen IDs in den Listen ihrer Besitzer-Pages (`ownerPages`), auch über mehrere Pages – weiterhin ein
+ * Undo-Schritt. Neue Objekte bekommen ihre Page über `assignObjects` (Grundfläche, sonst „Neue Objekte auf: …“).
  */
 
 const st = () => useStore.getState();
 
+/** Aktive Festplatz-Page oder Gesamtansicht eines Verbunds (core/verbundView.ts `pageView`); null auf der Start-Page. */
 export function activePage(): FestplatzPage | null {
   const s = st();
   if (s.ui.activePage === START_PAGE) return null;
-  return s.project.pages.find((p) => p.id === s.ui.activePage) ?? null;
+  return pageView(s.project, s.ui.activePage);
 }
 
 export function selectedIds(): Id[] {
@@ -39,13 +45,44 @@ export function select(ids: Id[]) {
   st().setUi({ selection: ids.length ? { kind: 'objects', ids } : null });
 }
 
-const pageOf = (p: Project, pageId: Id) => p.pages.find((x) => x.id === pageId);
+const pageOf = (p: Project, pageId: Id | null) => (pageId ? p.pages.find((x) => x.id === pageId) : undefined);
 
-function eachObject(page: FestplatzPage, ids: readonly Id[], fn: (o: Area | Stand | InfraObject, kind: ObjectKind) => void) {
+/** Pages, in deren Listen Änderungen an `pageId` landen: die Page selbst bzw. alle Mitglieder des Verbunds (#15). */
+const pagesOf = (p: Project, pageId: Id) => ownerPages(p, pageId);
+
+/** Objekte mit diesen IDs in den Listen der Pages (in der Gesamtansicht in allen Mitgliedern, #15). */
+function eachObject(pages: readonly FestplatzPage[], ids: readonly Id[], fn: (o: Area | Stand | InfraObject, kind: ObjectKind) => void) {
   const set = new Set(ids);
-  for (const a of page.areas) if (set.has(a.id)) fn(a, 'area');
-  for (const s of page.stands) if (set.has(s.id)) fn(s, 'stand');
-  for (const o of page.infra) if (set.has(o.id)) fn(o, 'infra');
+  for (const page of pages) {
+    for (const a of page.areas) if (set.has(a.id)) fn(a, 'area');
+    for (const s of page.stands) if (set.has(s.id)) fn(s, 'stand');
+    for (const o of page.infra) if (set.has(o.id)) fn(o, 'infra');
+  }
+}
+
+/**
+ * Page eines neuen Objekts: die Page selbst; in der Gesamtansicht eines Verbunds (#15) der Platz, auf dessen Grundfläche
+ * es steht, sonst die Auswahl „Neue Objekte auf: …“ (`newObjectsPage`). null = kein Platz (Verbund ohne Mitglieder bzw.
+ * Grundfläche ohne Platz mit Grundflächen).
+ */
+function targetPage(pageId: Id, obj: Area | Stand | InfraObject, kind: ObjectKind): Id | null {
+  const project = st().project;
+  const verbund = verbundOfRef(project, pageId);
+  if (!verbund) return pageId;
+  const lists = { areas: kind === 'area' ? [obj] : [], stands: kind === 'stand' ? [obj as Stand] : [], infra: kind === 'infra' ? [obj] : [] };
+  return assignObjects(project, verbund, lists, () => newObjectsPage(verbund.id)).get(obj.id) ?? null;
+}
+
+/** „Neue Objekte auf: …“ (#15): gewählter Platz des Verbunds, sonst sein erstes Mitglied; null ohne Mitglieder. */
+export function newObjectsPage(verbundId: Id): Id | null {
+  const s = st();
+  const verbund = s.project.groups.find((g) => g.id === verbundId);
+  return verbund ? fallbackPage(s.project, verbund, s.ui.newObjectsOn[verbundId]) : null;
+}
+
+/** „Neue Objekte auf: …“ setzen (Ansichtseinstellung der Sitzung: kein Undo-Schritt, nicht in der Projektdatei). */
+export function setNewObjectsPage(verbundId: Id, pageId: Id) {
+  st().setUi({ newObjectsOn: { ...st().ui.newObjectsOn, [verbundId]: pageId } });
 }
 
 /** Geometrie des Typs eines Infrastruktur-Objekts (unbekannter Typ: Rechteck). */
@@ -98,7 +135,8 @@ export const standDefaultSize = () => lastStandSize;
 
 export function addArea(pageId: Id, rect: Rect): Id {
   const area = createArea(roundRect({ ...rect, w: clamp(rect.w, 'area'), d: clamp(rect.d, 'area') }));
-  st().change('Grundfläche anlegen', (p) => void pageOf(p, pageId)?.areas.push(area));
+  const target = targetPage(pageId, area, 'area');
+  st().change('Grundfläche anlegen', (p) => void pageOf(p, target)?.areas.push(area));
   select([area.id]);
   return area.id;
 }
@@ -106,7 +144,8 @@ export function addArea(pageId: Id, rect: Rect): Id {
 export function addStand(pageId: Id, rect: Rect): Id {
   const stand = createStand(roundRect({ ...rect, w: clamp(rect.w, 'stand'), d: clamp(rect.d, 'stand') }));
   if (stand.w >= MIN_DRAW_SIZE && stand.d >= MIN_DRAW_SIZE) lastStandSize = { w: stand.w, d: stand.d };
-  st().change('Geschäft anlegen', (p) => void pageOf(p, pageId)?.stands.push(stand));
+  const target = targetPage(pageId, stand, 'stand');
+  st().change('Geschäft anlegen', (p) => void pageOf(p, target)?.stands.push(stand));
   select([stand.id]);
   return stand.id;
 }
@@ -116,7 +155,8 @@ export function addInfra(pageId: Id, typeId: Id, rect: Rect): Id | null {
   const type = st().project.infraTypes.find((t) => t.id === typeId);
   if (!type) return null;
   const obj = createInfra(type, rect);
-  st().change(`${type.label} anlegen`, (p) => void pageOf(p, pageId)?.infra.push(obj));
+  const target = targetPage(pageId, obj, 'infra');
+  st().change(`${type.label} anlegen`, (p) => void pageOf(p, target)?.infra.push(obj));
   select([obj.id]);
   return obj.id;
 }
@@ -124,9 +164,7 @@ export function addInfra(pageId: Id, typeId: Id, rect: Rect): Id | null {
 /** Attribute von Infrastruktur-Objekten ändern; false, wenn das Stromlimit die Änderung blockiert. */
 export function updateInfra(pageId: Id, ids: Id[], patch: Partial<Pick<InfraObject, 'label' | 'note' | 'powerKw' | 'connection' | 'suppressWidthWarning'>>, label: string): boolean {
   return changeWithPowerCheck(label, (p) => {
-    const page = pageOf(p, pageId);
-    if (!page) return;
-    eachObject(page, ids, (o, kind) => {
+    eachObject(pagesOf(p, pageId), ids, (o, kind) => {
       if (kind !== 'infra') return;
       const obj = o as InfraObject;
       const rect = geometryOf(p, obj) === 'rect';
@@ -141,8 +179,7 @@ export function setInfraType(pageId: Id, ids: Id[], typeId: Id) {
   const type = st().project.infraTypes.find((t) => t.id === typeId);
   if (!type) return;
   st().change('Typ ändern', (p) => {
-    const page = pageOf(p, pageId);
-    if (page) for (const o of page.infra) if (ids.includes(o.id) && geometryOf(p, o) === type.geometry) o.typeId = typeId;
+    for (const page of pagesOf(p, pageId)) for (const o of page.infra) if (ids.includes(o.id) && geometryOf(p, o) === type.geometry) o.typeId = typeId;
   });
 }
 
@@ -151,8 +188,7 @@ export function setInfraType(pageId: Id, ids: Id[], typeId: Id) {
 /** Übernimmt die Rechtecke einer Geste (Ziehen, Drehen, Größe ändern) als einen Undo-Schritt. */
 export function commitRects(pageId: Id, rects: RectMap, label: string) {
   st().change(label, (p) => {
-    const page = pageOf(p, pageId);
-    if (page) eachObject(page, Object.keys(rects), (o, kind) => assignObj(p, o, kind, rects[o.id]!));
+    eachObject(pagesOf(p, pageId), Object.keys(rects), (o, kind) => assignObj(p, o, kind, rects[o.id]!));
   });
 }
 
@@ -160,9 +196,7 @@ export function commitRects(pageId: Id, rects: RectMap, label: string) {
 export function setRectField(pageId: Id, ids: Id[], field: 'w' | 'd' | 'rot', value: number) {
   const label = field === 'rot' ? 'Drehen' : field === 'w' ? 'Breite ändern' : 'Tiefe ändern';
   st().change(label, (p) => {
-    const page = pageOf(p, pageId);
-    if (!page) return;
-    eachObject(page, ids, (o, kind) => {
+    eachObject(pagesOf(p, pageId), ids, (o, kind) => {
       const v = field === 'rot' ? normAngle(value) : kind === 'infra' ? clampToLimits(value, INFRA_LIMITS[geometryOf(p, o as InfraObject)][field]) : clamp(value, kind);
       // Eigene Form mit gedrehten Teilen (#16): Teile strecken, dann das Hüllrechteck neu einpassen
       const fit = kind === 'stand' && field !== 'rot' ? stretchStand(o as Stand, field === 'w' ? v : o.w, field === 'd' ? v : o.d) : null;
@@ -178,7 +212,7 @@ export function setRectField(pageId: Id, ids: Id[], field: 'w' | 'd' | 'rot', va
 
 /** Verschiebt die Objekte so, dass die Mitte ihres Hüllrechtecks bei x bzw. y liegt. */
 export function moveGroupTo(pageId: Id, ids: Id[], target: { x?: number; y?: number }) {
-  const page = st().project.pages.find((p) => p.id === pageId);
+  const page = pageView(st().project, pageId);
   if (!page) return;
   const objs = findObjects(page, ids).map((o) => o.obj);
   const c = groupCenter(objs);
@@ -187,15 +221,14 @@ export function moveGroupTo(pageId: Id, ids: Id[], target: { x?: number; y?: num
 }
 
 export function moveBy(pageId: Id, ids: Id[], dx: number, dy: number, label: string, merge?: { mergeKey: string; mergeIntoPrevious: boolean }) {
-  const page = st().project.pages.find((p) => p.id === pageId);
+  const page = pageView(st().project, pageId);
   if (!page) return;
   const rects: RectMap = Object.fromEntries(findObjects(page, ids).map((o) => [o.obj.id, o.obj]));
   const moved = moveRects(rects, { x: dx, y: dy });
   st().change(
     label,
     (p) => {
-      const pg = pageOf(p, pageId);
-      if (pg) eachObject(pg, ids, (o, kind) => assignObj(p, o, kind, moved[o.id]!));
+      eachObject(pagesOf(p, pageId), ids, (o, kind) => assignObj(p, o, kind, moved[o.id]!));
     },
     merge ?? {},
   );
@@ -216,7 +249,7 @@ export function nudge(dx: number, dy: number, repeat = false) {
 export function setAreaFront(pageId: Id, id: Id, edge: EdgeIndex) {
   if (edge === 2) return;
   st().change('Vorderseite festlegen', (p) => {
-    const a = pageOf(p, pageId)?.areas.find((x) => x.id === id);
+    const a = pagesOf(p, pageId).flatMap((pg) => pg.areas).find((x) => x.id === id);
     if (a) assignRect(a, setFront(a, edge));
   });
 }
@@ -226,14 +259,13 @@ export function setAreaFront(pageId: Id, id: Id, edge: EdgeIndex) {
 /** Attribute der Stände ändern; false, wenn das Stromlimit die Änderung blockiert. */
 export function updateStands(pageId: Id, ids: Id[], patch: Partial<Omit<Stand, 'id' | keyof Rect>>, label: string): boolean {
   return changeWithPowerCheck(label, (p) => {
-    const page = pageOf(p, pageId);
-    if (page) eachObject(page, ids, (o, kind) => kind === 'stand' && Object.assign(o, patch));
+    eachObject(pagesOf(p, pageId), ids, (o, kind) => kind === 'stand' && Object.assign(o, patch));
   });
 }
 
 export function updateArea(pageId: Id, id: Id, patch: Partial<Pick<Area, 'name'>>, label: string) {
   st().change(label, (p) => {
-    const a = pageOf(p, pageId)?.areas.find((x) => x.id === id);
+    const a = pagesOf(p, pageId).flatMap((pg) => pg.areas).find((x) => x.id === id);
     if (a) Object.assign(a, patch);
   });
 }
@@ -245,13 +277,63 @@ export function deleteObjects(pageId: Id, ids: Id[]) {
   const set = new Set(ids);
   const n = ids.length;
   st().change(n === 1 ? 'Objekt löschen' : `${n} Objekte löschen`, (p) => {
-    const page = pageOf(p, pageId);
-    if (!page) return;
-    page.areas = page.areas.filter((a) => !set.has(a.id));
-    page.stands = page.stands.filter((s) => !set.has(s.id));
-    page.infra = page.infra.filter((o) => !set.has(o.id));
+    // In der Gesamtansicht (#15) aus den Listen aller Besitzer-Pages; unberührte Listen bleiben dieselben
+    for (const page of pagesOf(p, pageId)) {
+      if (page.areas.some((a) => set.has(a.id))) page.areas = page.areas.filter((a) => !set.has(a.id));
+      if (page.stands.some((s) => set.has(s.id))) page.stands = page.stands.filter((s) => !set.has(s.id));
+      if (page.infra.some((o) => set.has(o.id))) page.infra = page.infra.filter((o) => !set.has(o.id));
+    }
   });
   select([]);
+}
+
+/**
+ * Umhängen (#15, Feld „Festplatz“ der Seitenleiste in der Gesamtansicht): Die Objekte wechseln in die Listen der Page
+ * `targetId` (Besitz = Liste, kein eigenes Feld), ein Undo-Schritt, auch für eine Mehrfachauswahl über mehrere Pages.
+ * Lage und Attribute bleiben; eine Grundfläche nimmt ihre ausgeblendeten Freiflächen mit. Grundflächen kommen nicht auf
+ * eine Page ohne Grundflächen (#17). Liefert die Zahl der umgehängten Objekte.
+ */
+export function reassignObjects(ids: readonly Id[], targetId: Id): number {
+  const set = new Set(ids);
+  const project = st().project;
+  const target = project.pages.find((p) => p.id === targetId);
+  if (!target) return 0;
+  const moving = (o: { id: Id }, page: FestplatzPage) => set.has(o.id) && page.id !== targetId;
+  const count = project.pages.reduce(
+    (n, pg) => n + (target.useAreas !== false ? pg.areas.filter((a) => moving(a, pg)).length : 0) + pg.stands.filter((s) => moving(s, pg)).length + pg.infra.filter((o) => moving(o, pg)).length,
+    0,
+  );
+  if (!count) return 0;
+  const ok = changeWithPowerCheck(count === 1 ? 'Festplatz ändern' : `${count} Objekte umhängen`, (p) => {
+    const to = p.pages.find((x) => x.id === targetId)!;
+    for (const pg of p.pages) {
+      if (pg.id === targetId) continue;
+      const areas = to.useAreas !== false ? pg.areas.filter((a) => set.has(a.id)) : [];
+      const stands = pg.stands.filter((s) => set.has(s.id));
+      const infra = pg.infra.filter((o) => set.has(o.id));
+      if (areas.length) {
+        const gone = new Set(areas.map((a) => a.id));
+        pg.areas = pg.areas.filter((a) => !gone.has(a.id));
+        to.areas.push(...areas);
+        // Ausgeblendete Freiflächen gehören zur Grundfläche (Schlüssel „areaId|…“) und wandern mit
+        const isOwn = (h: { key: string }) => gone.has(h.key.slice(0, h.key.indexOf('|')));
+        const hidden = pg.hiddenFree.filter(isOwn);
+        if (hidden.length) {
+          pg.hiddenFree = pg.hiddenFree.filter((h) => !isOwn(h));
+          to.hiddenFree.push(...hidden);
+        }
+      }
+      if (stands.length) {
+        pg.stands = pg.stands.filter((s) => !set.has(s.id));
+        to.stands.push(...stands);
+      }
+      if (infra.length) {
+        pg.infra = pg.infra.filter((o) => !set.has(o.id));
+        to.infra.push(...infra);
+      }
+    }
+  });
+  return ok ? count : 0;
 }
 
 export function deleteSelection() {
@@ -293,18 +375,33 @@ interface ObjectLists {
   infra: InfraObject[];
 }
 
-function insertObjects(pageId: Id, objs: ObjectLists, label: string) {
+/**
+ * Objekte einfügen (Einfügen, Duplizieren, Alt+Ziehen), ein Undo-Schritt. In der Gesamtansicht eines Verbunds (#15)
+ * bekommt jedes Objekt seine Page über `assignObjects`; `from` (Kopie → Original) macht bei Kopien den Platz des
+ * Originals zum Ersatz-Platz, sonst gilt „Neue Objekte auf: …“.
+ */
+function insertObjects(pageId: Id, objs: ObjectLists, label: string, from: Readonly<Record<Id, Id>> = {}) {
+  const project = st().project;
+  const verbund = verbundOfRef(project, pageId);
+  const owner = verbund ? assignObjects(project, verbund, objs, copyFallback(project, from, newObjectsPage(verbund.id))) : null;
+  const pageFor = (id: Id) => (owner ? (owner.get(id) ?? null) : pageId);
+  const inserted: Id[] = [];
   const ok = changeWithPowerCheck(label, (p) => {
-    const page = pageOf(p, pageId);
-    if (!page) return;
+    inserted.length = 0;
+    const put = <T extends { id: Id }>(o: T, list: (pg: FestplatzPage) => T[] | null) => {
+      const pg = pageOf(p, pageFor(o.id));
+      const target = pg ? list(pg) : null;
+      if (!target) return;
+      target.push(o);
+      inserted.push(o.id);
+    };
     // Auf einer Page ohne Grundflächen (#17) werden mitkopierte Grundflächen nicht eingefügt
-    if (page.useAreas) page.areas.push(...objs.areas.map((a) => roundRect(a)));
-    page.stands.push(...objs.stands.map((s) => roundRect(s)));
+    for (const a of objs.areas) put(roundRect(a), (pg) => (pg.useAreas ? pg.areas : null));
+    for (const s of objs.stands) put(roundRect(s), (pg) => pg.stands);
     // Objekte unbekannter Typen (z. B. aus einem anderen Projektstand) nicht einfügen
-    page.infra.push(...objs.infra.filter((o) => p.infraTypes.some((t) => t.id === o.typeId)).map((o) => ({ ...o, ...fitRect(geometryOf(p, o), o) })));
+    for (const o of objs.infra) if (p.infraTypes.some((t) => t.id === o.typeId)) put({ ...o, ...fitRect(geometryOf(p, o), o) }, (pg) => pg.infra);
   });
-  const areasOn = pageOf(st().project, pageId)?.useAreas ?? true;
-  if (ok) select([...(areasOn ? objs.areas : []), ...objs.stands, ...objs.infra].map((o) => o.id));
+  if (ok) select([...inserted]);
 }
 
 /**
@@ -347,23 +444,18 @@ export function cloneForDrag(page: FestplatzPage, ids: readonly Id[]): ObjectLis
 }
 
 /** Alt+Ziehen: Kopien an ihrer neuen Lage einfügen, ein Undo-Schritt; danach sind die Kopien ausgewählt (M4-12). */
-export function commitDuplicateDrag(pageId: Id, copies: ObjectLists) {
-  insertObjects(pageId, copies, 'Duplizieren');
+export function commitDuplicateDrag(pageId: Id, copies: ObjectLists, from: Readonly<Record<Id, Id>> = {}) {
+  insertObjects(pageId, copies, 'Duplizieren', from);
 }
 
 /** Duplizieren: Kopie um 1 m nach rechts unten versetzt, danach ausgewählt. */
 export function duplicateSelection() {
   const page = activePage();
-  const ids = new Set(selectedIds());
-  if (!page || !ids.size) return;
-  const copies = cloneObjects(
-    page.areas.filter((a) => ids.has(a.id)),
-    page.stands.filter((s) => ids.has(s.id)),
-    1,
-    1,
-    page.infra.filter((o) => ids.has(o.id)),
-  );
-  insertObjects(page.id, copies, 'Duplizieren');
+  const ids = selectedIds();
+  if (!page || !ids.length) return;
+  const { from, ...copies } = cloneForDrag(page, ids);
+  const shifted = <T extends Rect>(o: T): T => ({ ...o, cx: o.cx + 1, cy: o.cy + 1 });
+  insertObjects(page.id, { areas: copies.areas.map(shifted), stands: copies.stands.map(shifted), infra: copies.infra.map(shifted) }, 'Duplizieren', from);
 }
 
 export function selectAll() {

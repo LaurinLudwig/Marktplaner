@@ -6,23 +6,27 @@ import { InfraIconView } from '../icons/infraIcons';
 import { keyLabel, tip } from '../shortcuts/tip';
 import { TOOL_GROUPS, type ToolbarItem } from '../tools';
 import { useInfraToolType } from '../canvas/tools/useInfraTool';
+import { isVerbundRef, pageView } from '../../core/verbundView';
 
 /** Vertikale Werkzeugleiste, nur Icons. Name, Beschreibung und Taste erscheinen im Tooltip. */
 export function Toolbar() {
   const tool = useStore((s) => s.ui.tool);
-  const gridVisible = useStore((s) => s.project.pages.find((p) => p.id === s.ui.activePage)?.grid.visible ?? false);
+  const gridVisible = useStore((s) => pageView(s.project, s.ui.activePage)?.grid.visible ?? false);
   const snap = useStore((s) => s.project.settings.snap);
-  // Neu rendern, wenn sich die Verfügbarkeit ändern kann (z. B. Hintergrund importiert)
-  useStore((s) => s.project.pages.find((p) => p.id === s.ui.activePage)?.background?.assetId);
-  useStore((s) => s.project.pages.find((p) => p.id === s.ui.activePage)?.useAreas);
+  // Neu rendern, wenn sich die Verfügbarkeit ändern kann (z. B. Hintergrund importiert, Gesamtansicht #15)
+  useStore((s) => pageView(s.project, s.ui.activePage)?.background?.assetId);
+  useStore((s) => pageView(s.project, s.ui.activePage)?.useAreas);
+  const overview = useStore((s) => isVerbundRef(s.ui.activePage));
   return (
     <nav className="toolbar" aria-label="Werkzeuge">
       {TOOL_GROUPS.map((group, gi) => (
         <div key={gi} style={{ display: 'contents' }}>
           {gi > 0 && <div className="sep" />}
           {group.map((item) => {
+            if (item.overviewOnly && !overview) return null;
             const pending = !!item.milestone;
             const unavailable = !pending && COMMANDS[item.shortcut]?.enabled?.() === false;
+            const hint = overview && item.overviewHint ? item.overviewHint : item.disabledHint;
             const pressed = item.kind === 'tool' ? item.tool === tool : item.snap ? snap[item.snap] : item.shortcut === 'view.grid' && gridVisible;
             if (item.flyout) return <InfraToolButton key={item.shortcut} item={item} pressed={pressed} />;
             return (
@@ -37,8 +41,8 @@ export function Toolbar() {
                   shortcut: item.shortcut,
                   desc: pending
                     ? `${item.description} – folgt in ${item.milestone}`
-                    : unavailable && item.disabledHint
-                      ? `${item.description}. ${item.disabledHint}`
+                    : unavailable && hint
+                      ? `${item.description}. ${hint}`
                       : item.description,
                   side: 'right',
                 })}

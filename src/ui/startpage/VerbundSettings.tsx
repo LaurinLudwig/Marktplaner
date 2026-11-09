@@ -51,7 +51,7 @@ async function confirmDelete(g: Verbund) {
   if (ok) deleteVerbund(g.id);
 }
 
-function VerbundCard({ verbund: g }: { verbund: Verbund }) {
+export function VerbundCard({ verbund: g }: { verbund: Verbund }) {
   const pages = useStore((s) => s.project.pages);
   const groups = useStore((s) => s.project.groups);
   const [lageOf, setLageOf] = useState<string | null>(null);

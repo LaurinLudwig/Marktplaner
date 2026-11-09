@@ -3,6 +3,7 @@ import type { Id } from '../core/model/types';
 import { nrLockTargets } from '../core/numbering';
 import { setAllNrLocked } from '../state/numbering';
 import { START_PAGE, useStore } from '../state/store';
+import { isVerbundRef } from '../core/verbundView';
 import { notify, notifyUndoable } from './notify';
 
 /**
@@ -19,6 +20,8 @@ export function nrLockPage(): Id | null {
 
 /** Zahl der Stände, die der Befehl ändern würde. */
 export function nrLockCount(locked: boolean, pageId: Id | null = nrLockPage()): number {
+  // In der Gesamtansicht eines Verbunds (#15) ist die Nummerierung gesperrt
+  if (pageId !== null && isVerbundRef(pageId)) return 0;
   return nrLockTargets(useStore.getState().project, pageId, locked).length;
 }
 

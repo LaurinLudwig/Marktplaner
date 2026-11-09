@@ -8,14 +8,17 @@ import { activeAreas } from '../core/pageAreas';
 import type { Id, Project, Vec, View } from '../core/model/types';
 import type { PaperKind } from '../core/paper';
 import type { Bounds } from '../core/viewport';
+import { verbundRef } from '../core/verbund';
+import { pageView } from '../core/verbundView';
 import { APP_KEY_PREFIX } from '../platform/legacyKeys';
 import * as H from './history';
 
 
 export const START_PAGE = 'start';
+/** Start-Page, ID einer Festplatz-Page oder Gesamtansicht eines Verbunds `verbund:<id>` (#15, core/verbundView.ts). */
 export type PageRef = typeof START_PAGE | Id;
 
-export type ToolId = 'select' | 'hand' | 'zoom' | 'measure' | 'calibrate' | 'area' | 'stand' | 'infra' | 'titleBlock' | 'numberCenter' | 'numberDirection' | 'sheetRegion';
+export type ToolId = 'select' | 'hand' | 'zoom' | 'measure' | 'calibrate' | 'area' | 'stand' | 'infra' | 'titleBlock' | 'numberCenter' | 'numberDirection' | 'sheetRegion' | 'align';
 
 /**
  * Auswahl auf der aktiven Page: der Hintergrund, Objekte (Grundflächen, Geschäfte, Infrastruktur gemischt) oder ein
@@ -53,6 +56,11 @@ export interface UiState {
   focus: FocusRequest | null;
   /** Typ des Infrastruktur-Werkzeugs (zuletzt genutzt; Ansichtseinstellung, nur für die Sitzung, M7). */
   infraTypeId: Id;
+  /**
+   * „Neue Objekte auf: …“ je Verbund (#15, Gesamtansicht): Platz für neue Objekte, die auf mehreren oder auf keiner
+   * Grundfläche stehen. Nur für die Sitzung, nicht in der Projektdatei; fehlt = erstes Mitglied.
+   */
+  newObjectsOn: Record<Id, Id>;
 }
 
 export interface FocusRequest {
@@ -154,7 +162,8 @@ export function saveTheme(t: Theme) {
 /** Hebt eine Auswahl auf, deren Objekt es nicht mehr gibt (z. B. nach Undo). */
 function validSelection(project: Project, active: PageRef, sel: Selection): Selection {
   if (!sel) return null;
-  const page = project.pages.find((p) => p.id === active);
+  // Gesamtansicht eines Verbunds (#15): die Objekte aller Mitglieder
+  const page = pageView(project, active);
   if (!page) return null;
   if (sel.kind === 'background') return page.background ? sel : null;
   if (sel.kind === 'paper') return sel;
@@ -184,7 +193,7 @@ function syncViews(before: Project, after: Project, views: Record<Id, View>): Re
 
 /** Sorgt dafür, dass die aktive Page nach Undo/Löschen noch existiert. */
 function validActive(project: Project, active: PageRef): PageRef {
-  if (active === START_PAGE || project.pages.some((p) => p.id === active)) return active;
+  if (active === START_PAGE || pageView(project, active)) return active;
   return project.pages[0]?.id ?? START_PAGE;
 }
 
@@ -226,6 +235,7 @@ export const useStore = create<AppState>()((set, get) => {
       viewport: { w: 0, h: 0 },
       focus: null,
       infraTypeId: 'barrierMobile',
+      newObjectsOn: {},
     },
     preview: null,
     viewLive: false,
@@ -279,6 +289,8 @@ export const useStore = create<AppState>()((set, get) => {
     loadBundle({ project, assets }, file) {
       const views: Record<Id, View> = {};
       for (const p of project.pages) if (p.view) views[p.id] = p.view;
+      // Ansicht der Gesamtansicht eines Verbunds (#15) unter ihrer Seitenreferenz
+      for (const g of project.groups) if (g.view) views[verbundRef(g.id)] = g.view;
       set({
         ...initialState(project),
         assets,
@@ -287,7 +299,7 @@ export const useStore = create<AppState>()((set, get) => {
         savedHead: file.dirty ? -1 : 0,
         views,
         preview: null,
-        ui: { ...get().ui, activePage: project.pages[0]?.id ?? START_PAGE, tool: 'select', selection: null },
+        ui: { ...get().ui, activePage: project.pages[0]?.id ?? START_PAGE, tool: 'select', selection: null, newObjectsOn: {} },
       });
     },
     markSaved(path, name) {
@@ -318,5 +330,9 @@ export const selectCanRedo = (s: AppState) => s.history.future.length > 0;
 
 /** Projekt mit den aktuellen Ansichten, so wie es gespeichert wird. */
 export function projectForSave(s: AppState): Project {
-  return { ...s.project, pages: s.project.pages.map((p) => ({ ...p, view: s.views[p.id] ?? p.view })) };
+  return {
+    ...s.project,
+    pages: s.project.pages.map((p) => ({ ...p, view: s.views[p.id] ?? p.view })),
+    groups: s.project.groups.map((g) => ({ ...g, view: s.views[verbundRef(g.id)] ?? g.view })),
+  };
 }

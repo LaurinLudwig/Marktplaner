@@ -23,6 +23,8 @@ import {
   updateCategory,
 } from '../../state/objects';
 import { setLayer } from '../../state/pageSettings';
+import { memberPages } from '../../core/verbund';
+import { verbundOfRef } from '../../core/verbundView';
 import { useStore } from '../../state/store';
 import { Icon } from '../icons/Icon';
 import { tip } from '../shortcuts/tip';
@@ -377,16 +379,19 @@ const LAYER_LABEL: Record<LayerId, string> = {
  * Grundflächen (#17) fehlen „Grundflächen“ und „Freiflächen“.
  */
 export function LayersPanel({ page }: { page: FestplatzPage }) {
+  // Gesamtansicht eines Verbunds (#15): Ebenen des Verbunds, Hintergründe aller Mitglieder (nicht sperrbar), kein Blatt
+  const overview = useStore((s) => verbundOfRef(s.project, page.id));
+  const memberBg = useStore((s) => (overview ? memberPages(s.project, overview).some((m) => !!m.background) : false));
   const present: LayerId[] = [];
   const areas = activeAreas(page).length > 0;
-  if (page.background) present.push('background');
+  if (page.background || memberBg) present.push('background');
   if (areas) present.push('areas');
   if (areas) present.push('free');
   if (page.stands.length) present.push('stands');
   if (page.infra.length) present.push('infra');
   if (areas || page.stands.length || page.infra.length) present.push('labels');
-  // Das Blatt (M7) gibt es auf jeder Page; die Liste erscheint ab dem ersten Objekt
-  if (present.length) present.push('sheet');
+  // Das Blatt (M7) gibt es auf jeder Page; die Liste erscheint ab dem ersten Objekt (Gesamtansicht: folgt mit Teil c)
+  if (present.length && !overview) present.push('sheet');
   return (
     <section className="panel" aria-label="Ebenen">
       <div className="panel-head">Ebenen</div>
@@ -407,7 +412,7 @@ export function LayersPanel({ page }: { page: FestplatzPage }) {
                 >
                   <Icon name={l.visible ? 'visible' : 'hidden'} size={16} />
                 </button>
-                {id === 'labels' || id === 'free' ? (
+                {id === 'labels' || id === 'free' || (overview && id === 'background') ? (
                   <span className="icon-btn-placeholder" />
                 ) : (
                   <button

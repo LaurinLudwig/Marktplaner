@@ -6,6 +6,8 @@ import { pagePaper } from '../core/paper';
 import { mmToM } from '../core/sheet';
 import { defaultView, fitBounds, zoomAt, type Bounds } from '../core/viewport';
 import { START_PAGE, useStore } from '../state/store';
+import { pageView, verbundOfRef } from '../core/verbundView';
+import { memberPages } from '../core/verbund';
 
 /** Ansicht der aktiven Page (Standardansicht, falls noch keine gesetzt ist). */
 export function currentView(): View | null {
@@ -18,7 +20,7 @@ export function currentView(): View | null {
 
 function activePage(): FestplatzPage | null {
   const s = useStore.getState();
-  return s.project.pages.find((p) => p.id === s.ui.activePage) ?? null;
+  return pageView(s.project, s.ui.activePage);
 }
 
 /** Sichtbarer Ausschnitt der aktiven Page in Weltkoordinaten. */
@@ -38,10 +40,15 @@ export function zoomBy(factor: number) {
   useStore.getState().setView(page.id, zoomAt(v, factor, { x: w / 2, y: h / 2 }));
 }
 
-/** Hüllrechteck aller Objekte (ohne ausgeblendete Grundflächen, #17) und des Hintergrundplans (sichtbare Ebene) einer Page. */
-export function pageBounds(page: FestplatzPage): Bounds | null {
+/**
+ * Hüllrechteck aller Objekte (ohne ausgeblendete Grundflächen, #17) und des Hintergrundplans (sichtbare Ebene) einer
+ * Page; in der Gesamtansicht eines Verbunds (#15) die Hintergründe aller Mitglieder (`project` nötig).
+ */
+export function pageBounds(page: FestplatzPage, project?: Pick<Project, 'pages' | 'groups'>): Bounds | null {
   const objects = boundsOfRects([...activeAreas(page), ...page.stands, ...page.infra]);
-  const bg = page.background && page.layers.background.visible ? bgCorners(page.background.transform, page.background.pxSize) : [];
+  const verbund = project ? verbundOfRef(project, page.id) : null;
+  const backgrounds = verbund && project ? memberPages(project, verbund).map((m) => m.background) : [page.background];
+  const bg = page.layers.background.visible ? backgrounds.flatMap((b) => (b ? bgCorners(b.transform, b.pxSize) : [])) : [];
   if (!bg.length) return objects;
   const xs = bg.map((p) => p.x);
   const ys = bg.map((p) => p.y);
@@ -61,7 +68,7 @@ export function fitView() {
   if (!page) return;
   const s = useStore.getState();
   const { w, h } = s.ui.viewport;
-  s.setView(page.id, fitBounds(withSheet(page, s.project, pageBounds(page)), w, h));
+  s.setView(page.id, fitBounds(withSheet(page, s.project, pageBounds(page, s.project)), w, h));
 }
 
 /** Höhe der Blattmarke „A1 quer · 1:500“ über dem Rahmen in mm (PaperLayer: 4 mm Schrift, 2 mm Abstand). */

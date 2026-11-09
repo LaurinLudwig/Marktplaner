@@ -11,6 +11,12 @@ import { pageEnv } from '../../core/verbund';
 import { pageStands } from '../../core/footprint';
 import { cachedWarningData, countWarnings, warningSevere, warningTotal } from '../../core/warnings';
 import { addPage, duplicatePage, movePage, renamePage } from '../../state/pages';
+import { confirm } from '../../app/dialogs';
+import { openProjectSettings } from '../../app/startPageNav';
+import { groupOf, verbundRef } from '../../core/verbund';
+import { overviewTitle, tabOrder } from '../../core/verbundView';
+import type { Verbund } from '../../core/model/types';
+import { addMember, addVerbund, deleteVerbund, removeMember, renameVerbund } from '../../state/verbund';
 import { checkRecent, clearRecent, useRecent } from '../../state/recent';
 import { selectCanRedo, selectCanUndo, selectDirty, START_PAGE, useStore } from '../../state/store';
 import { Icon } from '../icons/Icon';
@@ -25,8 +31,20 @@ interface DragState {
   target: number;
 }
 
+/** Rückfrage vor dem Löschen eines Verbunds (wie in den Projekteinstellungen). */
+async function confirmDeleteVerbund(g: Verbund) {
+  const ok = await confirm(
+    'Verbund löschen',
+    `Verbund „${g.name}“ löschen? Die Festplätze bleiben an ihrer jetzigen Lage und zeigen keine Nachbarn mehr. Rückgängig mit Strg/Cmd+Z möglich.`,
+    'Löschen',
+    true,
+  );
+  if (ok) deleteVerbund(g.id);
+}
+
 export function TabBar() {
   const pages = useStore((s) => s.project.pages);
+  const groups = useStore((s) => s.project.groups);
   const active = useStore((s) => s.ui.activePage);
   const renaming = useStore((s) => s.ui.renamingPage);
   const dirty = useStore(selectDirty);
@@ -116,6 +134,27 @@ export function TabBar() {
     });
   };
 
+  /** Festplatz-Verbund (#15) im Tab-Menü einer Page: anlegen, aufnehmen, herausnehmen, Gesamtansicht, verwalten. */
+  const verbundItems = (id: Id): MenuItem[] => {
+    const g = groupOf({ groups }, id);
+    const name = pages.find((p) => p.id === id)?.name ?? '';
+    if (g)
+      return [
+        { label: `Gesamtansicht „${overviewTitle(g)}“`, onSelect: () => setUi({ activePage: verbundRef(g.id) }) },
+        { label: `Aus Verbund „${g.name}“ nehmen`, onSelect: () => removeMember(g.id, id) },
+        { label: 'Verbünde verwalten …', onSelect: openProjectSettings },
+      ];
+    return [
+      { label: `Neuer Verbund mit „${name}“`, onSelect: () => void addVerbund(undefined, [id]) },
+      {
+        label: 'In Verbund aufnehmen',
+        disabled: !groups.length,
+        submenu: groups.map((x): MenuItem => ({ label: x.name, detail: `${x.pageIds.length} ${x.pageIds.length === 1 ? 'Platz' : 'Plätze'}`, onSelect: () => addMember(x.id, id) })),
+      },
+      { label: 'Verbünde verwalten …', onSelect: openProjectSettings },
+    ];
+  };
+
   const openTabMenu = (e: React.MouseEvent, id: Id) => {
     e.preventDefault();
     setUi({ activePage: id });
@@ -126,7 +165,32 @@ export function TabBar() {
         { label: 'Umbenennen', shortcut: 'page.rename', onSelect: () => setUi({ renamingPage: id }) },
         { label: 'Duplizieren', shortcut: 'page.duplicate', onSelect: () => duplicatePage(id) },
         'separator',
+        ...verbundItems(id),
+        'separator',
         { label: 'Löschen', shortcut: 'page.delete', danger: true, onSelect: () => void confirmDeletePage(id) },
+      ],
+    });
+  };
+
+  /** Tab-Menü der Gesamtansicht eines Verbunds (#15): umbenennen, Festplatz aufnehmen, verwalten, löschen. */
+  const openVerbundMenu = (e: React.MouseEvent, g: Verbund) => {
+    e.preventDefault();
+    const ref = verbundRef(g.id);
+    setUi({ activePage: ref });
+    const free = pages.filter((p) => !groupOf({ groups }, p.id));
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: 'Verbund umbenennen', shortcut: 'page.rename', onSelect: () => setUi({ renamingPage: ref }) },
+        {
+          label: 'Festplatz aufnehmen',
+          disabled: !free.length,
+          submenu: free.map((p): MenuItem => ({ label: p.name, onSelect: () => addMember(g.id, p.id) })),
+        },
+        { label: 'Verbünde verwalten …', onSelect: openProjectSettings },
+        'separator',
+        { label: 'Verbund löschen', danger: true, onSelect: () => void confirmDeleteVerbund(g) },
       ],
     });
   };
@@ -192,42 +256,85 @@ export function TabBar() {
           <Icon name="home" size={15} />
           <span className="label">Start</span>
         </button>
-        {pages.map((p, i) => (
-          <div
-            key={p.id}
-            ref={(el) => {
-              if (el) tabRefs.current.set(p.id, el);
-              else tabRefs.current.delete(p.id);
-            }}
-            role="tab"
-            tabIndex={0}
-            className={`tab${drag?.active && drag.id === p.id ? ' dragging' : ''}${dropClass(p.id)}`}
-            aria-selected={active === p.id}
-            onPointerDown={(e) => onTabPointerDown(e, p.id)}
-            onPointerMove={onTabPointerMove}
-            onPointerUp={onTabPointerUp}
-            onPointerCancel={() => setDrag(null)}
-            onDoubleClick={() => setUi({ renamingPage: p.id })}
-            onContextMenu={(e) => openTabMenu(e, p.id)}
-            {...(i < 9 ? tip({ shortcut: `page.goto${i + 1}`, label: p.name, desc: 'Doppelklick: umbenennen · Rechtsklick: Menü · Ziehen: umsortieren' }) : tip({ label: p.name }))}
-          >
-            {renaming === p.id ? (
-              <RenameInput
-                initial={p.name}
-                onDone={(name) => {
-                  if (name !== null) renamePage(p.id, name);
-                  setUi({ renamingPage: null });
+        {tabOrder({ pages, groups }).map((entry) => {
+          if (entry.kind === 'verbund') {
+            const g = entry.verbund;
+            return (
+              <div
+                key={entry.ref}
+                ref={(el) => {
+                  if (el) tabRefs.current.set(entry.ref, el);
+                  else tabRefs.current.delete(entry.ref);
                 }}
-              />
-            ) : (
-              <>
-                <span className="label">{p.name}</span>
-                <WarnBadge pageId={p.id} />
-                <PowerBadge pageId={p.id} />
-              </>
-            )}
-          </div>
-        ))}
+                role="tab"
+                tabIndex={0}
+                className="tab tab-verbund"
+                data-testid="verbund-tab"
+                data-id={g.id}
+                aria-selected={active === entry.ref}
+                onPointerDown={(e) => {
+                  if (e.button === 0 && renaming !== entry.ref) setUi({ activePage: entry.ref });
+                }}
+                onDoubleClick={() => setUi({ renamingPage: entry.ref })}
+                onContextMenu={(e) => openVerbundMenu(e, g)}
+                {...tip({ label: overviewTitle(g), desc: 'Gesamtansicht des Verbunds · Doppelklick: umbenennen · Rechtsklick: Menü' })}
+              >
+                {renaming === entry.ref ? (
+                  <RenameInput
+                    initial={g.name}
+                    onDone={(name) => {
+                      if (name !== null) renameVerbund(g.id, name);
+                      setUi({ renamingPage: null });
+                    }}
+                  />
+                ) : (
+                  <>
+                    <Icon name="verbund" size={15} />
+                    <span className="label">{overviewTitle(g)}</span>
+                  </>
+                )}
+              </div>
+            );
+          }
+          const p = entry.page;
+          const i = pages.indexOf(p);
+          return (
+            <div
+              key={p.id}
+              ref={(el) => {
+                if (el) tabRefs.current.set(p.id, el);
+                else tabRefs.current.delete(p.id);
+              }}
+              role="tab"
+              tabIndex={0}
+              className={`tab${drag?.active && drag.id === p.id ? ' dragging' : ''}${dropClass(p.id)}`}
+              aria-selected={active === p.id}
+              onPointerDown={(e) => onTabPointerDown(e, p.id)}
+              onPointerMove={onTabPointerMove}
+              onPointerUp={onTabPointerUp}
+              onPointerCancel={() => setDrag(null)}
+              onDoubleClick={() => setUi({ renamingPage: p.id })}
+              onContextMenu={(e) => openTabMenu(e, p.id)}
+              {...(i < 9 ? tip({ shortcut: `page.goto${i + 1}`, label: p.name, desc: 'Doppelklick: umbenennen · Rechtsklick: Menü · Ziehen: umsortieren' }) : tip({ label: p.name }))}
+            >
+              {renaming === p.id ? (
+                <RenameInput
+                  initial={p.name}
+                  onDone={(name) => {
+                    if (name !== null) renamePage(p.id, name);
+                    setUi({ renamingPage: null });
+                  }}
+                />
+              ) : (
+                <>
+                  <span className="label">{p.name}</span>
+                  <WarnBadge pageId={p.id} />
+                  <PowerBadge pageId={p.id} />
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
       <button type="button" className="tab-add" onClick={() => addPage()} {...tip({ shortcut: 'page.new', desc: 'Neue Festplatz-Page anlegen', ariaLabel: 'Festplatz-Tab hinzufügen' })}>
         <Icon name="add" />

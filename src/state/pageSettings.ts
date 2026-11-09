@@ -1,6 +1,7 @@
 import { LAYER_OF } from '../core/objects';
 import { POWER_LIMIT } from '../core/power';
 import type { Background, FestplatzPage, Id, LayerId } from '../core/model/types';
+import { pageView, verbundOfRef } from '../core/verbundView';
 import { useStore } from './store';
 
 /** Änderungen an einer Festplatz-Page (Hintergrund, Raster, Norden, Strom). Alle rückgängig machbar. */
@@ -63,18 +64,21 @@ export function setNorthAngle(pageId: Id, angle: number) {
  */
 export function setLayer(pageId: Id, layer: LayerId, patch: { visible?: boolean; locked?: boolean }) {
   const s = useStore.getState();
-  const page = s.project.pages.find((p) => p.id === pageId);
-  if (!page) return;
+  // Gesamtansicht eines Verbunds (#15): Ebenen des Verbunds; die Hintergründe sind dort nicht sperrbar
+  const verbund = verbundOfRef(s.project, pageId);
+  const page = verbund ? null : s.project.pages.find((p) => p.id === pageId);
+  if (!page && !verbund) return;
   if (layer === 'background' && patch.locked !== undefined) {
-    if (page.background) updateBackground(pageId, patch.locked ? 'Hintergrund sperren' : 'Hintergrund entsperren', { locked: patch.locked });
+    if (page?.background) updateBackground(pageId, patch.locked ? 'Hintergrund sperren' : 'Hintergrund entsperren', { locked: patch.locked });
     return;
   }
   s.changeView((p) => {
-    const pg = p.pages.find((x) => x.id === pageId);
-    if (pg) Object.assign(pg.layers[layer], patch);
+    const target = verbund ? p.groups.find((g) => g.id === verbund.id) : p.pages.find((x) => x.id === pageId);
+    if (target) Object.assign(target.layers[layer], patch);
   });
   const after = useStore.getState();
-  const pg = after.project.pages.find((p) => p.id === pageId)!;
+  const pg = pageView(after.project, pageId);
+  if (!pg) return;
   const sel = after.ui.selection;
   if (layer === 'background' && sel?.kind === 'background' && !pg.layers.background.visible) after.setUi({ selection: null });
   if (sel?.kind === 'objects' && after.ui.activePage === pageId) {

@@ -1019,6 +1019,23 @@ kbd {
 .verbund-member { align-items: center; }
 .verbund-lage { padding: 6px 0 8px 12px; border-left: 2px solid var(--border); margin: 4px 0; }
 
+/* Gesamtansicht (#15 Teil b) */
+.tab.tab-verbund { gap: 6px; font-style: italic; }
+.tab.tab-verbund .icon { flex: none; color: var(--accent); }
+.cb-new-objects { display: flex; align-items: center; gap: 6px; color: var(--muted); margin-right: 8px; }
+.cb-new-objects select { height: 24px; max-width: 180px; }
+.overview-members { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.stage.tool-align { cursor: move; }
+.align-outline { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 4; pointer-events: none; }
+.align-pair { stroke: var(--calibrate); stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
+.align-own { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
+.align-ref { fill: var(--calibrate); stroke: var(--panel); stroke-width: 1.5; }
+.align-label { fill: var(--text-strong); font: 600 11px var(--f-num); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.align-panel select { height: 24px; max-width: 180px; }
+.align-panel .inp { width: 80px; }
+.align-deviation { color: var(--calibrate); }
+
 /* ---------- Formvorlagen (M12) ---------- */
 .shape-row { align-items: center; }
 .shape-row .shape-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }

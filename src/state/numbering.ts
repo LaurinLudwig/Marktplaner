@@ -1,6 +1,7 @@
 import { normAngle } from '../core/geometry/rect';
 import type { Id, NumberingDirection, NumberingMode, NumberingScope, Vec } from '../core/model/types';
 import { clampDigits, clampStart, defaultClockwiseCenter, defaultDirection, isCircularMode, nrLockTargets, type RenumberPlan } from '../core/numbering';
+import { ownerPages } from '../core/verbundView';
 import { updatePage } from './pageSettings';
 import { useStore, type ToolId } from './store';
 
@@ -108,10 +109,11 @@ export function setNumberingDigits(digits: number) {
   });
 }
 
+/** Nummer fixieren bzw. lösen; `pageId` darf die Gesamtansicht eines Verbunds sein (#15, Stände aller Mitglieder). */
 export function setNrLocked(pageId: Id, ids: readonly Id[], locked: boolean) {
   const set = new Set(ids);
-  updatePage(pageId, locked ? 'Nummer fixieren' : 'Fixierung lösen', (page) => {
-    for (const s of page.stands) if (set.has(s.id)) s.nrLocked = locked;
+  st().change(locked ? 'Nummer fixieren' : 'Fixierung lösen', (p) => {
+    for (const page of ownerPages(p, pageId)) for (const s of page.stands) if (set.has(s.id)) s.nrLocked = locked;
   });
 }
 

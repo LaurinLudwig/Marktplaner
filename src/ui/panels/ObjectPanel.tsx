@@ -9,7 +9,8 @@ import { feesOf, fmtEuro, hasPricing, sumFees, type Fee } from '../../core/fee';
 import { fmt, fmtInput } from '../../core/format';
 import { usesAreas } from '../../core/pageAreas';
 import { cachedInfraWarnings, cachedWarningData, fmtGap } from '../../core/warnings';
-import { ownerOf, pageEnv } from '../../core/verbund';
+import { memberPages, ownerOf, pageEnv } from '../../core/verbund';
+import { verbundOfRef } from '../../core/verbundView';
 import { Icon } from '../icons/Icon';
 import { tip } from '../shortcuts/tip';
 import { setNrLocked } from '../../state/numbering';
@@ -17,7 +18,7 @@ import { dissolveStandOnPage, mergeStandsOnPage, setFrontOverride, setStandParts
 import { autoFrontMeters, hasOwnForm, occupancyStands, occupiesParts, pageStands } from '../../core/footprint';
 import { standPartsInMeters } from '../../core/compound';
 import { newPart } from '../startpage/ShapeTemplates';
-import { setAreaFront, setInfraType, setLabelOffset, setRectField, setWarningIgnored, updateArea, updateInfra, updateStands, type WarningKind } from '../../state/objects';
+import { reassignObjects, setAreaFront, setInfraType, setLabelOffset, setRectField, setWarningIgnored, updateArea, updateInfra, updateStands, type WarningKind } from '../../state/objects';
 import { useStore } from '../../state/store';
 import { ColorField } from './ColorField';
 import { NumberField } from './NumberField';
@@ -44,6 +45,7 @@ export function ObjectPanel({ sel }: { sel: SelectionInfo }) {
         {!single && <span className="panel-badge">{objects.length} ausgewählt</span>}
       </div>
       <div className="panel-body form">
+        <OwnerField pageId={page.id} ids={objects.map((o) => o.obj.id)} />
         {areas.length === 1 && single && <AreaFields pageId={page.id} area={areas[0]!} />}
         {stands.length > 0 && kinds === 1 && <StandWarnings page={page} stands={stands} />}
         {stands.length > 0 && kinds === 1 && <StandFields pageId={page.id} stands={stands} />}
@@ -65,6 +67,43 @@ export function ObjectPanel({ sel }: { sel: SelectionInfo }) {
         {kinds > 1 && <p className="hint">Attribute erscheinen, wenn nur Objekte einer Art ausgewählt sind.</p>}
       </div>
     </section>
+  );
+}
+
+/** Wert der Auswahl „Festplatz“, wenn die Objekte verschiedenen Plätzen gehören. */
+const MIXED_OWNER = '__mixed__';
+
+/**
+ * Feld „Festplatz“ (#15, nur in der Gesamtansicht eines Verbunds): zeigt, welchem Platz die Auswahl gehört, und hängt
+ * sie um (Objekte wechseln in die Liste des anderen Platzes; ein Undo-Schritt, auch bei Mehrfachauswahl). Verschieben
+ * ändert die Zuordnung nie; nur dieses Feld.
+ */
+function OwnerField({ pageId, ids }: { pageId: string; ids: Id[] }) {
+  const verbund = useStore((s) => verbundOfRef(s.project, pageId));
+  const pages = useStore((s) => s.project.pages);
+  if (!verbund) return null;
+  const members = memberPages({ pages }, verbund);
+  const owner = common(ids.map((id) => ownerOf({ pages }, id)));
+  return (
+    <div className="field">
+      <label htmlFor="obj-owner">Festplatz</label>
+      <select
+        id="obj-owner"
+        data-testid="obj-owner"
+        value={owner ?? MIXED_OWNER}
+        onChange={(e) => {
+          if (e.target.value !== MIXED_OWNER) reassignObjects(ids, e.target.value);
+        }}
+      >
+        {!owner && <option value={MIXED_OWNER}>verschiedene</option>}
+        {members.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <p className="hint">Gehört diesem Platz und zählt nur dort (Statistik, Strom, Standgeld, Nummerierung). Verschieben ändert die Zuordnung nicht.</p>
+    </div>
   );
 }
 

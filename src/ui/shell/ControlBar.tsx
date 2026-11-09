@@ -2,7 +2,10 @@ import { runCommand } from '../../app/commands';
 import { roundRect } from '../../core/geometry/rect';
 import { typeMap } from '../../core/infra';
 import { groupCenter } from '../../core/transform';
-import { moveGroupTo, setRectField } from '../../state/objects';
+import { moveGroupTo, newObjectsPage, setNewObjectsPage, setRectField } from '../../state/objects';
+import { memberPages } from '../../core/verbund';
+import { overviewTitle, verbundOfRef } from '../../core/verbundView';
+import type { Verbund } from '../../core/model/types';
 import { useStore } from '../../state/store';
 import { Icon } from '../icons/Icon';
 import { NumberField } from '../panels/NumberField';
@@ -15,15 +18,17 @@ import { tip } from '../shortcuts/tip';
  * eine Eingabe gilt für alle ausgewählten Objekte. Jede Eingabe ist ein Undo-Schritt.
  */
 export function ControlBar() {
+  const verbund = useStore((s) => verbundOfRef(s.project, s.ui.activePage));
   const pageName = useStore((s) => s.project.pages.find((p) => p.id === s.ui.activePage)?.name ?? '');
   const sidebarOpen = useStore((s) => s.ui.sidebarOpen);
   const bgSelected = useStore((s) => s.ui.selection?.kind === 'background');
   const sel = useSelectedObjects();
   return (
     <div className="controlbar">
-      <span className="title">{pageName}</span>
+      <span className="title">{verbund ? overviewTitle(verbund) : pageName}</span>
       {sel ? <SelectionFields sel={sel} /> : <span>{bgSelected ? 'Hintergrund ausgewählt' : 'Keine Auswahl'}</span>}
       <div className="spacer" />
+      {verbund && <NewObjectsOn verbund={verbund} />}
       <button
         type="button"
         className="icon-btn"
@@ -34,6 +39,32 @@ export function ControlBar() {
         <Icon name={sidebarOpen ? 'sidebarClose' : 'sidebarOpen'} />
       </button>
     </div>
+  );
+}
+
+/**
+ * „Neue Objekte auf: …“ (#15, nur in der Gesamtansicht): Platz für neue Objekte, die auf mehreren oder auf keiner
+ * Grundfläche stehen (sonst gehören sie dem Platz ihrer Grundfläche). Nur für die Sitzung, kein Undo-Schritt.
+ */
+function NewObjectsOn({ verbund }: { verbund: Verbund }) {
+  const pages = useStore((s) => s.project.pages);
+  useStore((s) => s.ui.newObjectsOn[verbund.id]);
+  const members = memberPages({ pages }, verbund);
+  const value = newObjectsPage(verbund.id) ?? '';
+  return (
+    <label
+      className="cb-new-objects"
+      {...tip({ label: 'Neue Objekte auf', desc: 'Neue Objekte gehören dem Platz, auf dessen Grundfläche sie stehen. Stehen sie auf mehreren oder auf keiner, gehören sie diesem Platz.', side: 'bottom', ariaLabel: false })}
+    >
+      <span>Neue Objekte auf:</span>
+      <select data-testid="new-objects-on" value={value} onChange={(e) => setNewObjectsPage(verbund.id, e.target.value)}>
+        {members.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
