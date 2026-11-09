@@ -228,6 +228,11 @@ export interface PageEnv {
    * Grundflächen aller Mitglieder (eigene zuerst); null auf einer Page ohne Grundflächen (#17).
    */
   outside: readonly Area[] | null;
+  /**
+   * Nur in der Gesamtansicht eines Verbunds (Teil b): Projekt für `ownerOf`. Infrastruktur warnt dann nur an Ständen
+   * derselben Besitzer-Page (Entscheidung 2026-11-07/-09), so wie in den Einzelansichten.
+   */
+  owners?: Pick<Project, 'pages'>;
 }
 
 const outsideCache = new WeakMap<Verbund, { lists: readonly (readonly Area[])[]; out: readonly Area[] }>();
@@ -254,6 +259,11 @@ function verbundOutside(project: VerbundProject, page: FestplatzPage): readonly 
 
 /** Nachbarn und Bezug von „außerhalb“ einer Page (`page` darf eine Sicht mit Vorschau sein). */
 export function pageEnv(project: VerbundProject, page: FestplatzPage): PageEnv {
+  // Gesamtansicht (`mergedPage`, Seitenreferenz verbund:<id>): keine Nachbarn, alle Objekte sind eigene; Infrastruktur
+  // warnt nur innerhalb desselben Besitzers
+  if (page.id.startsWith(VERBUND_PREFIX) && project.groups?.some((g) => verbundRef(g.id) === page.id)) {
+    return { neighbours: NO_NEIGHBOURS, outside: usesAreas(page) ? page.areas : null, owners: project };
+  }
   return { neighbours: neighbourObjects(project, page), outside: verbundOutside(project, page) };
 }
 

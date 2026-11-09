@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createPage, createProject, createVerbund } from './model/defaults';
 import type { Area, FestplatzPage, Project, Stand, Vec } from './model/types';
 import { createArea, createStand } from './objects';
-import { applyTransform, mergedPage, verbundRef } from './verbund';
+import { applyTransform, mergedPage, pageEnv, verbundRef } from './verbund';
+import { createInfra } from './infra';
+import { cachedWarningData } from './warnings';
 import { assignObjects, copyFallback, fallbackPage, hasOverview, isVerbundRef, ownerPages, pageView, tabOrder, twoPointTransform, verbundOfRef } from './verbundView';
 
 const area = (id: string, cx: number, cy: number, w: number, d: number): Area => ({ ...createArea({ cx, cy, w, d, rot: 0 }), id });
@@ -141,5 +143,52 @@ describe('#15 2-Punkt-Ausrichtung', () => {
   it('mergedPage bleibt Grundlage: Sicht nutzt sie', () => {
     const { project, g } = setup();
     expect(pageView(project, verbundRef('g'))!.stands).toBe(mergedPage(project, g).stands);
+  });
+});
+
+describe('#15 Warnungen der Gesamtansicht = Vereinigung der Einzelansichten', () => {
+  it('Infrastruktur nur innerhalb desselben Platzes; Überlappung, Abstand und „außerhalb“ über Platzgrenzen', () => {
+    const base = createProject('T');
+    const categories = [{ id: 'c', name: 'Crêpes', color: '#ffffff', minDistance: 10, price: null }];
+    const rtw = base.infraTypes.find((t) => t.id === 'ambulance')!;
+    expect(rtw.keepClear).toBe(true);
+    const cat = (s: Stand): Stand => ({ ...s, categoryId: 'c' });
+    // A: Grundfläche x 0–20; B: x 15–35 (Überschneidung 15–20)
+    const a: FestplatzPage = {
+      ...createPage('A'),
+      id: 'A',
+      areas: [area('aA', 10, 5, 20, 10)],
+      // sA1 überlappt sB1; sA2 zu nah an sB2 (gleiche Kategorie); sA3 steht im eigenen RTW-Feld
+      stands: [stand('sA1', 16, 2), cat(stand('sA2', 12, 8)), stand('sA3', 3, 5)],
+      // RTW-Feld von A über sA3 (eigen) und über sB3 (fremd)
+      infra: [{ ...createInfra(rtw, { cx: 5, cy: 5, w: 10, d: 4, rot: 0 }), id: 'rA' }],
+    };
+    const b: FestplatzPage = {
+      ...createPage('B'),
+      id: 'B',
+      areas: [area('aB', 25, 5, 20, 10)],
+      // sB4 liegt außerhalb jeder Grundfläche
+      stands: [stand('sB1', 17, 2), cat(stand('sB2', 18, 8)), stand('sB3', 8, 5), stand('sB4', 30, 20)],
+    };
+    const project: Project = { ...base, categories, pages: [a, b], groups: [{ ...createVerbund('U', ['A', 'B']), id: 'g' }] };
+    const summary = (pg: FestplatzPage) => {
+      const w = cachedWarningData(pg.stands, pg.infra, pageEnv(project, pg), project);
+      const ids = (pred: (id: string) => boolean) => pg.stands.map((x) => x.id).filter(pred).toSorted();
+      return {
+        infra: ids((id) => w.infra.byStand.has(id)),
+        infraPairs: pg.stands.flatMap((x) => (w.infra.byStand.get(x.id) ?? []).map((o) => `${x.id}>${o}`)).toSorted(),
+        overlap: ids((id) => !!w.page.byStand.get(id)?.overlaps.length),
+        outside: ids((id) => !!w.page.byStand.get(id)?.outside),
+        distance: ids((id) => w.distance.has(id)),
+      };
+    };
+    const whole = summary(pageView(project, verbundRef('g'))!);
+    const sa = summary(a);
+    const sb = summary(b);
+    const keys = ['infra', 'infraPairs', 'overlap', 'outside', 'distance'] as const;
+    const union = Object.fromEntries(keys.map((k) => [k, [...sa[k], ...sb[k]].toSorted()]));
+    expect(whole).toEqual(union);
+    // Erwartete Inhalte: sB3 im RTW-Feld von A warnt nicht, sA3 schon
+    expect(whole).toEqual({ infra: ['sA3'], infraPairs: ['sA3>rA'], overlap: ['sA1', 'sB1'], outside: ['sB4'], distance: ['sA2', 'sB2'] });
   });
 });
