@@ -4,6 +4,7 @@ import { INFRA_LIMITS, PASSAGE_TYPE_ID } from '../../core/infra';
 import type { FestplatzPage, Id, InfraGeometry, InfraTypeDef } from '../../core/model/types';
 import { findObjects, LIMITS, type PageObject } from '../../core/objects';
 import { useStore } from '../../state/store';
+import { pageView } from '../../core/verbundView';
 
 export interface SelectionInfo {
   page: FestplatzPage;
@@ -15,7 +16,8 @@ export interface SelectionInfo {
  * zeigen beim Ziehen und Drehen die Werte live an.
  */
 export function useSelectedObjects(): SelectionInfo | null {
-  const stored = useStore((s) => s.project.pages.find((p) => p.id === s.ui.activePage) ?? null);
+  // Auch in der Gesamtansicht eines Verbunds (#15): Objekte aller Mitglieder
+  const stored = useStore((s) => pageView(s.project, s.ui.activePage));
   const preview = useStore((s) => s.preview);
   const selection = useStore((s) => s.ui.selection);
   return useMemo(() => {

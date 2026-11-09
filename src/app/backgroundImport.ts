@@ -5,6 +5,7 @@ import { screenToWorld } from '../core/viewport';
 import { platform } from '../platform';
 import { setBackground } from '../state/pageSettings';
 import { START_PAGE, useStore } from '../state/store';
+import { isVerbundRef } from '../core/verbundView';
 import { UserError, userMessage } from '../core/errors';
 import { imageSize, openPdf, pageSize, pdfErrorMessage, renderPdfRegion } from '../ui/canvas/background/renderer';
 import { confirm, showError } from './dialogs';
@@ -96,7 +97,8 @@ async function prepare(bytes: Uint8Array, fileName: string): Promise<Prepared | 
 export async function importBackground(): Promise<void> {
   const s = useStore.getState();
   const pageId = s.ui.activePage;
-  if (pageId === START_PAGE) return;
+  // In der Gesamtansicht eines Verbunds (#15) gesperrt: Jeder Platz hat seinen eigenen Hintergrund
+  if (pageId === START_PAGE || isVerbundRef(pageId)) return;
 
   let picked;
   try {

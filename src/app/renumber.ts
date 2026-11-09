@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { defaultRenumberMode, planRenumber, renumberIssue, type RenumberMode, type RenumberPlan } from '../core/numbering';
 import { applyRenumber } from '../state/numbering';
 import { START_PAGE, useStore } from '../state/store';
+import { isVerbundRef } from '../core/verbundView';
 import { notify } from './notify';
 
 /**
@@ -17,6 +18,7 @@ export const useRenumber = create<RenumberState>()(() => ({ plans: null, mode: '
 /** Bei „pro Festplatz“ die aktive Page; im Modus „manuell“ nicht möglich. Bei „global“ immer (sofern es eine nicht-manuelle Page gibt). */
 export function canRenumber(): boolean {
   const s = useStore.getState();
+  if (isVerbundRef(s.ui.activePage)) return false;
   const page = s.project.pages.find((p) => p.id === s.ui.activePage);
   if (s.project.settings.numbering.scope === 'global') return s.project.pages.some((p) => p.numberingMode !== 'manual');
   return !!page && page.numberingMode !== 'manual';
@@ -25,6 +27,8 @@ export function canRenumber(): boolean {
 export function openRenumber() {
   const s = useStore.getState();
   if (s.ui.activePage === START_PAGE && s.project.settings.numbering.scope !== 'global') return;
+  // In der Gesamtansicht eines Verbunds (#15) gesperrt
+  if (isVerbundRef(s.ui.activePage)) return;
   const pageId = s.ui.activePage;
   // Gesperrt, solange eine betroffene Page nicht nummerieren kann (eigene Richtung mit A = B, #12)
   const issue = renumberIssue(s.project, pageId);

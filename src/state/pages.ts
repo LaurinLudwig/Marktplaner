@@ -1,6 +1,7 @@
 import { createPage } from '../core/model/defaults';
 import { clonePage, copyName, nextPageName } from '../core/model/pages';
 import type { Id } from '../core/model/types';
+import { tabOrder } from '../core/verbundView';
 import { START_PAGE, useStore } from './store';
 
 /** Page-Befehle. Alle Änderungen am Projekt laufen über `change` und sind damit rückgängig machbar. */
@@ -73,10 +74,10 @@ export function movePage(id: Id, to: number) {
   });
 }
 
-/** Wechselt relativ zur aktiven Page; die Start-Page zählt als Position 0. */
+/** Wechselt relativ zur aktiven Page; die Start-Page zählt als Position 0, Gesamtansichten (#15) zählen mit. */
 export function cyclePage(delta: number) {
   const s = useStore.getState();
-  const order = [START_PAGE, ...s.project.pages.map((p) => p.id)];
+  const order = [START_PAGE, ...tabOrder(s.project).map((t) => (t.kind === 'page' ? t.page.id : t.ref))];
   const i = order.indexOf(s.ui.activePage);
   const next = order[(i + delta + order.length) % order.length]!;
   s.setUi({ activePage: next });

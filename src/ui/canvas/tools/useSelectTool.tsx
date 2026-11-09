@@ -19,6 +19,7 @@ import { angleTo, rotateRects, snapAngle, type RectMap } from '../../../core/tra
 import { cloneForDrag, commitDuplicateDrag, commitRects, select, setAreaFront, setLabelOffset } from '../../../state/objects';
 import { updateBackground } from '../../../state/pageSettings';
 import { useStore, type PaperElement } from '../../../state/store';
+import { pageView } from '../../../core/verbundView';
 import { boundsHandle, mmToM, mToMm, paperToAnchor, paperToWorld, resizeBounds, snapToPaperCorners, worldToPaper } from '../../../core/sheet';
 import type { Bounds } from '../../../core/viewport';
 import { moveSheetTo, setPaperAnchor, setSheetRegion } from '../../../state/paper';
@@ -112,7 +113,8 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
     // Ausgangsrechtecke aus dem Projekt (nicht aus einer womöglich laufenden Vorschau); Stände mit den Teilen, mit
     // denen sie belegen (#16), damit der Fang an den Kanten der Teile greift
     const project = useStore.getState().project;
-    const page = project.pages.find((p) => p.id === pageId);
+    // Auch die Gesamtansicht eines Verbunds (#15)
+    const page = pageView(project, pageId);
     if (!page) return {};
     const calc = new Map(occupancyStands(page.stands, project.shapeTemplates).map((x) => [x.id, x]));
     return Object.fromEntries(findObjects(page, list).map((o) => [o.obj.id, o.kind === 'stand' ? (calc.get(o.obj.id) ?? o.obj) : o.obj]));
@@ -166,7 +168,7 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
   const startPart = (mode: 'move' | 'resize' | 'rotate', handle: Handle | null, p: ToolPointer) => {
     if (!ownStand || partIndex === null || !partBox) return;
     // Ausgangslage aus dem gespeicherten Projekt (nicht aus einer Vorschau)
-    const stored = useStore.getState().project.pages.find((x) => x.id === pageId)?.stands.find((x) => x.id === ownStand.id);
+    const stored = pageView(useStore.getState().project, pageId)?.stands.find((x) => x.id === ownStand.id);
     if (!stored?.parts) return;
     const rect0 = partRect(stored, stored.parts[partIndex]!);
     startGesture({ kind: 'part', mode, id: stored.id, index: partIndex, stand0: stored, rect0, handle, startWorld: p.world, start: p.screen, moved: false, a0: angleTo({ x: rect0.cx, y: rect0.cy }, p.world) });
@@ -248,7 +250,7 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
   const moveStep = (g: Extract<Gesture, { kind: 'move' }>, p: ToolPointer) => {
     g.last = p;
     const st = useStore.getState();
-    const stored = st.project.pages.find((x) => x.id === pageId);
+    const stored = pageView(st.project, pageId);
     if (!stored) return;
     if (p.altKey && !g.copies) g.copies = cloneForDrag(stored, Object.keys(g.rects0));
     const copyIds = new Set(g.copies ? Object.keys(g.copies.from) : []);
@@ -382,7 +384,8 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       const preview = st.preview;
       if (commit && preview?.pageId === pageId) {
         // Alt beim Loslassen: Kopien einfügen (ein Undo-Schritt „Duplizieren“), Originale bleiben
-        if (preview.added) commitDuplicateDrag(pageId, preview.added);
+        // Kopien gehören in der Gesamtansicht (#15) ohne eindeutige Grundfläche dem Platz ihres Originals
+        if (preview.added) commitDuplicateDrag(pageId, preview.added, g.kind === 'move' ? g.copies?.from : undefined);
         else commitRects(pageId, preview.rects, LABEL[g.kind]);
       }
       st.setPreview(null);

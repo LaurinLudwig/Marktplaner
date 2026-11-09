@@ -6,6 +6,7 @@ import { loadRecent } from './state/recent';
 import { startKeyboard } from './app/keyboard';
 import { guardClose, startWindowTitle } from './app/window';
 import { START_PAGE, useStore } from './state/store';
+import { pageView } from './core/verbundView';
 import { Canvas } from './ui/canvas/Canvas';
 import { ControlBar } from './ui/shell/ControlBar';
 import { DialogHost } from './ui/shell/DialogHost';
@@ -29,7 +30,8 @@ let recovery: Promise<unknown> | null = null;
 
 export function App() {
   const theme = useStore((s) => s.ui.theme);
-  const activePage = useStore((s) => s.project.pages.find((p) => p.id === s.ui.activePage) ?? null);
+  // Festplatz-Page oder Gesamtansicht eines Verbunds (#15)
+  const activePage = useStore((s) => pageView(s.project, s.ui.activePage));
   const isStart = useStore((s) => s.ui.activePage === START_PAGE);
   const panelsHidden = useStore((s) => s.ui.panelsHidden);
   const sidebarOpen = useStore((s) => s.ui.sidebarOpen);

@@ -61,6 +61,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'tool.measure', label: 'Messen', group: 'Werkzeuge', keys: ['M'] },
   { id: 'tool.calibrate', label: 'Kalibrieren', group: 'Werkzeuge', keys: ['K'] },
   { id: 'tool.titleBlock', label: 'Schriftfeld', group: 'Werkzeuge', keys: ['T'] },
+  { id: 'tool.align', label: 'Ausrichten (Gesamtansicht eines Verbunds)', group: 'Werkzeuge', keys: ['A'] },
   { id: 'view.legend', label: 'Legende ein/aus', group: 'Ansicht', keys: ['Shift+L'] },
   { id: 'snap.front', label: 'Fang an Vorderkante', group: 'Werkzeuge', keys: ['Shift+F'] },
   { id: 'snap.grid', label: 'Fang am Raster', group: 'Werkzeuge', keys: ['Shift+R'] },

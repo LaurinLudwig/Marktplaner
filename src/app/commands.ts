@@ -14,6 +14,7 @@ import { openExportDialog, useExportUi } from './pdfExport';
 import { openStartTab } from './startPageNav';
 import { useStartPage } from '../state/startPage';
 import { nudgePaper, setPaperVisible } from '../state/paper';
+import { isVerbundRef, pageView } from '../core/verbundView';
 
 /**
  * Befehle, die über Shortcuts, Menüs und Buttons ausgelöst werden. Der Schlüssel entspricht
@@ -30,8 +31,14 @@ export interface Command {
 const s = () => useStore.getState();
 const onDrawingPage = () => s().ui.activePage !== START_PAGE;
 const onStartPage = () => s().ui.activePage === START_PAGE;
-const activePage = () => s().project.pages.find((p) => p.id === s().ui.activePage) ?? null;
-const hasBackground = () => !!activePage()?.background;
+/** Gesamtansicht eines Verbunds (#15): Nummerierung, Hintergrund, Kalibrieren und Page-Befehle sind dort gesperrt. */
+export const inOverview = () => isVerbundRef(s().ui.activePage);
+/** Festplatz-Page (nicht Start-Page, nicht Gesamtansicht). */
+const onSinglePage = () => onDrawingPage() && !inOverview();
+const activePage = () => pageView(s().project, s().ui.activePage);
+const hasBackground = () => onSinglePage() && !!activePage()?.background;
+/** Hinweis für Befehle, die in der Gesamtansicht gesperrt sind. */
+const OVERVIEW_MSG = (what: string) => `${what}: In der Gesamtansicht gesperrt, nur in der Einzelansicht des Festplatzes möglich.`;
 const setTool = (tool: ToolId) => () => s().setUi({ tool });
 const hasObjects = () => onDrawingPage() && selectedIds().length > 0;
 /** Ausgewähltes Papier-Element (Blatt, Schriftfeld, Legende, M7). */
@@ -63,6 +70,7 @@ function nextInfraType() {
 
 /** Shift+L: Legende der aktiven Page ein- oder ausblenden (Undo-Schritt, M7). */
 function toggleLegend() {
+  if (inOverview()) return;
   const page = activePage();
   if (page) setPaperVisible(page.id, 'legend', !page.legend.visible);
 }
@@ -128,37 +136,56 @@ export const COMMANDS: Record<string, Command> = {
   'tool.stand': { run: setTool('stand'), enabled: onDrawingPage },
   'tool.infra': { run: setTool('infra'), enabled: onDrawingPage },
   'tool.infraNext': { run: nextInfraType, enabled: onDrawingPage },
-  'tool.titleBlock': { run: setTool('titleBlock'), enabled: onDrawingPage },
-  'view.legend': { run: toggleLegend, enabled: onDrawingPage },
+  'tool.titleBlock': {
+    run: setTool('titleBlock'),
+    enabled: onSinglePage,
+    disabledMessage: 'Schriftfeld: In der Gesamtansicht gesperrt; Blatt, Schriftfeld und Legende des Verbunds kommen mit dem PDF der Gesamtansicht.',
+  },
+  'view.legend': { run: toggleLegend, enabled: onSinglePage },
   'tool.measure': { run: setTool('measure'), enabled: onDrawingPage },
   'tool.calibrate': {
     run: setTool('calibrate'),
     enabled: hasBackground,
-    disabledMessage: 'Kalibrieren: Zuerst einen Hintergrund importieren (Cmd/Strg+Shift+P).',
+    get disabledMessage() {
+      return inOverview() ? OVERVIEW_MSG('Kalibrieren') : 'Kalibrieren: Zuerst einen Hintergrund importieren (Cmd/Strg+Shift+P).';
+    },
   },
-  'file.importBackground': { run: () => void importBackground(), enabled: onDrawingPage },
+  // #15: Ausrichten gibt es nur in der Gesamtansicht eines Verbunds
+  'tool.align': {
+    run: setTool('align'),
+    enabled: inOverview,
+    disabledMessage: 'Ausrichten: Nur in der Gesamtansicht eines Festplatz-Verbunds (Tab „… (gesamt)“).',
+  },
+  'file.importBackground': { run: () => void importBackground(), enabled: onSinglePage, disabledMessage: OVERVIEW_MSG('Hintergrund importieren') },
   'numbering.renumber': {
     run: openRenumber,
-    enabled: () => onDrawingPage() && canRenumber(),
-    disabledMessage: 'Neu nummerieren: Diese Page wird manuell nummeriert (Seitenleiste, Bereich „Nummerierung“).',
+    enabled: () => onSinglePage() && canRenumber(),
+    get disabledMessage() {
+      return inOverview() ? OVERVIEW_MSG('Neu nummerieren') : 'Neu nummerieren: Diese Page wird manuell nummeriert (Seitenleiste, Bereich „Nummerierung“).';
+    },
   },
   // #14: auf der Festplatz-Page für deren Nummernkreis, auf der Start-Page für alle Pages (app/nrLock.ts)
   'numbering.unlockAll': {
     run: () => setAllNrLocks(false),
-    enabled: () => nrLockCount(false) > 0,
-    disabledMessage: 'Alle Fixierungen lösen: Im Nummernkreis ist keine Nummer fixiert.',
+    enabled: () => !inOverview() && nrLockCount(false) > 0,
+    get disabledMessage() {
+      return inOverview() ? OVERVIEW_MSG('Alle Fixierungen lösen') : 'Alle Fixierungen lösen: Im Nummernkreis ist keine Nummer fixiert.';
+    },
   },
   'numbering.lockAll': {
     run: () => setAllNrLocks(true),
-    enabled: () => nrLockCount(true) > 0,
-    disabledMessage: 'Alle Nummern fixieren: Im Nummernkreis gibt es keine Nummer, die noch nicht fixiert ist.',
+    enabled: () => !inOverview() && nrLockCount(true) > 0,
+    get disabledMessage() {
+      return inOverview() ? OVERVIEW_MSG('Alle Nummern fixieren') : 'Alle Nummern fixieren: Im Nummernkreis gibt es keine Nummer, die noch nicht fixiert ist.';
+    },
   },
   'view.grid': {
     run: () => {
       const page = activePage();
       if (page) setGridVisible(page.id, !page.grid.visible);
     },
-    enabled: onDrawingPage,
+    // Raster der Gesamtansicht kommt vom ersten Mitglied (#15)
+    enabled: onSinglePage,
   },
 
   'snap.front': snapCmd('front'),
@@ -174,9 +201,10 @@ export const COMMANDS: Record<string, Command> = {
   'page.start': { run: () => gotoPage(0) },
   ...pageJumps,
   'page.new': { run: () => void addPage() },
+  // In der Gesamtansicht benennt F2 den Verbund um (Tab „… (gesamt)“); Duplizieren und Löschen gibt es dort nicht
   'page.rename': { run: () => s().setUi({ renamingPage: s().ui.activePage }), enabled: onDrawingPage },
-  'page.duplicate': { run: () => duplicatePage(s().ui.activePage), enabled: onDrawingPage },
-  'page.delete': { run: () => void confirmDeletePage(s().ui.activePage), enabled: onDrawingPage },
+  'page.duplicate': { run: () => duplicatePage(s().ui.activePage), enabled: onSinglePage, disabledMessage: OVERVIEW_MSG('Festplatz duplizieren') },
+  'page.delete': { run: () => void confirmDeletePage(s().ui.activePage), enabled: onSinglePage, disabledMessage: OVERVIEW_MSG('Festplatz löschen') },
 
   'start.stands': { run: () => openStartTab('stands'), enabled: onStartPage },
   'start.free': { run: () => openStartTab('free'), enabled: onStartPage },

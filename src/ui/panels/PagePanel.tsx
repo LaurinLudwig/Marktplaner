@@ -10,7 +10,7 @@ import { keyLabel, tip } from '../shortcuts/tip';
 import { NumberField } from './NumberField';
 import { AreaOrderPanel } from './AreaOrderPanel';
 import { NumberingPanel } from './NumberingPanel';
-import { groupOf } from '../../core/verbund';
+import { groupOf, verbundRef } from '../../core/verbund';
 import { openProjectSettings } from '../../app/startPageNav';
 
 const KIND_LABEL = { pdf: 'PDF', svg: 'SVG', image: 'Bild' } as const;
@@ -194,9 +194,14 @@ function VerbundInfo({ page }: { page: FestplatzPage }) {
           {others.length ? ` · mit ${others.join(', ')}` : ''}
         </p>
         <p className="hint">Stände und Infrastruktur der Nachbarplätze erscheinen blass; ein Doppelklick springt zu ihrem Platz.</p>
-        <button type="button" className="btn" onClick={openProjectSettings}>
-          Verbünde verwalten …
-        </button>
+        <div className="btn-row">
+          <button type="button" className="btn" data-testid="open-overview" onClick={() => useStore.getState().setUi({ activePage: verbundRef(group.id) })}>
+            Gesamtansicht
+          </button>
+          <button type="button" className="btn" onClick={openProjectSettings}>
+            Verbünde verwalten …
+          </button>
+        </div>
       </div>
     </section>
   );

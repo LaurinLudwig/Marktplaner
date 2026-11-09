@@ -52,6 +52,8 @@ import i_refresh from '@material-symbols/svg-400/outlined/refresh.svg?raw';
 import i_loadList from '@material-symbols/svg-400/outlined/playlist_add.svg?raw';
 import i_manageLists from '@material-symbols/svg-400/outlined/list_alt.svg?raw';
 import i_drag from '@material-symbols/svg-400/outlined/drag_indicator.svg?raw';
+import i_align from '@material-symbols/svg-400/outlined/open_with.svg?raw';
+import i_verbund from '@material-symbols/svg-400/outlined/join.svg?raw';
 
 const RAW = {
   select: i_select,
@@ -107,6 +109,8 @@ const RAW = {
   loadList: i_loadList,
   manageLists: i_manageLists,
   drag: i_drag,
+  align: i_align,
+  verbund: i_verbund,
 };
 
 export type IconName = keyof typeof RAW;

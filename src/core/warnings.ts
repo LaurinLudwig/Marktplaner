@@ -16,9 +16,9 @@ import { boundsTouch, clipConvex, dilateRect, distToRect, penetration, rectGeo, 
 import { footprint, footprintGap, overlapPolygons } from './footprint';
 import { exceedsTol, greaterThan, lessThan, TOL, withinTol } from './geometry/tolerance';
 import { infraConflicts, passageTooNarrow, typeMap } from './infra';
-import type { Area, Category, Id, InfraObject, InfraTypeDef, ProjectSettings, ShapeTemplate, Stand, Vec } from './model/types';
+import type { Area, Category, FestplatzPage, Id, InfraObject, InfraTypeDef, Project, ProjectSettings, ShapeTemplate, Stand, Vec } from './model/types';
 import { occupancyStands } from './footprint';
-import { withNeighbours, type PageEnv } from './verbund';
+import { ownerOf, withNeighbours, type PageEnv } from './verbund';
 
 export interface StandWarning {
   outside: boolean;
@@ -303,6 +303,30 @@ export interface WarningData {
   distance: DistanceWarnings;
 }
 
+const ownerCache = new WeakMap<InfraWarnings, { pages: readonly FestplatzPage[]; out: InfraWarnings }>();
+
+/**
+ * Infrastruktur-Warnungen nur für Paare (Stand, Objekt) mit derselben Besitzer-Page (#15, Gesamtansicht): Infrastruktur
+ * eines Platzes warnt nicht an Ständen eines anderen Platzes, wie in den Einzelansichten. „Durchfahrt zu eng“ hängt nur
+ * am Objekt und bleibt. Zwischengespeichert je Ergebnis und Pages.
+ */
+export function sameOwnerInfra(iw: InfraWarnings, project: Pick<Project, 'pages'>): InfraWarnings {
+  if (!iw.byStand.size) return iw;
+  const hit = ownerCache.get(iw);
+  if (hit && hit.pages === project.pages) return hit.out;
+  const byStand = new Map<Id, readonly Id[]>();
+  let changed = false;
+  for (const [standId, ids] of iw.byStand) {
+    const owner = ownerOf(project, standId);
+    const keep = ids.filter((id) => ownerOf(project, id) === owner);
+    if (keep.length !== ids.length) changed = true;
+    if (keep.length) byStand.set(standId, keep);
+  }
+  const out = changed ? { byStand, narrow: iw.narrow } : iw;
+  ownerCache.set(iw, { pages: project.pages, out });
+  return out;
+}
+
 /**
  * Rohdaten der Warnungen einer Page mit ihren Nachbarn aus dem Verbund (#15): Überlappung und Abstand rechnen über
  * eigene und Nachbarstände, „außerhalb“ über die Grundflächen des Verbunds (`env.outside`). Infrastruktur („freihalten“,
@@ -321,7 +345,10 @@ export function cachedWarningData(
   const all = withNeighbours(stands, occupancyStands(nb.stands, project.shapeTemplates ?? []));
   return {
     page: cachedPageWarnings(env.outside, all),
-    infra: cachedInfraWarnings({ stands, infra }, project.infraTypes, project.settings.minPassageWidth),
+    // Gesamtansicht (#15 Teil b): Infrastruktur nur an Ständen desselben Platzes
+    infra: env.owners
+      ? sameOwnerInfra(cachedInfraWarnings({ stands, infra }, project.infraTypes, project.settings.minPassageWidth), env.owners)
+      : cachedInfraWarnings({ stands, infra }, project.infraTypes, project.settings.minPassageWidth),
     distance: cachedDistanceWarnings(all, project.categories),
   };
 }

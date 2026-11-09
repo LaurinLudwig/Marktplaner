@@ -78,10 +78,15 @@ export function moveMember(verbundId: Id, pageId: Id, delta: number) {
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r1 = (n: number) => Math.round(n * 10) / 10;
+/** Nur Gleitkomma-Reste entfernen (10⁻⁸ m bzw. °), wie `transformPageContent` für die bewegten Positionen. */
+const fine = (n: number) => Math.round(n * 1e8) / 1e8;
 
 /**
  * Lage einer Page im Verbund ändern (#15): die ganze Page samt Hintergrund und allen Objekten verschieben bzw. drehen
- * (`transformPageContent`). Verschiebung auf 0,01 m, Drehung auf 0,1° gerundet; ein Undo-Schritt.
+ * (`transformPageContent`). Verschiebung auf 0,01 m, Drehung auf 0,1° gerundet; ein Undo-Schritt. Mit `precise`
+ * (Werkzeug „Ausrichten“: 2-Punkt-Ausrichtung und Drehfeld, Teil b) entfallen nur Gleitkomma-Reste: Bei 0,1° läge ein
+ * Punkt 200 m vom Drehpunkt bis etwa 0,17 m daneben. Die Lage der Objekte zueinander bleibt so oder so starr
+ * (keine Rundung je Objekt, also keine Fehlwarnungen).
  *
  * Die Ansicht der Page folgt dem Inhalt (der Drehpunkt bleibt an seiner Bildschirmstelle), auch bei Undo/Redo: Die
  * aktuelle Ansicht wird zuerst ohne Undo-Schritt in `page.view` übernommen, dann verschiebt der Undo-Schritt sie mit
@@ -89,9 +94,9 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
  * verschobene Ansicht stehen und der Inhalt erschiene versetzt. „An Fenster anpassen“ wäre keine Lösung: Es ginge nur
  * auf der sichtbaren Zeichenfläche (die Lage wird in den Projekteinstellungen geändert) und verlöre den Ausschnitt.
  */
-export function movePageContent(pageId: Id, t: PageTransform): boolean {
+export function movePageContent(pageId: Id, t: PageTransform, opts: { precise?: boolean } = {}): boolean {
   const s = useStore.getState();
-  const tr: PageTransform = { dx: r2(t.dx), dy: r2(t.dy), rot: r1(t.rot), pivot: t.pivot };
+  const tr: PageTransform = opts.precise ? { dx: fine(t.dx), dy: fine(t.dy), rot: fine(t.rot), pivot: t.pivot } : { dx: r2(t.dx), dy: r2(t.dy), rot: r1(t.rot), pivot: t.pivot };
   const page = s.project.pages.find((x) => x.id === pageId);
   if (!page || (!tr.dx && !tr.dy && !tr.rot)) return false;
   const view = s.views[pageId];
