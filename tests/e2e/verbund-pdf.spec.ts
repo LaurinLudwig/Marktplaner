@@ -108,7 +108,9 @@ test.describe('#15 PDF der Gesamtansicht und Nachbarn im PDF (Teil c)', () => {
     // Blatt des Verbunds: A3 quer, 1:500, Mitte zwischen beiden Plätzen
     await page.evaluate(() => {
       const s = (window as any).__marktplanerStore.getState();
-      s.change('Blatt', (p: any) => Object.assign(p.groups[0].sheet, { format: 'A3', orientation: 'landscape', scale: 500, cx: 47.5, cy: -5 }));
+      s.change('Blatt', (p: any) => {
+        Object.assign(p.groups[0].sheet, { format: 'A3', orientation: 'landscape', scale: 500, cx: 47.5, cy: -5 });
+      });
     });
     await overviewTab(page).click();
     await openExport(page);
@@ -132,6 +134,9 @@ test.describe('#15 PDF der Gesamtansicht und Nachbarn im PDF (Teil c)', () => {
   });
 
   test('Einzel-PDF mit und ohne Ebene „Nachbarn“; Ebene „Nachbarn“ auf der Zeichenfläche', async ({ page }) => {
+    // Chromium braucht für die erste Vorschau nach einem Mausklick rund 15 s (auch auf origin/main 7bec637); mit zwei
+    // Exporten reichen die üblichen 30 s bei vier Workern nicht sicher
+    test.setTimeout(60_000);
     const errors = collectErrors(page);
     await openApp(page);
     await seed(page);
