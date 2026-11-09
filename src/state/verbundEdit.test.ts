@@ -28,7 +28,8 @@ import { hideFreeSpace } from './freeSpaces';
 import { pageFree } from '../core/hiddenFree';
 import { setNrLocked } from './numbering';
 import { setLayer } from './pageSettings';
-import { mergeStandsOnPage } from './shapes';
+import { dissolveStandOnPage, mergeStandsOnPage, setStandParts } from './shapes';
+import { cyclePage } from './pages';
 import { projectForSave, useStore } from './store';
 import { movePageContent } from './verbund';
 
@@ -204,6 +205,20 @@ describe('#15 Umhängen (Feld „Festplatz“)', () => {
     expect(pageById('B').hiddenFree.map((h) => h.key)).toEqual([fs.key]);
   });
 
+  it('Nummer, Schloss, Strom und Attribute bleiben; Stromlimit des Ziel-Platzes blockiert wie beim Ändern', () => {
+    s().change('Attribute', (p) => {
+      Object.assign(p.pages[0]!.stands[0]!, { nr: 'M-01', nrLocked: true, powerKw: 5, name: 'Waffeln' });
+      Object.assign(p.pages[1]!, { powerLimitKw: 4, blockOverLimit: true });
+    });
+    const before = past();
+    expect(reassignObjects(['sA'], 'B')).toBe(0);
+    expect(past()).toBe(before);
+    expect(pageById('A').stands.map((x) => x.id)).toEqual(['sA']);
+    s().change('Limit', (p) => void (p.pages[1]!.powerLimitKw = 10));
+    expect(reassignObjects(['sA'], 'B')).toBe(1);
+    expect(pageById('B').stands.find((x) => x.id === 'sA')).toMatchObject({ nr: 'M-01', nrLocked: true, powerKw: 5, name: 'Waffeln', cx: 5, cy: 5 });
+  });
+
   it('keine Grundfläche auf eine Page ohne Grundflächen (#17)', () => {
     s().change('ohne', (p) => void (p.pages[1]!.useAreas = false));
     expect(reassignObjects(['aA'], 'B')).toBe(0);
@@ -313,6 +328,39 @@ describe('#15 Ausrichten: Genauigkeit und Speichern', () => {
     expect(after.northAngle).toBeCloseTo(3.7234, 8);
     expect(after.background!.transform).toEqual(before.background!.transform);
     expect(after.background!.transform.rot).toBeCloseTo(3.7234, 8);
+  });
+});
+
+describe('#15 Gesamtansicht: Form, Tab-Wechsel', () => {
+  it('Form auflösen: alle Teile bleiben auf dem Platz des Stands, ein Schritt', () => {
+    // Zwei Teile in Metern ab der linken oberen Ecke des 3 × 3 m großen Stands
+    expect(
+      setStandParts(REF, 'sB', [
+        { kind: 'rect', x: 0, y: 0, w: 1, h: 3, rot: 0 },
+        { kind: 'rect', x: 2, y: 0, w: 1, h: 3, rot: 0 },
+      ]),
+    ).toBe(true);
+    const before = past();
+    const pieces = dissolveStandOnPage(REF, 'sB');
+    expect(pieces).toHaveLength(2);
+    expect(past()).toBe(before + 1);
+    expect(pageById('B').stands.map((x) => x.id)).toEqual(pieces);
+    expect(pageById('A').stands.map((x) => x.id)).toEqual(['sA']);
+  });
+
+  it('Tab-Wechsel zwischen Gesamt- und Einzelansicht hebt die Auswahl auf; Ctrl+Tab hält an der Gesamtansicht', () => {
+    select(['sA', 'sB']);
+    s().setUi({ activePage: 'A' });
+    expect(s().ui.selection).toBeNull();
+    s().setUi({ activePage: REF });
+    select(['sB']);
+    cyclePage(1);
+    expect(s().ui.activePage).toBe('A');
+    expect(s().ui.selection).toBeNull();
+    cyclePage(-1);
+    expect(s().ui.activePage).toBe(REF);
+    cyclePage(-1);
+    expect(s().ui.activePage).toBe('start');
   });
 });
 
