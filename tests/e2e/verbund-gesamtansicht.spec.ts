@@ -247,6 +247,10 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     await input.fill('Unterstadt');
     await input.press('Enter');
     await expect(overviewTab(page)).toHaveText('Unterstadt (gesamt)');
+    // Erstes Öffnen ohne gespeicherte Ansicht: automatisch „An Fenster anpassen“ (danach gilt diese Ansicht)
+    const s = await st(page);
+    expect(s.ui.activePage).toBe(`verbund:${s.project.groups[0].id}`);
+    expect(s.views[`verbund:${s.project.groups[0].id}`]).toBeTruthy();
     expect(errors).toEqual([]);
   });
 

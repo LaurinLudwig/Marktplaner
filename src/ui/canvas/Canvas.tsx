@@ -20,6 +20,7 @@ import { verbundOfRef } from '../../core/verbundView';
 import { useAlignTool } from './tools/useAlignTool';
 import { activeNarrow, cachedWarningData } from '../../core/warnings';
 import { jumpToInfra, jumpToStand } from '../../app/jump';
+import { fitView } from '../../app/view';
 import { hideFreeSpace } from '../../state/freeSpaces';
 import { useStore } from '../../state/store';
 import { Menu } from '../shell/Menu';
@@ -372,6 +373,12 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
     return () => ro.disconnect();
   }, [setUi]);
 
+  // Gesamtansicht (#15) beim ersten Öffnen: „An Fenster anpassen“, solange der Verbund keine Ansicht hat (danach gilt
+  // Verbund.view bzw. die Ansicht der Sitzung)
+  useLayoutEffect(() => {
+    if (verbund && !storedView && size.w > 0 && size.h > 0 && useStore.getState().ui.activePage === storedPage.id) fitView();
+  }, [verbund, storedView, size.w, size.h, storedPage.id]);
+
   // Sprung von der Start-Page (M6-09): auf das Ziel zoomen, sobald die Größe der Zeichenfläche bekannt ist
   // (von der Start-Page aus ist `ui.viewport` evtl. veraltet), dann das Ziel kurz aufleuchten lassen
   const focus = useStore((s) => s.ui.focus);
@@ -688,7 +695,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
         {activeTool?.overlay}
       </svg>
       {activeTool?.panel && <div className="tool-panel-host">{activeTool.panel}</div>}
-      <NorthArrow angle={page.northAngle} />
+      <NorthArrow angle={page.northAngle} overview={overview} />
       {fpsVisible && <FpsMeter />}
       <div className="statusbar">
         <span>
@@ -733,9 +740,11 @@ function snapSourceWithout(page: FestplatzPage, exclude: Id, neighbours: Neighbo
 }
 
 /** Nordpfeil oben rechts; `angle` = Richtung Norden in Grad im Uhrzeigersinn ab „oben“. */
-function NorthArrow({ angle }: { angle: number }) {
+function NorthArrow({ angle, overview = false }: { angle: number; overview?: boolean }) {
+  // Gesamtansicht (#15): die Nordrichtung des ersten Platzes, einstellbar nur in dessen Einzelansicht
+  const desc = overview ? 'Nordrichtung des ersten Platzes im Verbund; einstellen in dessen Einzelansicht (Seitenleiste)' : 'Nordrichtung in der Seitenleiste einstellen';
   return (
-    <div className="north-arrow" {...tip({ label: `Norden: ${fmt(angle, 1)}°`, desc: 'Nordrichtung in der Seitenleiste einstellen', side: 'bottom' })}>
+    <div className="north-arrow" {...tip({ label: `Norden: ${fmt(angle, 1)}°`, desc, side: 'bottom' })}>
       <svg viewBox="-20 -20 40 40" width="40" height="40" aria-hidden="true">
         <circle r="18" className="north-ring" />
         <g transform={`rotate(${angle})`}>
