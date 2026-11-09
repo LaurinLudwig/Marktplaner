@@ -20,9 +20,17 @@ import { mmToPt, writePdf } from './writePdf';
 const fonts = testFonts();
 const profile = (id: string): ExportProfile => structuredClone(BUILTIN_PROFILES.find((p) => p.id === id)!);
 
-async function exportPdf(project: Project, prof: ExportProfile, pageIds: string[] | null = null, appendix = { stands: true, free: true, infra: true }, bgBytes?: Uint8Array) {
+/** `bgBytes`: Datei aller PDF-Hintergründe bzw. je Asset. */
+async function exportPdf(project: Project, prof: ExportProfile, pageIds: string[] | null = null, appendix = { stands: true, free: true, infra: true }, bgBytes?: Uint8Array | Record<string, Uint8Array>) {
   const c = buildExport(project, prof, { pageIds, appendix });
-  const pages = c.scenes.map((scene) => ({ scene, background: scene.background && bgBytes ? { kind: 'pdf' as const, key: scene.background.assetId, bytes: bgBytes } : null }));
+  const fileOf = (assetId: string) => (bgBytes instanceof Uint8Array ? bgBytes : bgBytes?.[assetId]);
+  const pages = c.scenes.map((scene) => ({
+    scene,
+    backgrounds: scene.backgrounds.map(({ background: bg }) => {
+      const bytes = fileOf(bg.assetId);
+      return bytes ? { kind: 'pdf' as const, key: bg.assetId, bytes } : null;
+    }),
+  }));
   return writePdf({ title: c.title, projectName: c.projectName, pages, appendix: c.appendix, fonts, iconPath: testIconPath });
 }
 
@@ -35,7 +43,7 @@ function oneStand(format: 'A1' | 'A3' | 'A4', n: number): Project {
   for (const k of ['titleBlock', 'legend', 'scaleBar', 'northArrow'] as const) pg[k].visible = false;
   return p;
 }
-const standsOnly: ExportProfile = { ...profile('internal'), layers: { background: false, grid: false, areas: false, free: false, stands: true, infra: false, labels: false }, warnings: 'none' };
+const standsOnly: ExportProfile = { ...profile('internal'), layers: { background: false, grid: false, areas: false, free: false, stands: true, infra: false, neighbours: false, labels: false }, warnings: 'none' };
 
 describe('PDF: Seitengröße und Maßstab', () => {
   it.each([

@@ -35,10 +35,14 @@ export function Sidebar() {
       <div className="sidebar-scroll">
         {sel ? (
           <ObjectPanel key={sel.objects.map((o) => o.obj.id).join(',')} sel={sel} />
-        ) : verbund ? (
-          <OverviewPanel verbund={verbund} />
         ) : page && paper ? (
           <PaperElementPanel page={page} element={paper} />
+        ) : verbund ? (
+          // Gesamtansicht (#15): Bereich „Verbund“ statt der Page-Einstellungen, dazu das Blatt des Verbunds (Teil c)
+          <>
+            <OverviewPanel verbund={verbund} />
+            {page && <SheetPanel page={page} />}
+          </>
         ) : (
           page && (
             <>

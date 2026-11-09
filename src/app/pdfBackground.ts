@@ -7,6 +7,8 @@
  *   Ziel-Auflösung (nie hochgerechnet). JPEG bleibt JPEG (Qualität 85), PNG bleibt PNG. Unverändert eingebettet,
  *   wenn weder beschnitten noch verkleinert wird. Über 16 Megapixel in Kacheln.
  * - SVG: in der Ziel-Auflösung gerastert (PNG; Vektor siehe E-53).
+ * - Mehrere Hintergründe je Seite (Gesamtansicht eines Verbunds, #15 Teil c): jeder für sich, zusammen höchstens
+ *   `MAX_OUT_PX` Ausgabepixel (`rasterBudgets`).
  * - „E-Mail“ (M8-Nacharbeit): 100 dpi, alles als JPEG mit Qualität 60.
  *
  * JPEG-Qualität (M8-Nacharbeit): Die Browser deuten den Wert von `convertToBlob` verschieden (WebKit 0,85 ≈ libjpeg
@@ -24,8 +26,11 @@ import type { SheetFrame } from '../core/sheet';
 const TILE = 2048;
 /** Ab dieser Größe (Megapixel) wird in Kacheln gearbeitet. */
 const TILE_FROM_PX = 16_000_000;
-/** Höchstens so viele Ausgabepixel je Seite bei „Original“ (Speicher). */
-const MAX_OUT_PX = 200_000_000;
+/**
+ * Höchstens so viele Ausgabepixel je Seite bei „Original“ (Speicher), über alle Rasterhintergründe der Seite (die
+ * Gesamtansicht eines Verbunds hat einen je Mitglied, #15 Teil c; `rasterBudgets`).
+ */
+export const MAX_OUT_PX = 200_000_000;
 
 /**
  * Ausgabe-Pixel je Quell-Pixel für die Ziel-Auflösung. Rasterbilder werden nie hochgerechnet (höchstens 1); SVG ist
@@ -45,20 +50,50 @@ export interface RasterCanvas {
   draw(src: { x: number; y: number; w: number; h: number }, out: { w: number; h: number }): Promise<Uint8Array>;
 }
 
-/**
- * Plan für einen Rasterhintergrund: Ausschnitt in Quell-Pixeln (auf ganze Pixel erweitert), Faktor und Kacheln.
- * null = der Plan liegt nicht auf dem Blatt.
- */
-export function rasterPlan(bg: Background, frame: SheetFrame, quality: ExportDpi | number) {
+/** Ausschnitt eines Rasterhintergrunds auf dem Blatt in Quell-Pixeln (auf ganze Pixel erweitert); null = nicht auf dem Blatt. */
+function sourceRect(bg: Background, frame: SheetFrame) {
   const region = visibleSourceRegion(bg.transform, bg.pxSize, frame.bounds);
   if (!region) return null;
   const x0 = Math.max(0, Math.floor(region.minX) - 1);
   const y0 = Math.max(0, Math.floor(region.minY) - 1);
   const x1 = Math.min(bg.pxSize.w, Math.ceil(region.maxX) + 1);
   const y1 = Math.min(bg.pxSize.h, Math.ceil(region.maxY) + 1);
+  return { x0, y0, x1, y1 };
+}
+
+/** Ausgabepixel eines Rasterhintergrunds auf dem Blatt ohne Obergrenze (PDF-Hintergründe: 0). */
+function naturalOutPx(bg: Background, frame: SheetFrame, quality: ExportDpi | number): number {
+  if (bg.kind === 'pdf') return 0;
+  const r = sourceRect(bg, frame);
+  if (!r) return 0;
+  const f = rasterFactor(bg, frame, quality);
+  return (r.x1 - r.x0) * (r.y1 - r.y0) * f * f;
+}
+
+/**
+ * Obergrenze der Ausgabepixel je Hintergrund einer Seite (#15 Teil c): zusammen höchstens `MAX_OUT_PX`. Liegen die
+ * Rasterhintergründe darüber, wird die Auflösung aller gleichmäßig gesenkt (jeder bekommt seinen Anteil); sonst gilt
+ * für jeden `MAX_OUT_PX`. Für PDF-Hintergründe ohne Bedeutung.
+ */
+export function rasterBudgets(bgs: readonly Background[], frame: SheetFrame, quality: ExportDpi | number): number[] {
+  const px = bgs.map((bg) => naturalOutPx(bg, frame, quality));
+  const total = px.reduce((a, b) => a + b, 0);
+  if (total <= MAX_OUT_PX) return bgs.map(() => MAX_OUT_PX);
+  return px.map((n) => (n * MAX_OUT_PX) / total);
+}
+
+/**
+ * Plan für einen Rasterhintergrund: Ausschnitt in Quell-Pixeln (auf ganze Pixel erweitert), Faktor und Kacheln.
+ * `maxOutPx` = Obergrenze für diesen Hintergrund (bei mehreren je Seite aus `rasterBudgets`). null = der Plan liegt
+ * nicht auf dem Blatt.
+ */
+export function rasterPlan(bg: Background, frame: SheetFrame, quality: ExportDpi | number, maxOutPx = MAX_OUT_PX) {
+  const r = sourceRect(bg, frame);
+  if (!r) return null;
+  const { x0, y0, x1, y1 } = r;
   let factor = rasterFactor(bg, frame, quality);
   const outPx = (x1 - x0) * (y1 - y0) * factor * factor;
-  if (outPx > MAX_OUT_PX) factor *= Math.sqrt(MAX_OUT_PX / outPx);
+  if (outPx > maxOutPx) factor *= Math.sqrt(maxOutPx / outPx);
   const whole = x0 === 0 && y0 === 0 && x1 === bg.pxSize.w && y1 === bg.pxSize.h;
   const unchanged = whole && factor >= 0.999;
   const outW = Math.max(1, Math.round((x1 - x0) * factor));
@@ -76,6 +111,9 @@ export function rasterPlan(bg: Background, frame: SheetFrame, quality: ExportDpi
   return { region: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, factor, unchanged, outPx: outW * outH, tiles };
 }
 
+/** Schlüssel eines vorbereiteten Hintergrunds: Seite des Exports (Page oder `verbund:<id>`) und Besitzer-Page. */
+export const backgroundKey = (sceneRef: string, pageId: string) => `${sceneRef}|${pageId}`;
+
 /** Ausgabeformat eines Rasterhintergrunds: JPEG bleibt JPEG, sonst PNG; bei „E-Mail“ immer JPEG. */
 export function outputFormat(bg: Background, quality: ExportDpi | number): 'jpg' | 'png' {
   return rasterQuality(quality).allJpeg || mimeForAsset(bg.assetId) === 'image/jpeg' ? 'jpg' : 'png';
@@ -85,7 +123,8 @@ export type CanvasFactory = (bytes: Uint8Array, mime: string, format: 'jpg' | 'p
 
 /**
  * Hintergrund einer Page vorbereiten. `canvasFor` liefert eine Leinwand für das dekodierte Bild (Worker:
- * OffscreenCanvas mit ImageBitmap; Hauptthread: auch SVG); `jpegQuality` = Wert für `convertToBlob` in diesem Browser.
+ * OffscreenCanvas mit ImageBitmap; Hauptthread: auch SVG); `jpegQuality` = Wert für `convertToBlob` in diesem Browser;
+ * `maxOutPx` = Anteil dieses Hintergrunds an den Ausgabepixeln der Seite (`rasterBudgets`).
  */
 export async function prepareBackground(
   bg: Background,
@@ -94,10 +133,11 @@ export async function prepareBackground(
   quality: ExportDpi | number,
   canvasFor: CanvasFactory,
   jpegQuality: number,
+  maxOutPx = MAX_OUT_PX,
 ): Promise<PreparedBackground | null> {
   if (!bytes) return null;
   if (bg.kind === 'pdf') return { kind: 'pdf', key: bg.assetId, bytes };
-  const plan = rasterPlan(bg, frame, quality);
+  const plan = rasterPlan(bg, frame, quality, maxOutPx);
   if (!plan) return null;
   const mime = mimeForAsset(bg.assetId);
   const format = outputFormat(bg, quality);

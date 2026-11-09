@@ -45,6 +45,8 @@ export const PAPER_STYLE: Record<StyleKey, PaperStyle> = {
   'stand-label': { fill: '#141414', halo: true },
   /** Führungslinie einer ausgelagerten Standbeschriftung (#9). */
   'label-leader': { stroke: '#141414', strokeOpacity: 0.75, width: 0.15 },
+  /** Nachbarstand aus dem Festplatz-Verbund (#15): „SE-02 · Seestraße“, blass. */
+  'neighbour-label': { fill: '#141414', fillOpacity: 0.55, halo: true },
   'area-label': { fill: INK, halo: true },
   'free-label': { fill: '#1f6b39' },
   'infra-label': { fill: INK, halo: true },

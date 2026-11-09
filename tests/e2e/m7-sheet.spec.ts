@@ -267,7 +267,7 @@ test.describe('M7: Dateiformat Version 4', () => {
     const { readFileSync } = await import('node:fs');
     const { unzipSync, strFromU8 } = await import('fflate');
     const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(path)))['project.json']!));
-    expect(json.schemaVersion).toBe(16); // seit #15 Version 16, angepasst vom Entwickler (vorher 15, 14, 13, 12, 11, 10, 9, 8)
+    expect(json.schemaVersion).toBe(17); // seit #15 Teil c Version 17, angepasst vom Entwickler (vorher 16, 15, 14, 13, 12, 11, 10, 9, 8)
     expect(json.project.pages[0]).not.toHaveProperty('titleBlockPos');
     expect(json.project.pages[0].legend).toEqual({ visible: true, corner: 'bl', dx: 10, dy: 10 });
   });

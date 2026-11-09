@@ -2,16 +2,25 @@ import { PAPER_KIND_LABEL, pagePaper, type PaperKind } from '../core/paper';
 import { isFreeFormat, mmToM, nudgeAnchor, regionOf } from '../core/sheet';
 import { clampToLimits } from '../core/infra';
 import { MARGIN_LIMITS, normalizeRegion, SCALE_LIMITS, TARGET_WIDTH_LIMITS } from '../core/model/schema';
-import type { Id, PaperAnchor, Project, Sheet, Vec } from '../core/model/types';
+import type { FestplatzPage, Id, PaperAnchor, Project, Sheet, Vec } from '../core/model/types';
 import type { Bounds } from '../core/viewport';
+import { pageView, verbundOfRef } from '../core/verbundView';
 import { useStore } from './store';
 
 /**
  * Befehle für Blatt und Papier-Elemente (M7, M8, spec.md §8). Jede Änderung ist ein Undo-Schritt.
+ *
+ * `pageId` ist eine Seitenreferenz: die ID einer Festplatz-Page oder die Gesamtansicht eines Verbunds `verbund:<id>`
+ * (#15 Teil c). Gelesen wird dann die Sicht der Gesamtansicht (`pageView`, Objekte aller Mitglieder), geschrieben in die
+ * Felder des Verbunds (`Verbund.sheet`, `titleBlock`, `titleBlockText`, `legend`, `scaleBar`, `northArrow`).
  */
 
 const st = () => useStore.getState();
-const pageOf = (p: Project, pageId: Id) => p.pages.find((x) => x.id === pageId);
+/** Page bzw. Sicht der Gesamtansicht zum Lesen (Blatt berechnen). */
+const pageOf = (p: Project, ref: Id): FestplatzPage | null => pageView(p, ref);
+/** Träger der Blatt-Felder im Entwurf: die Page oder der Verbund der Gesamtansicht. */
+type PaperHolder = Pick<FestplatzPage, 'sheet' | 'titleBlock' | 'titleBlockText' | 'legend' | 'scaleBar' | 'northArrow'>;
+const holderOf = (p: Project, ref: Id): PaperHolder | undefined => verbundOfRef(p, ref) ?? p.pages.find((x) => x.id === ref);
 
 const SHEET_LABEL: Record<keyof Sheet, string> = {
   format: 'Papierformat ändern',
@@ -57,7 +66,7 @@ export function setSheet(pageId: Id, patch: Partial<Sheet>, label?: string) {
   }
   const key = Object.keys(patch)[0] as keyof Sheet | undefined;
   st().change(label ?? (key ? SHEET_LABEL[key] : 'Blatt ändern'), (p) => {
-    const pg = pageOf(p, pageId);
+    const pg = holderOf(p, pageId);
     if (pg) Object.assign(pg.sheet, next);
   });
 }
@@ -89,7 +98,7 @@ export function setPaperAnchor(pageId: Id, kind: PaperKind, anchor: Pick<PaperAn
   st().change(
     label,
     (p) => {
-      const pg = pageOf(p, pageId);
+      const pg = holderOf(p, pageId);
       if (pg) Object.assign(pg[kind], anchor);
     },
     merge ?? {},
@@ -98,7 +107,7 @@ export function setPaperAnchor(pageId: Id, kind: PaperKind, anchor: Pick<PaperAn
 
 export function setPaperVisible(pageId: Id, kind: PaperKind, visible: boolean) {
   st().change(`${PAPER_KIND_LABEL[kind]} ${visible ? 'einblenden' : 'ausblenden'}`, (p) => {
-    const pg = pageOf(p, pageId);
+    const pg = holderOf(p, pageId);
     if (pg) pg[kind].visible = visible;
   });
   const sel = st().ui.selection;
@@ -107,7 +116,7 @@ export function setPaperVisible(pageId: Id, kind: PaperKind, visible: boolean) {
 
 export function setTitleBlockText(pageId: Id, text: string) {
   st().change('Freitext des Schriftfelds ändern', (p) => {
-    const pg = pageOf(p, pageId);
+    const pg = holderOf(p, pageId);
     if (pg) pg.titleBlockText = text;
   });
 }
@@ -127,7 +136,7 @@ export const todayText = (d = new Date()) => `${String(d.getDate()).padStart(2, 
 export function nudgePaper(dxMm: number, dyMm: number, repeat = false) {
   const s = st();
   const sel = s.ui.selection;
-  const page = s.project.pages.find((p) => p.id === s.ui.activePage);
+  const page = pageOf(s.project, s.ui.activePage);
   if (sel?.kind !== 'paper' || !page) return;
   const merge = { mergeKey: `nudge-paper:${page.id}:${sel.element}:${dxMm},${dyMm}`, mergeIntoPrevious: repeat };
   const paper = pagePaper(page, s.project);
@@ -137,7 +146,7 @@ export function nudgePaper(dxMm: number, dyMm: number, repeat = false) {
     s.change(
       'Blatt verschieben',
       (p) => {
-        const pg = pageOf(p, page.id);
+        const pg = holderOf(p, page.id);
         if (!pg) return;
         if (pg.sheet.format === 'region') {
           const r = pg.sheet.region ?? regionOf(paper.frame.bounds);
@@ -159,7 +168,7 @@ export function nudgePaper(dxMm: number, dyMm: number, repeat = false) {
 /** Schriftfeld-Werkzeug: Schriftfeld an diese Lage setzen und einblenden (ein Undo-Schritt), danach ausgewählt. */
 export function placeTitleBlock(pageId: Id, anchor: Pick<PaperAnchor, 'corner' | 'dx' | 'dy'>) {
   st().change('Schriftfeld setzen', (p) => {
-    const pg = pageOf(p, pageId);
+    const pg = holderOf(p, pageId);
     if (pg) Object.assign(pg.titleBlock, anchor, { visible: true });
   });
   st().setUi({ selection: { kind: 'paper', element: 'titleBlock' } });

@@ -190,6 +190,15 @@ export function infraLabelPrim(o: InfraObject, t: InfraTypeDef, fontSize: number
   return { ...label('infra-label', [text], x, y + BASELINE * fontSize, fontSize), anchor: t.geometry === 'point' ? 'start' : 'middle' };
 }
 
+/**
+ * Beschriftung eines Nachbarstands aus dem Festplatz-Verbund (#15): „SE-02 · Seestraße“ in der Mitte des Stands, etwas
+ * kleiner und blass (wie `.neighbour-label` auf der Zeichenfläche).
+ */
+export function neighbourLabelPrim(stand: Pick<Stand, 'cx' | 'cy'>, caption: string, fontSize: number): TextPrim {
+  const size = fontSize * 0.8;
+  return { ...label('neighbour-label', [caption], stand.cx, stand.cy + BASELINE * size, size), weight: 400 };
+}
+
 const label = (s: TextPrim['s'], lines: string[], x: number, y: number, fontSize: number): TextPrim => ({
   t: 'text',
   s,

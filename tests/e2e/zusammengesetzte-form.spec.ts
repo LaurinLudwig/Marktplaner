@@ -221,7 +221,7 @@ test.describe('#16 Zusammengesetzte Form', () => {
     await page.keyboard.press(`${MOD}+s`);
     const bytes = readFileSync((await (await download).path())!);
     const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(bytes))['project.json']!));
-    expect(json.schemaVersion).toBe(16); // seit #15 Version 16, angepasst vom Entwickler (vorher 15)
+    expect(json.schemaVersion).toBe(17); // seit #15 Teil c Version 17, angepasst vom Entwickler (vorher 16, 15)
     expect(json.project.pages[0].stands[0]).toMatchObject({ parts: B06_PARTS, frontOverride: 24 });
   });
 });

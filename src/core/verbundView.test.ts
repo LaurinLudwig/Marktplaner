@@ -22,7 +22,7 @@ function setup() {
 }
 
 describe('#15 Gesamtansicht: Seitenreferenz und Sicht', () => {
-  it('verbund:<id> löst den Verbund auf; die Sicht hat keinen Hintergrund und kein Blatt, Identität bleibt', () => {
+  it('verbund:<id> löst den Verbund auf; die Sicht hat keinen Hintergrund, Blatt und Ebenen des Verbunds (Teil c), Identität bleibt', () => {
     const { project, g } = setup();
     const ref = verbundRef('g');
     expect(isVerbundRef(ref)).toBe(true);
@@ -33,7 +33,10 @@ describe('#15 Gesamtansicht: Seitenreferenz und Sicht', () => {
     expect(v.id).toBe(ref);
     expect(v.stands.map((s) => s.id)).toEqual(['sA', 'sB']);
     expect(v.background).toBeNull();
-    expect(v.layers.sheet).toEqual({ visible: false, locked: true });
+    // Teil c: Blatt, Papier-Elemente und Ebenen des Verbunds (auch die Ebene „Blatt“)
+    expect(v.layers).toBe(g.layers);
+    expect(v.sheet).toBe(g.sheet);
+    expect(v.titleBlock).toBe(g.titleBlock);
     // Objekte sind dieselben wie in den Mitgliedern
     expect(v.stands[0]).toBe(project.pages[1]!.stands[0]);
     expect(pageView(project, ref)).toBe(v);

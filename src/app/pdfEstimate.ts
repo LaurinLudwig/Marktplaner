@@ -4,6 +4,8 @@
  * - Grundanteil: Schriften (Teilmengen) und je Page der Vektorinhalt (Stände mit Beschriftung, Freiflächen, Legende,
  *   Schriftfeld); Anhang je Zeile.
  * - PDF-Hintergrund: Größe der eingebetteten Datei, einmal je Datei.
+ * - Gesamtansicht eines Verbunds (#15 Teil c): eine Seite mit den Objekten aller Mitglieder und je Mitglied einem
+ *   Hintergrund (Rasterpixel zusammen höchstens wie eine Seite, `rasterBudgets`); der Anhang zählt jedes Objekt einmal.
  * - Rasterhintergrund: unverändert eingebettet = Größe der Datei; sonst Ausgabepixel × Bytes je Pixel. Bei JPEG geht
  *   das Verhältnis der Quelldatei ein, umgerechnet von ihrer Qualität (aus der Quantisierungstabelle) auf die
  *   Zielqualität; bei PNG das Verhältnis der Quelle; bei „E-Mail“ aus PNG/SVG ein Erfahrungswert für JPEG 60.
@@ -14,7 +16,9 @@ import { mimeForAsset } from '../core/assets';
 import { rasterQuality, type AppendixPart, type ExportDpi, type ExportProfile } from '../core/exportProfiles';
 import type { Id, Project } from '../core/model/types';
 import { exportFrame } from '../core/paper';
-import { dqtLumaSum, ijgLumaSum, outputFormat, rasterPlan } from './pdfBackground';
+import { entryPages, selectedEntries } from '../core/pdf/exportDoc';
+import { viewBackgrounds } from '../core/verbundView';
+import { dqtLumaSum, ijgLumaSum, outputFormat, rasterBudgets, rasterPlan } from './pdfBackground';
 
 const FONTS = 120_000;
 const PER_PAGE = 30_000;
@@ -64,34 +68,39 @@ export function estimateExportBytes(
   quality: ExportDpi | number,
   assets: Readonly<Record<string, Uint8Array>>,
 ): number {
-  const pages = pageIds ? project.pages.filter((p) => pageIds.includes(p.id)) : project.pages;
+  const entries = selectedEntries(project, pageIds);
+  const pages = entryPages(project, entries);
   const q = rasterQuality(quality);
   let bytes = FONTS;
   const pdfAssets = new Set<string>();
-  for (const page of pages) {
+  for (const { page } of entries) {
     bytes += PER_PAGE + PER_OBJECT * (page.stands.length + page.infra.length + page.areas.length);
-    const bg = profile.layers.background ? page.background : null;
-    const file = bg ? assets[bg.assetId] : undefined;
-    if (!bg || !file) continue;
-    if (bg.kind === 'pdf') {
-      pdfAssets.add(bg.assetId);
-      continue;
-    }
+    const bgs = profile.layers.background ? viewBackgrounds(project, page).map((b) => b.background) : [];
+    if (!bgs.length) continue;
     const frame = exportFrame(page, project, profile);
-    const plan = rasterPlan(bg, frame, quality);
-    if (!plan) continue;
-    const format = outputFormat(bg, quality);
-    const source = mimeForAsset(bg.assetId);
-    if (bg.kind === 'image' && plan.unchanged && (source === 'image/jpeg') === (format === 'jpg')) {
-      bytes += file.length;
-      continue;
+    const budgets = rasterBudgets(bgs, frame, quality);
+    for (const [i, bg] of bgs.entries()) {
+      const file = assets[bg.assetId];
+      if (!file) continue;
+      if (bg.kind === 'pdf') {
+        pdfAssets.add(bg.assetId);
+        continue;
+      }
+      const plan = rasterPlan(bg, frame, quality, budgets[i]);
+      if (!plan) continue;
+      const format = outputFormat(bg, quality);
+      const source = mimeForAsset(bg.assetId);
+      if (bg.kind === 'image' && plan.unchanged && (source === 'image/jpeg') === (format === 'jpg')) {
+        bytes += file.length;
+        continue;
+      }
+      const sourceBpp = file.length / (bg.pxSize.w * bg.pxSize.h);
+      let bpp: number;
+      if (bg.kind === 'svg') bpp = format === 'jpg' ? JPEG60_LINEART : SVG_PNG;
+      else if (source === 'image/jpeg') bpp = (sourceBpp * jpegSizeFactor(q.jpeg)) / jpegSizeFactor(jpegQualityOf(file));
+      else bpp = format === 'jpg' ? Math.min(JPEG60_LINEART, sourceBpp) : sourceBpp;
+      bytes += plan.outPx * bpp;
     }
-    const sourceBpp = file.length / (bg.pxSize.w * bg.pxSize.h);
-    let bpp: number;
-    if (bg.kind === 'svg') bpp = format === 'jpg' ? JPEG60_LINEART : SVG_PNG;
-    else if (source === 'image/jpeg') bpp = (sourceBpp * jpegSizeFactor(q.jpeg)) / jpegSizeFactor(jpegQualityOf(file));
-    else bpp = format === 'jpg' ? Math.min(JPEG60_LINEART, sourceBpp) : sourceBpp;
-    bytes += plan.outPx * bpp;
   }
   for (const id of pdfAssets) bytes += assets[id]?.length ?? 0;
   const rows = (appendix.stands && profile.appendix.stands ? pages.reduce((n, p) => n + p.stands.length, 0) : 0) + (appendix.infra && profile.appendix.infra ? pages.reduce((n, p) => n + p.infra.length, 0) : 0);

@@ -36,7 +36,7 @@ const SIZES = [
 ];
 const CONNECTIONS = [null, '230V', 'CEE16', 'CEE32'];
 
-const layers = () => Object.fromEntries(['background', 'areas', 'free', 'stands', 'infra', 'labels', 'sheet'].map((id) => [id, { visible: true, locked: false }]));
+const layers = () => Object.fromEntries(['background', 'areas', 'free', 'stands', 'infra', 'neighbours', 'labels', 'sheet'].map((id) => [id, { visible: true, locked: false }]));
 
 function page(id, name, prefix) {
   return {
@@ -174,6 +174,6 @@ const project = {
 const total = project.pages.reduce((n, p) => n + p.stands.length, 0);
 if (total !== 500) throw new Error(`Erwartet 500 Stände, erzeugt ${total}`);
 
-const file = { format: 'schelmeplaner', schemaVersion: 16, project };
+const file = { format: 'schelmeplaner', schemaVersion: 17, project };
 writeFileSync(out, zipSync({ 'project.json': [strToU8(JSON.stringify(file, null, 2)), { level: 6 }] }, { mtime: new Date('2026-01-01T00:00:00Z') }));
 console.warn(`${out}: ${total} Stände auf ${project.pages.length} Festplätzen`);

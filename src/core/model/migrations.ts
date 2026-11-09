@@ -32,10 +32,11 @@
  *  15  Zusammengesetzte Form (#16): Geschäft `parts` (eigene Form) und `frontOverride` (Frontmeter von Hand),
  *      Formvorlage `occupies` („belegt wie gezeichnet“), Teil einer Form `rot` (Drehung je Teil).
  *  16  Festplatz-Verbund (#15): Projekt `groups` (Verbünde mit Mitgliedern, Blatt, Papier-Elementen, Ebenen, Ansicht).
+ *  17  Nachbarn im PDF (#15 Teil c): Ebene `neighbours` („Nachbarn“) je Page und je Verbund.
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 16;
+export const CURRENT_SCHEMA_VERSION = 17;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -190,7 +191,22 @@ export const MIGRATIONS: Record<number, Migration> = {
   }),
   /** 15 → 16 (#15): Noch kein Festplatz-Verbund; jede Page steht für sich. */
   15: (p) => ({ groups: [], ...p }),
+  /**
+   * 16 → 17 (#15 Teil c): Ebene „Nachbarn“ je Page und Verbund, sichtbar und nicht gesperrt (Nachbarn waren bisher auf
+   * den Ebenen „Geschäfte“ bzw. „Infrastruktur“ sichtbar; so bleibt die Darstellung gleich).
+   */
+  16: (p) => ({
+    ...p,
+    pages: mapList(p.pages, withNeighbourLayer),
+    ...('groups' in p ? { groups: mapList(p.groups, withNeighbourLayer) } : {}),
+  }),
 };
+
+/** Ebene `neighbours` ergänzen, eine vorhandene bleibt (16 → 17). */
+function withNeighbourLayer(x: unknown): unknown {
+  if (!isObj(x) || !isObj(x.layers)) return x;
+  return { ...x, layers: { neighbours: { visible: true, locked: false }, ...x.layers } };
+}
 
 export function migrate(project: unknown, fromVersion: number): unknown {
   let p = project;

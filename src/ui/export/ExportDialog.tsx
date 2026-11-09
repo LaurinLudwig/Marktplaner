@@ -18,8 +18,8 @@ import {
 } from '../../core/exportProfiles';
 import { fmt } from '../../core/format';
 import { SCALE_LIMITS, TARGET_WIDTH_LIMITS } from '../../core/model/schema';
-import type { FestplatzPage } from '../../core/model/types';
 import { exportFrame } from '../../core/paper';
+import { exportEntries, type ExportEntry } from '../../core/pdf/exportDoc';
 import { exceedsPdfLimit, isFreeFormat, paperSizeText, PDF_MAX_MM, sheetLabel } from '../../core/sheet';
 import { addProfile, deleteProfile, loadExportSettings, resetProfile, selectProfile, setExportDpi, updateProfile, useExportSettings } from '../../state/exportSettings';
 import { fixSheetScale, setSheet } from '../../state/paper';
@@ -34,6 +34,7 @@ import { TextField } from '../panels/TextField';
  * Export-Dialog (M8-09, spec.md §9): Profil (mit „Profile verwalten …“), Umfang, Anhang, Raster-Auflösung, Blatt je
  * Page und Vorschau. Die Vorschau ist das echte PDF der gewählten Page (Rasterbilder mit 72 dpi), mit pdf.js gezeichnet.
  * Änderungen am Blatt gelten für die Page (Undo-Schritt); Profile gelten für diesen Rechner (kein Undo).
+ * Gesamtansichten von Verbünden („Unterstadt (gesamt)“, #15 Teil c) sind eigene Seiten mit dem Blatt des Verbunds.
  */
 export function ExportDialog() {
   const open = useExportUi((s) => s.open);
@@ -54,6 +55,8 @@ function ExportDialogBody() {
   const [today] = useState(() => new Date());
   const exportRef = useRef<HTMLButtonElement>(null);
   const pages = scopePages(project, scope);
+  const entries = useMemo(() => exportEntries(project), [project]);
+  const hasOverviews = entries.some((e) => e.verbund);
   const all = scope.pageIds === null;
 
   useEffect(() => {
@@ -70,8 +73,9 @@ function ExportDialogBody() {
   }, []);
 
   const togglePage = (id: string, on: boolean) => {
-    const current = scope.pageIds ?? project.pages.map((p) => p.id);
-    const next = on ? project.pages.map((p) => p.id).filter((x) => x === id || current.includes(x)) : current.filter((x) => x !== id);
+    const refs = entries.map((e) => e.ref);
+    const current = scope.pageIds ?? refs;
+    const next = on ? refs.filter((x) => x === id || current.includes(x)) : current.filter((x) => x !== id);
     setExportScope({ pageIds: next });
   };
   const assets = useStore((s) => s.assets);
@@ -112,22 +116,22 @@ function ExportDialogBody() {
               <legend>Umfang</legend>
               <label className="check">
                 <input type="radio" name="ex-scope" checked={all} onChange={() => setExportScope({ pageIds: null })} />
-                Gesamtplan (alle Festplätze in Tab-Reihenfolge)
+                {hasOverviews ? 'Gesamtplan (alle Festplätze und Gesamtansichten in Tab-Reihenfolge)' : 'Gesamtplan (alle Festplätze in Tab-Reihenfolge)'}
               </label>
               <label className="check">
                 <input type="radio" name="ex-scope" checked={!all} onChange={() => setExportScope({ pageIds: [previewPageId ?? project.pages[0]!.id] })} />
                 Auswahl
               </label>
               <div className="export-pages" role="list">
-                {project.pages.map((p) => (
+                {entries.map((e) => (
                   <PageRow
-                    key={p.id}
-                    page={p}
-                    checked={all || scope.pageIds!.includes(p.id)}
+                    key={e.ref}
+                    entry={e}
+                    checked={all || scope.pageIds!.includes(e.ref)}
                     disabled={all}
-                    previewed={p.id === previewPageId}
+                    previewed={e.ref === previewPageId}
                     profile={profile}
-                    onToggle={(on) => togglePage(p.id, on)}
+                    onToggle={(on) => togglePage(e.ref, on)}
                   />
                 ))}
               </div>
@@ -189,23 +193,25 @@ function profileSummary(p: ExportProfile): string {
 }
 
 /**
- * Zeile je Page: Häkchen, Name (Klick = Vorschau) und Blatt (Format, Ausrichtung, Maßstab bzw. Zielbreite), darunter
- * das Papiermaß in mm (#13) und gegebenenfalls die Warnung für Seiten über 5 080 mm.
+ * Zeile je Seite (Page oder Gesamtansicht eines Verbunds, #15 Teil c): Häkchen, Name (Klick = Vorschau) und Blatt
+ * (Format, Ausrichtung, Maßstab bzw. Zielbreite), darunter das Papiermaß in mm (#13) und gegebenenfalls die Warnung für
+ * Seiten über 5 080 mm. Die Gesamtansicht zeigt und ändert das Blatt des Verbunds.
  */
-function PageRow({ page, checked, disabled, previewed, profile, onToggle }: { page: FestplatzPage; checked: boolean; disabled: boolean; previewed: boolean; profile: ExportProfile; onToggle: (on: boolean) => void }) {
+function PageRow({ entry, checked, disabled, previewed, profile, onToggle }: { entry: ExportEntry; checked: boolean; disabled: boolean; previewed: boolean; profile: ExportProfile; onToggle: (on: boolean) => void }) {
   const project = useStore((s) => s.project);
+  const { page, name } = entry;
   const s = page.sheet;
   const auto = s.scale === null;
   const free = isFreeFormat(s.format);
   // Maß und Maßstab wie im PDF: Die Legende folgt den Ebenen des Profils (beim Plan ändert das das Papiermaß)
   const frame = exportFrame(page, project, profile);
   return (
-    <div className={`export-page${previewed ? ' previewed' : ''}`} role="listitem" data-testid="export-page">
-      <input type="checkbox" aria-label={`${page.name} exportieren`} checked={checked} disabled={disabled} onChange={(e) => onToggle(e.target.checked)} />
-      <button type="button" className="export-page-name" aria-pressed={previewed} onClick={() => setPreviewPage(page.id)} title="Vorschau zeigen">
-        {page.name}
+    <div className={`export-page${previewed ? ' previewed' : ''}${entry.verbund ? ' overview' : ''}`} role="listitem" data-testid="export-page" data-ref={entry.ref}>
+      <input type="checkbox" aria-label={`${name} exportieren`} checked={checked} disabled={disabled} onChange={(e) => onToggle(e.target.checked)} />
+      <button type="button" className="export-page-name" aria-pressed={previewed} onClick={() => setPreviewPage(entry.ref)} title="Vorschau zeigen">
+        {name}
       </button>
-      <SheetFormatSelect page={page} ariaLabel={`Format ${page.name}`} />
+      <SheetFormatSelect page={page} ariaLabel={`Format ${name}`} />
       {free ? (
         <NumberField
           id={`ex-width-${page.id}`}
@@ -220,7 +226,7 @@ function PageRow({ page, checked, disabled, previewed, profile, onToggle }: { pa
           onCommit={(n) => setSheet(page.id, { targetWidth: n })}
         />
       ) : (
-        <select aria-label={`Ausrichtung ${page.name}`} value={s.orientation} onChange={(e) => setSheet(page.id, { orientation: e.target.value as 'portrait' | 'landscape' })}>
+        <select aria-label={`Ausrichtung ${name}`} value={s.orientation} onChange={(e) => setSheet(page.id, { orientation: e.target.value as 'portrait' | 'landscape' })}>
           <option value="landscape">quer</option>
           <option value="portrait">hoch</option>
         </select>
@@ -228,7 +234,7 @@ function PageRow({ page, checked, disabled, previewed, profile, onToggle }: { pa
       <label className="check" title={free ? 'Maßstab über Zielbreite' : 'An Seite anpassen'}>
         <input
           type="checkbox"
-          aria-label={free ? `${page.name}: Maßstab über Zielbreite` : `${page.name}: an Seite anpassen`}
+          aria-label={free ? `${name}: Maßstab über Zielbreite` : `${name}: an Seite anpassen`}
           checked={auto}
           onChange={(e) => (e.target.checked ? setSheet(page.id, { scale: null }) : fixSheetScale(page.id))}
         />
@@ -374,13 +380,15 @@ function Preview({ pageId, profile }: { pageId: string | null; profile: ExportPr
   }, [request]);
   const busy = result?.for !== request;
   const error = !busy ? result?.error : null;
-  const page = project.pages.find((p) => p.id === pageId);
+  // Page oder Gesamtansicht eines Verbunds (#15 Teil c)
+  const entry = useMemo(() => exportEntries(project).find((e) => e.ref === pageId), [project, pageId]);
+  const page = entry?.page;
   // Maß und Maßstab der Seite im PDF (Ebenen des Profils, wie die Vorschau selbst)
   const frame = page && exportFrame(page, project, profile);
   return (
     <div className="export-preview" aria-label="Vorschau" data-testid="export-preview" data-state={busy ? 'busy' : error ? 'error' : 'ok'}>
       <div className="export-preview-head">
-        Vorschau: {page?.name}
+        Vorschau: {entry?.name}
         {page && frame && (
           <span className="hint" data-testid="export-preview-size">
             {' '}

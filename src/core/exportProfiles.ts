@@ -42,8 +42,11 @@ export const FIELD_PLACEHOLDER: Record<StandField, string | null> = {
   fee: null,
 };
 
-/** Ebenen, die ein Profil schalten kann. */
-export const PROFILE_LAYERS = ['background', 'grid', 'areas', 'free', 'stands', 'infra', 'labels'] as const;
+/**
+ * Ebenen, die ein Profil schalten kann. `neighbours` (#15 Teil c): Nachbarn aus dem Festplatz-Verbund im PDF einer
+ * Einzelansicht, blass mit „Nr · Platz“ (Stände nur mit „Geschäfte“, Infrastruktur nur mit „Infrastruktur“).
+ */
+export const PROFILE_LAYERS = ['background', 'grid', 'areas', 'free', 'stands', 'infra', 'neighbours', 'labels'] as const;
 export type ProfileLayer = (typeof PROFILE_LAYERS)[number];
 
 export const PROFILE_LAYER_LABEL: Record<ProfileLayer, string> = {
@@ -53,6 +56,7 @@ export const PROFILE_LAYER_LABEL: Record<ProfileLayer, string> = {
   free: 'Freiflächen',
   stands: 'Geschäfte',
   infra: 'Infrastruktur',
+  neighbours: 'Nachbarn',
   labels: 'Beschriftung',
 };
 
@@ -76,7 +80,11 @@ export interface ExportProfile {
 
 const allLayers = (on: boolean) => Object.fromEntries(PROFILE_LAYERS.map((l) => [l, on])) as Record<ProfileLayer, boolean>;
 
-/** Mitgeliefert (§9): bearbeitbar, „Zurücksetzen“ stellt diesen Stand her, nicht löschbar. */
+/**
+ * Mitgeliefert (§9): bearbeitbar, „Zurücksetzen“ stellt diesen Stand her, nicht löschbar. „Nachbarn“ (#15 Teil c) ist in
+ * allen an: Im alten Illustrator-Plan standen Nachbarstände auf beiden Plätzen, sie helfen bei der Orientierung an der
+ * Platzgrenze, und sie zeigen nur „Nr · Platz“ bzw. den Namen – beides nur, soweit das Profil die Felder erlaubt.
+ */
 export const BUILTIN_PROFILES: readonly ExportProfile[] = [
   {
     id: 'internal',
@@ -121,7 +129,11 @@ export function newProfile(name: string, from?: ExportProfile): ExportProfile {
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Ein gespeichertes Profil prüfen; fehlende oder unbekannte Angaben gelten als nicht erlaubt bzw. aus. */
+/**
+ * Ein gespeichertes Profil prüfen; fehlende oder unbekannte Angaben gelten als nicht erlaubt bzw. aus. Ausnahme: Profile
+ * von vor #15 Teil c kennen die Ebene „Nachbarn“ nicht; sie folgt dort der Ebene „Geschäfte“ (Nachbarn sind Stände
+ * anderer Plätze; welche Felder sie zeigen, regeln weiter die erlaubten Felder).
+ */
 export function normalizeProfile(raw: unknown): ExportProfile | null {
   if (!isObj(raw) || typeof raw.id !== 'string' || !raw.id) return null;
   const layers = isObj(raw.layers) ? raw.layers : {};
@@ -132,7 +144,7 @@ export function normalizeProfile(raw: unknown): ExportProfile | null {
     id: raw.id,
     builtin,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : (builtinProfile(raw.id)?.name ?? 'Profil'),
-    layers: Object.fromEntries(PROFILE_LAYERS.map((l) => [l, layers[l] === true])) as Record<ProfileLayer, boolean>,
+    layers: Object.fromEntries(PROFILE_LAYERS.map((l) => [l, l === 'neighbours' && !('neighbours' in layers) ? layers.stands === true : layers[l] === true])) as Record<ProfileLayer, boolean>,
     warnings: raw.warnings === 'all' || raw.warnings === 'safety' ? raw.warnings : 'none',
     fields: STAND_FIELDS.filter((f) => fields.includes(f)),
     appendix: Object.fromEntries(APPENDIX_PARTS.map((a) => [a, appendix[a] === true])) as Record<AppendixPart, boolean>,

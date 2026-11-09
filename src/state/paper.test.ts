@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createProject, LEGACY_SHEET } from '../core/model/defaults';
+import { createPage, createProject, createVerbund, LEGACY_SHEET } from '../core/model/defaults';
 import { createArea } from '../core/objects';
 import { pagePaper } from '../core/paper';
-import { moveSheetTo, nudgePaper, setSheet, setSheetRegion } from './paper';
+import { verbundRef } from '../core/verbund';
+import { pageView } from '../core/verbundView';
+import { moveSheetTo, nudgePaper, placeTitleBlock, setPaperAnchor, setPaperVisible, setSheet, setSheetRegion, setTitleBlockText } from './paper';
+import { setLayer } from './pageSettings';
 import { useStore } from './store';
 
 /** Blatt umschalten, verschieben, Ausschnitt (#13): Befehle der Seitenleiste und der Zeichenfläche. */
@@ -68,5 +71,78 @@ describe('Blatt umschalten (#13)', () => {
     setSheet(pg().id, { ...LEGACY_SHEET, scale: 500 });
     moveSheetTo(pg().id, { x: 1, y: 2 });
     expect(pg().sheet).toMatchObject({ cx: 1, cy: 2 });
+  });
+});
+
+describe('Blatt der Gesamtansicht eines Verbunds (#15 Teil c)', () => {
+  const REF = verbundRef('g');
+  const g = () => st().project.groups[0]!;
+  const view = () => pageView(st().project, REF)!;
+  const labels = () => st().history.past.map((h) => h.label);
+
+  beforeEach(() => {
+    const p = createProject('T');
+    const a = { ...createPage('Müllerwiese'), id: 'A', areas: [createArea({ cx: 10, cy: 5, w: 20, d: 10, rot: 0 })] };
+    const b = { ...createPage('Ziegelturm'), id: 'B', areas: [createArea({ cx: 40, cy: 5, w: 20, d: 10, rot: 0 })] };
+    p.pages = [a, b];
+    p.groups = [{ ...createVerbund('Unterstadt', ['A', 'B']), id: 'g' }];
+    st().loadBundle({ project: p, assets: {} }, { path: null, name: null });
+    st().setUi({ activePage: REF });
+  });
+
+  it('Format, Maßstab und Ausschnitt landen im Verbund, nicht in den Mitgliedern; je ein Undo-Schritt', () => {
+    const pagesBefore = st().project.pages;
+    // „Plan“ (Vorgabe): Inhalt sind beide Mitglieder
+    const plan = pagePaper(view(), st().project).frame;
+    expect(plan.bounds.minX).toBeLessThan(0);
+    expect(plan.bounds.maxX).toBeGreaterThan(50);
+    setSheet(REF, { format: 'A2' });
+    expect(g().sheet.format).toBe('A2');
+    expect(view().sheet).toBe(g().sheet);
+    setSheet(REF, { scale: 750 });
+    // Beim Wechsel auf einen festen Maßstab wird die Mitte des angepassten Blatts übernommen (etwa die Mitte beider
+    // Plätze; die Papier-Elemente verschieben sie leicht)
+    expect(g().sheet.scale).toBe(750);
+    expect(g().sheet.cx).toBeCloseTo(25, 0);
+    expect(g().sheet.cy).toBeCloseTo(5, 0);
+    moveSheetTo(REF, { x: 30, y: 6 });
+    expect(g().sheet).toMatchObject({ cx: 30, cy: 6 });
+    setSheetRegion(REF, { minX: 0, minY: 0, maxX: 60, maxY: 20 });
+    expect(g().sheet).toMatchObject({ format: 'region', region: { cx: 30, cy: 10, w: 60, h: 20 } });
+    expect(st().project.pages).toBe(pagesBefore);
+    expect(labels()).toEqual(['Papierformat ändern', 'Maßstab ändern', 'Blatt verschieben', 'Ausschnitt ändern']);
+    for (let i = 0; i < 4; i++) st().undo();
+    expect(g().sheet.format).toBe('plan');
+    st().redo();
+    expect(g().sheet.format).toBe('A2');
+  });
+
+  it('Papier-Elemente: Sichtbarkeit, Lage, Freitext, Schriftfeld setzen und Pfeiltasten am Verbund (Undo)', () => {
+    setPaperVisible(REF, 'legend', false);
+    expect(g().legend.visible).toBe(false);
+    setPaperAnchor(REF, 'titleBlock', { corner: 'tl', dx: 12, dy: 15 });
+    expect(g().titleBlock).toMatchObject({ corner: 'tl', dx: 12, dy: 15 });
+    setTitleBlockText(REF, 'Übersichtsplan');
+    expect(g().titleBlockText).toBe('Übersichtsplan');
+    placeTitleBlock(REF, { corner: 'br', dx: 20, dy: 20 });
+    expect(g().titleBlock).toMatchObject({ corner: 'br', dx: 20, dy: 20, visible: true });
+    expect(st().ui.selection).toEqual({ kind: 'paper', element: 'titleBlock' });
+    nudgePaper(0, -1);
+    expect(g().titleBlock.dy).toBe(21);
+    // Mitglieder unverändert
+    for (const p of st().project.pages) {
+      expect(p.legend.visible).toBe(true);
+      expect(p.titleBlockText).toBe('');
+    }
+    expect(labels()).toEqual(['Legende ausblenden', 'Schriftfeld verschieben', 'Freitext des Schriftfelds ändern', 'Schriftfeld setzen', 'Schriftfeld verschieben']);
+    for (let i = 0; i < 5; i++) st().undo();
+    expect(g()).toMatchObject({ titleBlockText: '', legend: { visible: true }, titleBlock: { corner: 'br', dx: 10, dy: 10 } });
+  });
+
+  it('Ebene „Blatt“ des Verbunds lässt sich ausblenden (Ansichtseinstellung wie bei einer Page)', () => {
+    setLayer(REF, 'sheet', { visible: false });
+    expect(g().layers.sheet.visible).toBe(false);
+    expect(view().layers.sheet.visible).toBe(false);
+    expect(st().project.pages.every((p) => p.layers.sheet.visible)).toBe(true);
   });
 });

@@ -12,7 +12,7 @@ import type { Project } from '../core/model/types';
 import { buildExport, type ExportRequest } from '../core/pdf/exportDoc';
 import { writePdf, type PdfFonts, type PreparedBackground } from '../core/pdf/writePdf';
 import { iconPath } from '../ui/icons/infraIconPaths';
-import { engineJpegQuality, offscreenCanvasFor, prepareBackground } from './pdfBackground';
+import { backgroundKey, engineJpegQuality, offscreenCanvasFor, prepareBackground, rasterBudgets } from './pdfBackground';
 
 export interface ExportJob {
   id: number;
@@ -21,7 +21,7 @@ export interface ExportJob {
   req: ExportRequest;
   /** Eingebettete Dateien der Hintergründe (nur die benötigten). */
   assets: Record<string, Uint8Array>;
-  /** Auf dem Hauptthread vorbereitete Hintergründe (SVG), je Page-ID. */
+  /** Auf dem Hauptthread vorbereitete Hintergründe (SVG), je `backgroundKey(Seite, Besitzer-Page)`. */
   prepared: Record<string, PreparedBackground | null>;
   dpi: ExportDpi | number;
 }
@@ -42,24 +42,31 @@ self.addEventListener('message', async (e: MessageEvent<ExportJob>) => {
   try {
     const content = buildExport(job.project, job.profile, job.req);
     const jpegQuality = await engineJpegQuality(rasterQuality(job.dpi).jpeg);
-    const withBg = content.scenes.filter((s) => s.background).length;
+    const withBg = content.scenes.reduce((n, s) => n + s.backgrounds.length, 0);
     let prepDone = 0;
     // Anteile: Hintergründe 40 %, Pages und Anhang 55 %, Speichern 5 %
     const pages = [];
     for (const scene of content.scenes) {
-      const bg = scene.background;
-      let background: PreparedBackground | null = null;
-      if (bg) {
+      // Gesamtansicht (#15 Teil c): ein Hintergrund je Mitglied, zusammen höchstens die Pixel einer Seite
+      const budgets = rasterBudgets(
+        scene.backgrounds.map((b) => b.background),
+        scene.frame,
+        job.dpi,
+      );
+      const backgrounds: (PreparedBackground | null)[] = [];
+      for (const [i, { pageId, background: bg }] of scene.backgrounds.entries()) {
         post({ type: 'progress', id: job.id, share: (0.4 * prepDone) / Math.max(1, withBg), label: `Hintergrund ${scene.name}` });
-        background =
-          scene.pageId in job.prepared
-            ? job.prepared[scene.pageId]!
+        const key = backgroundKey(scene.pageId, pageId);
+        backgrounds.push(
+          key in job.prepared
+            ? job.prepared[key]!
             : bg.kind === 'svg'
               ? null
-              : await prepareBackground(bg, job.assets[bg.assetId], scene.frame, job.dpi, offscreenCanvasFor, jpegQuality);
+              : await prepareBackground(bg, job.assets[bg.assetId], scene.frame, job.dpi, offscreenCanvasFor, jpegQuality, budgets[i]),
+        );
         prepDone++;
       }
-      pages.push({ scene, background });
+      pages.push({ scene, backgrounds });
     }
     const n = content.scenes.length;
     const bytes = await writePdf({

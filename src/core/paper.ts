@@ -9,6 +9,7 @@ import type { FestplatzPage, LayerId, LayerState, PaperAnchor, Project, Vec } fr
 import { NORTH_ARROW_SIZE, SCALE_BAR_SIZE, scaleBarLayout, type ScaleBarLayout } from './scene/paper';
 import { anchorToWorld, backgroundBounds, formatText, mmToM, sheetFrame, titleBlockLayout, type SheetElement, type SheetFrame, type TitleBlockLayout } from './sheet';
 import type { Bounds } from './viewport';
+import { viewBackgrounds } from './verbundView';
 
 export type PaperKind = 'titleBlock' | 'legend' | 'scaleBar' | 'northArrow';
 export const PAPER_KINDS: readonly PaperKind[] = ['titleBlock', 'legend', 'scaleBar', 'northArrow'];
@@ -50,6 +51,11 @@ export function paperElement(pp: PagePaper, kind: PaperKind): PaperElement<{ w: 
 /**
  * Blatt und Papier-Elemente der Page. `layers` = sichtbare Ebenen (Zeichenfläche: die der Page; PDF: die des
  * Export-Profils); `freeShown` aus der Freiflächen-Berechnung des Aufrufers (sonst neu berechnet).
+ *
+ * Gesamtansicht eines Verbunds (#15 Teil c): `page` ist die `mergedPage` bzw. `pageView` (Blatt, Papier-Elemente und
+ * Ebenen des Verbunds, Objekte aller Mitglieder, Nordrichtung des ersten Mitglieds); der Inhalt eines angepassten
+ * Blatts bzw. eines Plans sind alle Mitglieder, ohne Objekte ihre Hintergründe (dafür `project.pages`/`groups`). Im
+ * Schriftfeld steht als Festplatz der Name des Verbunds.
  */
 export function pagePaper(page: FestplatzPage, project: ProjectPart, layers: Record<LayerId, LayerState> = page.layers, freeShown?: boolean): PagePaper {
   const tb = (scale: number, format: string) =>
@@ -81,7 +87,7 @@ export function pagePaper(page: FestplatzPage, project: ProjectPart, layers: Rec
         [page.northArrow, NORTH_ARROW_SIZE],
       ] as [PaperAnchor, { w: number; h: number } | null][]
     ).flatMap(([a, size]) => (a.visible && size ? [{ corner: a.corner, dx: a.dx, dy: a.dy, w: size.w, h: size.h }] : []));
-  const frame = sheetFrame(page, backgroundBounds(page), elements);
+  const frame = sheetFrame(page, viewBackgroundBounds(page, project), elements);
   const lLayout = legendFor(frame.layoutHeight);
   const tLayout = tb(frame.scale, formatText(page.sheet, frame.paper));
   const sLayout = scaleBarLayout(frame.scale);
@@ -93,6 +99,19 @@ export function pagePaper(page: FestplatzPage, project: ProjectPart, layers: Rec
     scaleBar: { layout: sLayout, anchor: page.scaleBar, topLeft: anchorToWorld(frame, page.scaleBar, sLayout) },
     northArrow: { layout: nLayout, anchor: page.northArrow, topLeft: anchorToWorld(frame, page.northArrow, nLayout) },
   };
+}
+
+/**
+ * Hüllrechteck der Hintergründe einer Page; in der Gesamtansicht eines Verbunds (#15 Teil c) über die Hintergründe
+ * aller Mitglieder (Inhalt des Blatts, wenn es keine Objekte gibt).
+ */
+export function viewBackgroundBounds(page: FestplatzPage, project: Partial<Pick<Project, 'pages' | 'groups'>>): Bounds | null {
+  let out: Bounds | null = null;
+  for (const { background } of viewBackgrounds(project, page)) {
+    const b = backgroundBounds({ background })!;
+    out = out ? { minX: Math.min(out.minX, b.minX), minY: Math.min(out.minY, b.minY), maxX: Math.max(out.maxX, b.maxX), maxY: Math.max(out.maxY, b.maxY) } : b;
+  }
+  return out;
 }
 
 /** Umriss eines sichtbaren Papier-Elements auf dem Plan (Meter), sonst null. */
