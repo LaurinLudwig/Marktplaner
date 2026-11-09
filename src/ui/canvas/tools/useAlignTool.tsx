@@ -82,16 +82,17 @@ export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & 
   /** Nächster Punkt der 2-Punkt-Ausrichtung: gerade Anzahl = Punkt auf diesem Plan, ungerade = auf dem Referenzplan. */
   const nextOwn = (two?.pts.length ?? 0) % 2 === 0;
 
+  /** 2-Punkt-Ausrichtung und Drehfeld: Drehung und Verschiebung ungerundet (nur Gleitkomma-Reste entfallen). */
   const apply = (t: PageTransform, what: string) => {
     if (!member) return;
     clearPreview();
-    if (movePageContent(member.id, t)) notify(`${member.name} ${what}. Rückgängig mit Strg/Cmd+Z.`, 'success');
+    if (movePageContent(member.id, t, { precise: true })) notify(`${member.name} ${what}. Rückgängig mit Strg/Cmd+Z.`, 'success');
   };
 
   const rotate = () => {
     const v = parseNum(rotText);
     if (!member || !Number.isFinite(v) || !v) return;
-    apply({ dx: 0, dy: 0, rot: v, pivot: pagePivot(member) }, `um ${fmt(v, 1)}° gedreht`);
+    apply({ dx: 0, dy: 0, rot: v, pivot: pagePivot(member) }, `um ${fmt(v, 3)}° gedreht`);
     setRotText('');
   };
 
@@ -226,7 +227,7 @@ export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & 
         {r ? (
           <>
             <span className="tool-panel-note" data-testid="align-result">
-              Drehung {fmt(r.rot, 1)}° · Verschiebung {fmt(r.t.dx)} / {fmt(r.t.dy)} m
+              Drehung {fmt(r.rot, 3)}° · Verschiebung {fmt(r.t.dx)} / {fmt(r.t.dy)} m
               {r.deviation > ALIGN_DEVIATION_HINT && (
                 <>
                   {' '}

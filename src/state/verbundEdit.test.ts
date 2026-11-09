@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createPage, createProject, createVerbund } from '../core/model/defaults';
 import type { Area, FestplatzPage, Project, Stand } from '../core/model/types';
 import { createArea, createStand } from '../core/objects';
-import { applyTransform, verbundRef } from '../core/verbund';
+import { applyTransform, pageEnv, verbundRef } from '../core/verbund';
+import { decodeProjectFile, encodeProjectFile } from '../core/fileFormat';
+import { cachedWarningData, countWarnings } from '../core/warnings';
 import { twoPointTransform } from '../core/verbundView';
 import {
   activePage,
@@ -236,6 +238,81 @@ describe('#15 Ausrichten', () => {
     expect(ar.cx).toBeCloseTo(expected.x, 1);
     expect(ar.cy).toBeCloseTo(expected.y, 1);
     expect(ar.rot).toBe(90);
+  });
+});
+
+describe('#15 Ausrichten: Genauigkeit und Speichern', () => {
+  /** Starre Bewegung wie `applyTransform`, für die erwarteten Zielpunkte. */
+  const truth = { dx: 37.21, dy: -12.807, rot: 3.7234, pivot: { x: 0, y: 0 } };
+
+  it('2-Punkt-Ausrichtung mit Punkten in 200 m Abstand trifft beide Paare auf ≤ 0,005 m (Drehung nicht auf 0,1° gerundet)', () => {
+    // Zwei Marker-Stände auf dem Ziegelturm, 200 m auseinander
+    s().change('Marker', (p) => {
+      p.pages[1]!.stands.push(stand('m1', 30, 5), stand('m2', 230, 5));
+    });
+    const a1 = { x: 30, y: 5 };
+    const a2 = { x: 230, y: 5 };
+    const b1 = applyTransform(truth, a1);
+    const b2 = applyTransform(truth, a2);
+    const r = twoPointTransform(a1, a2, b1, b2)!;
+    expect(r.deviation).toBeLessThan(1e-9);
+    const before = past();
+    expect(movePageContent('B', r.t, { precise: true })).toBe(true);
+    expect(past()).toBe(before + 1);
+    const m = (id: string) => pageById('B').stands.find((x) => x.id === id)!;
+    expect(Math.hypot(m('m1').cx - b1.x, m('m1').cy - b1.y)).toBeLessThanOrEqual(0.005);
+    expect(Math.hypot(m('m2').cx - b2.x, m('m2').cy - b2.y)).toBeLessThanOrEqual(0.005);
+    expect(m('m1').rot).toBeCloseTo(3.7234, 6);
+    // Zum Vergleich: mit der Rundung von „Lage“ (0,1°) läge der ferne Punkt deutlich daneben
+    s().undo();
+    movePageContent('B', r.t);
+    expect(Math.hypot(m('m2').cx - b2.x, m('m2').cy - b2.y)).toBeGreaterThan(0.01);
+  });
+
+  it('bündige Stände bleiben nach der feinen Drehung ohne Warnung', () => {
+    // 20 bündige Stände auf der Grundfläche des Ziegelturms (x 15–35 → hier eigene, längere Grundfläche)
+    s().change('bündig', (p) => {
+      const pg = p.pages[1]!;
+      pg.areas = [area('aL', 60, -5, 90, 10)];
+      pg.stands = Array.from({ length: 20 }, (_, i) => ({ ...stand(`b${i}`, 16.5 + 3 * i, -1.5) }));
+    });
+    const p0 = s().project;
+    const count = (pg: FestplatzPage) => countWarnings(cachedWarningData(pg.stands, pg.infra, pageEnv(p0, pg), p0).page, pg.stands, p0.settings);
+    expect(count(pageById('B'))).toMatchObject({ outside: 0, overlap: 0 });
+    for (const rot of [0.0137, 17.3456, 123.4567, 271.98765]) {
+      expect(movePageContent('B', { dx: 12.3456, dy: -7.891, rot, pivot: { x: 60.123, y: -5 } }, { precise: true })).toBe(true);
+      const p = s().project;
+      const pg = pageById('B');
+      const w = cachedWarningData(pg.stands, pg.infra, pageEnv(p, pg), p);
+      expect(countWarnings(w.page, pg.stands, p.settings), `${rot}°`).toMatchObject({ outside: 0, overlap: 0 });
+      s().undo();
+    }
+  });
+
+  it('feine Drehung bleibt beim Speichern und Laden erhalten (Objekte, Hintergrund, Nordrichtung)', () => {
+    s().change('Hintergrund', (p) => {
+      p.pages[1]!.background = {
+        assetId: 'bg.png',
+        fileName: 'plan.png',
+        kind: 'image',
+        pxSize: { w: 1000, h: 800 },
+        transform: { x: 0, y: 0, rot: 0, metersPerPx: 0.1 },
+        opacity: 1,
+        locked: true,
+      } as FestplatzPage['background'];
+    });
+    expect(movePageContent('B', { dx: 1.2345, dy: 0, rot: 3.7234, pivot: { x: 25, y: 5 } }, { precise: true })).toBe(true);
+    const saved = projectForSave(s());
+    const loaded = decodeProjectFile(encodeProjectFile({ project: saved, assets: { 'bg.png': new Uint8Array([1]) } })).project;
+    const before = saved.pages.find((p) => p.id === 'B')!;
+    const after = loaded.pages.find((p) => p.id === 'B')!;
+    expect(after.stands.map((x) => [x.cx, x.cy, x.rot])).toEqual(before.stands.map((x) => [x.cx, x.cy, x.rot]));
+    expect(after.areas.map((x) => [x.cx, x.cy, x.rot])).toEqual(before.areas.map((x) => [x.cx, x.cy, x.rot]));
+    expect(after.stands[0]!.rot).toBe(3.7234);
+    expect(after.northAngle).toBe(before.northAngle);
+    expect(after.northAngle).toBeCloseTo(3.7234, 8);
+    expect(after.background!.transform).toEqual(before.background!.transform);
+    expect(after.background!.transform.rot).toBeCloseTo(3.7234, 8);
   });
 });
 

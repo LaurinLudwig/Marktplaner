@@ -1029,7 +1029,8 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   keine Masken; Ebene „Hintergrund“ des Verbunds blendet alle aus, sperrbar ist dort keiner, auswählen und verschieben
   geht nur in der Einzelansicht), dazu die Objekte aller Mitglieder (wirkende Grundflächen, Stände, Infrastruktur). Es
   gibt keine Nachbarn: Alle Objekte sind bearbeitbar. Raster und Nordrichtung kommen vom ersten Mitglied, Ebenen und
-  Ansicht vom Verbund (Ansicht in `Verbund.view` gespeichert, kein Undo-Schritt). Die Ebene „Blatt“ fehlt bis zum PDF der
+  Ansicht vom Verbund (Ansicht in `Verbund.view` gespeichert, kein Undo-Schritt; hat der Verbund noch keine, passt die
+  Gesamtansicht beim ersten Öffnen Objekte und Hintergründe ins Fenster). Die Ebene „Blatt“ fehlt bis zum PDF der
   Gesamtansicht (Teil c).
 - **Bearbeiten wie in der Einzelansicht:** Auswählen (Klick, Auswahlrechteck, Alles auswählen – auch über Platzgrenzen),
   Verschieben, Größe, Drehen, Pfeiltasten, Felder der Steuerungs- und Seitenleiste, Löschen, Kopieren/Einfügen,
@@ -1063,16 +1064,22 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
 - **Ziehen** verschiebt die ganze Page samt Hintergrund (wie „Lage“): Vorschau während des Ziehens (Objekte, Hintergrund,
   Freiflächen und Warnungen live), beim Loslassen ein Undo-Schritt (Verschiebung auf 0,01 m). Ziehen auf einem Objekt
   eines anderen Platzes wählt diesen und verschiebt ihn; Bewegungen bis 3 px zählen als Klick. Esc bricht ab.
-- **Drehen um … °** (Zahlenfeld im Panel, im Uhrzeigersinn um die Mitte des Platzes wie „Lage“, auf 0,1°): Enter oder
-  „Drehen“ = ein Undo-Schritt; das Feld leert sich danach.
+- **Drehen um … °** (Zahlenfeld im Panel, im Uhrzeigersinn um die Mitte des Platzes wie „Lage“, Drehung wie eingegeben,
+  ohne Rundung auf 0,1°): Enter oder „Drehen“ = ein Undo-Schritt; das Feld leert sich danach.
 - **2-Punkt-Ausrichtung** („2 Punkte …“, Vorlage: Kalibrieren): A1 auf diesem Plan, passender Punkt B1 auf dem
   Referenzplan, dann A2 und B2. Fang an Grundflächen-Ecken und Standmitten sichtbarer Ebenen (A an diesem Platz, B an den
   anderen; Cmd/Strg = ohne Fang, z. B. für Gebäudeecken im Hintergrund). Ergebnis: Drehung um den Winkel zwischen A1→A2
   und B1→B2, Verschiebung der Mitte von A1/A2 auf die Mitte von B1/B2; der **Maßstab bleibt 1** (gleiche
   Stadtgrundkarte). Weichen die Abstände A1–A2 und B1–B2 um mehr als 0,01 m ab, nennt das Panel beide Abstände und die
-  Abweichung in m (der Fehler verteilt sich zur Hälfte auf jedes Paar). Vorschau bis „Anwenden“ (ein Undo-Schritt;
-  Drehung auf 0,1°, Verschiebung auf 0,01 m gerundet wie bei „Lage“); Esc oder „Abbrechen“ verwirft die Punkte. Fallen
-  die Punkte eines Plans zusammen, beginnt die Auswahl mit Hinweis neu.
+  Abweichung in m (der Fehler verteilt sich zur Hälfte auf jedes Paar). Vorschau bis „Anwenden“ (ein Undo-Schritt); Esc
+  oder „Abbrechen“ verwirft die Punkte. Fallen die Punkte eines Plans zusammen, beginnt die Auswahl mit Hinweis neu.
+- **Genauigkeit:** Drehfeld und 2-Punkt-Ausrichtung runden Drehung und Verschiebung nicht (nur Gleitkomma-Reste unter
+  10⁻⁸ entfallen, wie bei den bewegten Positionen): Mit 0,1° läge ein Punkt 200 m vom Drehpunkt bis etwa 0,17 m daneben;
+  so treffen beide Punktpaare auf Bruchteile eines Millimeters. Die Objekte bleiben zueinander starr (keine Rundung je
+  Objekt, also keine Fehlwarnungen). Drehungen der Objekte, des Hintergrunds und der Nordrichtung bleiben beim
+  Speichern und Laden unverändert erhalten. Wird ein Objekt danach bearbeitet (Ziehen, Felder), rundet es wie immer
+  beim Übernehmen auf 0,01 m und 0,1° (§ Begriffe). „Lage“ (Zahlenfelder in den Projekteinstellungen) und Ziehen mit
+  „Ausrichten“ runden weiter auf 0,1° bzw. 0,01 m.
 
 **PDF der Gesamtansicht** (Teil c, folgt): eigenes Blatt mit Schriftfeld und Legende des Verbunds.
 
