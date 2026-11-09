@@ -14,7 +14,7 @@ import type { TextPrim } from '../scene/prims';
 import { mergedPage, verbundRef } from '../verbund';
 import { pageView } from '../verbundView';
 import { buildExport, entryPages, exportEntries, selectedEntries } from './exportDoc';
-import { pdfjs, readPdf, testFonts, testIconPath } from './pdf.testutil';
+import { pdfjs, rawContains, readPdf, testFonts, testIconPath } from './pdf.testutil';
 import { mmToPt, writePdf } from './writePdf';
 
 /**
@@ -207,6 +207,74 @@ describe('#15 c: Export mit Gesamtansicht', () => {
     const doc = await PDFDocument.load(out);
     const forms = [...doc.context.enumerateIndirectObjects()].filter(([, o]) => o instanceof PDFRawStream && String(o.dict.get(PDFName.of('Subtype'))) === '/Form');
     expect(forms).toHaveLength(1);
+  });
+
+  it('dieselbe Datei in Gesamtansicht und Einzelansicht: im ganzen Dokument nur einmal eingebettet', async () => {
+    const p = setup();
+    p.pages[0]!.background = pdfBg('plan.pdf', -60, -40);
+    p.pages[2]!.background = pdfBg('plan.pdf', 0, -40);
+    const plan = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'plan-1zu1000.pdf')));
+    const c = buildExport(p, profile('internal'), { pageIds: [REF, 'A', 'B'], appendix: {} });
+    expect(c.scenes.map((s) => s.backgrounds.length)).toEqual([2, 1, 1]);
+    const pages = c.scenes.map((scene) => ({ scene, backgrounds: scene.backgrounds.map(({ background: bg }) => ({ kind: 'pdf' as const, key: bg.assetId, bytes: plan })) }));
+    const out = await writePdf({ title: c.title, projectName: c.projectName, pages, appendix: [], fonts: testFonts(), iconPath: testIconPath });
+    const doc = await PDFDocument.load(out);
+    expect(doc.getPageCount()).toBe(3);
+    const forms = [...doc.context.enumerateIndirectObjects()].filter(([, o]) => o instanceof PDFRawStream && String(o.dict.get(PDFName.of('Subtype'))) === '/Form');
+    expect(forms).toHaveLength(1);
+  });
+});
+
+/**
+ * Datenschutz (spec.md §9) mit Verbund: Kanarienwerte an allen Ständen beider Mitglieder. Weder die Nachbarn im
+ * Einzel-PDF („Nr · Platz“) noch die Gesamtansicht dürfen in „Sanität/Ordnungsamt“ und „Händler“ nicht erlaubte Felder
+ * zeigen, auch nicht in Rohdaten oder Lesezeichen.
+ */
+describe('#15 c: Datenschutz je Profil mit Verbund (Kanarienwerte)', () => {
+  const OWNER = 'KANARIE-EIGENTÜMER-Ölmühle';
+  const NOTE = 'KANARIE-NOTIZ-7731';
+  const WARE = 'KANARIE-WARE-Brezel';
+
+  function canaryProject(): Project {
+    const p = setup();
+    p.settings.labelTemplate = '{nr}\n{name}\n{eigentuemer}\n{ware}\n{strom} kW {anschluss}';
+    p.pages = p.pages.map((pg) => ({ ...pg, stands: pg.stands.map((s) => ({ ...s, owner: OWNER, note: NOTE, ware: WARE, powerKw: 77.7, connection: 'CEE32' as const })) }));
+    return p;
+  }
+
+  async function exportRead(p: Project, prof: ExportProfile) {
+    const c = buildExport(p, prof, { pageIds: [REF, 'A'], appendix: { stands: true, free: true, infra: true } });
+    return readPdf(await writePdf({ title: c.title, projectName: c.projectName, pages: c.scenes.map((scene) => ({ scene })), appendix: c.appendix, fonts: testFonts(), iconPath: testIconPath }));
+  }
+
+  const where = (pdf: Awaited<ReturnType<typeof readPdf>>, s: string) => {
+    const out: string[] = [];
+    if (pdf.pages.some((x) => x.text.includes(s))) out.push('Textlayer');
+    if (pdf.outline.some((t) => t.includes(s))) out.push('Lesezeichen');
+    if (JSON.stringify(pdf.info).includes(s)) out.push('Metadaten');
+    if (rawContains(pdf.raw, s)) out.push('Rohdaten');
+    return out;
+  };
+
+  it('„Intern“ (Gegenprobe): Gesamtansicht und Einzel-PDF mit Nachbar „SE-02 · Ziegelturm“, Eigentümer und Notiz im Text', async () => {
+    const pdf = await exportRead(canaryProject(), profile('internal'));
+    expect(pdf.outline.slice(0, 2)).toEqual(['Unterstadt (gesamt)', 'Müllerwiese']);
+    expect(pdf.pages[1]!.text).toContain('SE-02 · Ziegelturm');
+    expect(where(pdf, OWNER)).toContain('Textlayer');
+  });
+
+  it.each(['safety', 'vendor'])('„%s“: Nachbarn und Gesamtansicht ohne Eigentümer, Strom, Anschluss und Notiz', async (id) => {
+    const pdf = await exportRead(canaryProject(), profile(id));
+    // Nachbar mit erlaubter Nummer im Einzel-PDF, Stände beider Plätze in der Gesamtansicht
+    expect(pdf.pages[1]!.text).toContain('SE-02 · Ziegelturm');
+    for (const nr of ['M-01', 'SE-02', 'Z-11']) expect(pdf.pages[0]!.text).toContain(nr);
+    expect(where(pdf, 'KANARIE-EIGENTÜMER')).toEqual([]);
+    expect(where(pdf, 'Ölmühle')).toEqual([]);
+    expect(where(pdf, NOTE)).toEqual([]);
+    expect(where(pdf, '77,7')).toEqual([]);
+    expect(where(pdf, 'CEE 32 A')).toEqual([]);
+    if (id === 'vendor') expect(where(pdf, WARE)).toEqual([]);
+    else expect(where(pdf, WARE)).toContain('Textlayer');
   });
 });
 
