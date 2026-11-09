@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { artifact, collectErrors, MOD, openApp, openSettings, pageTabs, tabbar } from './helpers';
+import { artifact, collectErrors, MOD, openApp, openSettings, tabbar } from './helpers';
 
 /**
  * #15 Teil a: Festplatz-Verbund. Ziegelturm (Grundfläche x 0–50, Vorderseite y = 0) und Seestraße (Grundfläche x 45–95,
@@ -54,7 +54,8 @@ async function w2s(page: Page, p: { x: number; y: number }) {
   return { x: box.x + VIEW.tx + p.x * VIEW.scale, y: box.y + VIEW.ty + p.y * VIEW.scale };
 }
 
-const badge = (page: Page, n: number) => pageTabs(page).nth(n).getByTestId('warn-badge');
+// Nach Namen statt nach Position: Seit Teil b steht vor dem ersten Mitglied der Tab der Gesamtansicht (#15)
+const badge = (page: Page, name: string) => tabbar(page).getByRole('tab', { name }).getByTestId('warn-badge');
 
 test.describe('#15 Festplatz-Verbund (Teil a)', () => {
   test('Verbund aus zwei Pages anlegen und die Lage der Seestraße per Zahlenfeld verschieben, mit Undo', async ({ page }) => {
@@ -180,9 +181,9 @@ test.describe('#15 Festplatz-Verbund (Teil a)', () => {
       });
     });
     await tabbar(page).getByRole('tab', { name: 'Ziegelturm' }).click();
-    await expect(badge(page, 1)).toHaveText('1');
-    await expect(badge(page, 1)).toHaveClass(/overlap/);
-    await expect(badge(page, 2)).toHaveText('1');
+    await expect(badge(page, 'Ziegelturm')).toHaveText('1');
+    await expect(badge(page, 'Ziegelturm')).toHaveClass(/overlap/);
+    await expect(badge(page, 'Seestraße')).toHaveText('1');
     await expect(page.locator('.layer-stands [data-id="z2"]')).toHaveAttribute('data-warning', 'overlap');
     await expect(page.locator('.layer-stands [data-id="z1"]')).not.toHaveAttribute('data-warning', /./);
     const c = await w2s(page, { x: 49.5, y: -0.5 });
