@@ -219,9 +219,15 @@ describe('#15 Umhängen (Feld „Festplatz“)', () => {
     expect(pageById('B').stands.find((x) => x.id === 'sA')).toMatchObject({ nr: 'M-01', nrLocked: true, powerKw: 5, name: 'Waffeln', cx: 5, cy: 5 });
   });
 
-  it('keine Grundfläche auf eine Page ohne Grundflächen (#17)', () => {
+  it('keine Grundfläche auf eine Page ohne Grundflächen (#17)', async () => {
     s().change('ohne', (p) => void (p.pages[1]!.useAreas = false));
     expect(reassignObjects(['aA'], 'B')).toBe(0);
+    expect(pageById('A').areas.map((a) => a.id)).toEqual(['aA']);
+    // Nicht still: Hinweis, dass der Platz keine Grundflächen verwendet; Stände einer gemischten Auswahl wechseln trotzdem
+    const { useToasts } = await import('../app/notify');
+    expect(useToasts.getState().toasts.at(-1)?.text).toBe('„Ziegelturm“ verwendet keine Grundflächen: Die Grundfläche bleibt auf ihrem Platz.');
+    expect(reassignObjects(['aA', 'sA'], 'B')).toBe(1);
+    expect(pageById('B').stands.map((x) => x.id)).toEqual(['sB', 'sA']);
     expect(pageById('A').areas.map((a) => a.id)).toEqual(['aA']);
   });
 });

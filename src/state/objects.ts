@@ -291,7 +291,7 @@ export function deleteObjects(pageId: Id, ids: Id[]) {
  * Umhängen (#15, Feld „Festplatz“ der Seitenleiste in der Gesamtansicht): Die Objekte wechseln in die Listen der Page
  * `targetId` (Besitz = Liste, kein eigenes Feld), ein Undo-Schritt, auch für eine Mehrfachauswahl über mehrere Pages.
  * Lage und Attribute bleiben; eine Grundfläche nimmt ihre ausgeblendeten Freiflächen mit. Grundflächen kommen nicht auf
- * eine Page ohne Grundflächen (#17). Liefert die Zahl der umgehängten Objekte.
+ * eine Page ohne Grundflächen (#17); dann erscheint ein Hinweis. Liefert die Zahl der umgehängten Objekte.
  */
 export function reassignObjects(ids: readonly Id[], targetId: Id): number {
   const set = new Set(ids);
@@ -303,6 +303,14 @@ export function reassignObjects(ids: readonly Id[], targetId: Id): number {
     (n, pg) => n + (target.useAreas !== false ? pg.areas.filter((a) => moving(a, pg)).length : 0) + pg.stands.filter((s) => moving(s, pg)).length + pg.infra.filter((o) => moving(o, pg)).length,
     0,
   );
+  // Grundflächen bleiben auf ihrem Platz, wenn das Ziel keine verwendet (#17): Hinweis statt still nichts zu tun
+  const skipped = target.useAreas === false ? project.pages.reduce((n, pg) => n + pg.areas.filter((a) => moving(a, pg)).length, 0) : 0;
+  if (skipped)
+    notify(
+      `„${target.name}“ verwendet keine Grundflächen: ${skipped === 1 ? 'Die Grundfläche bleibt' : `${skipped} Grundflächen bleiben`} auf ${skipped === 1 ? 'ihrem' : 'ihren'} Platz.`,
+      'error',
+      6000,
+    );
   if (!count) return 0;
   const ok = changeWithPowerCheck(count === 1 ? 'Festplatz ändern' : `${count} Objekte umhängen`, (p) => {
     const to = p.pages.find((x) => x.id === targetId)!;

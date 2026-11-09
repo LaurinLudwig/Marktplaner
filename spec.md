@@ -1037,7 +1037,9 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   Duplizieren, Alt+Ziehen, Form und Teile, „Zu einem Stand zusammenfassen“ (der Stand bleibt auf dem Platz seines
   größten Ausgangsstands), Freifläche ausblenden (bei der Besitzer-Page ihrer Grundfläche). Jede Änderung wirkt auf die
   Objekte in den Listen ihrer Besitzer-Pages und ist **ein** Undo-Schritt, auch wenn sie mehrere Pages betrifft.
-  Freiflächen, Fang und Warnungen rechnen über alle Mitglieder.
+  Freiflächen und Fang rechnen über alle Mitglieder. Die Warnungen sind genau die der Einzelansichten zusammen:
+  Überlappung, Abstand (Konkurrenzschutz) und „außerhalb“ über die Platzgrenzen, Infrastruktur („freihalten“) nur an
+  Ständen desselben Platzes (Entscheidung 2026-11-07, wie bei den Nachbarn).
 - **Neue Objekte** (Zeichnen, Einfügen) gehören dem Platz, auf dessen wirkender Grundfläche sie stehen (mehr als 0,01 m
   hinein; Linien und Punkte mit 0,05 m Breite). Stehen sie auf mehreren oder auf keiner, entscheidet die Auswahl **„Neue
   Objekte auf: …“** rechts in der Steuerungsleiste (nur in der Gesamtansicht; je Verbund, anfangs das erste Mitglied; nur
@@ -1047,8 +1049,9 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
 - **Verschieben ändert die Zuordnung nie.** Umhängen geht nur über das Feld **„Festplatz“** der Seitenleiste (oberstes
   Feld der Auswahl; bei verschiedenen Besitzern „verschiedene“): Die Objekte wechseln in die Liste der gewählten Page,
   Lage und Attribute bleiben, eine Grundfläche nimmt ihre ausgeblendeten Freiflächen mit; ein Undo-Schritt, auch für
-  eine Mehrfachauswahl. Grundflächen kommen nicht auf eine Page ohne Grundflächen; das Stromlimit (§6) gilt wie beim
-  Ändern.
+  eine Mehrfachauswahl. Grundflächen kommen nicht auf eine Page ohne Grundflächen: Sind nur Grundflächen ausgewählt,
+  sind solche Plätze im Feld ausgegraut („verwendet keine Grundflächen“); bei gemischter Auswahl wechseln die übrigen
+  Objekte, und ein Hinweis nennt die Grundflächen, die bleiben. Das Stromlimit (§6) gilt wie beim Ändern.
 - **Gesperrt** (Tooltip bzw. Hinweis „In der Gesamtansicht gesperrt: nur in der Einzelansicht des Festplatzes möglich“):
   „Neu nummerieren“, „Alle Fixierungen lösen“/„Alle Nummern fixieren“, die Werkzeuge „Mittelpunkt setzen“ und „Richtung
   setzen“, Hintergrund importieren, Kalibrieren, Schriftfeld, Legende ein/aus, Raster ein/aus (es gilt das des ersten

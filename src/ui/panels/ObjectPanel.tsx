@@ -84,6 +84,9 @@ function OwnerField({ pageId, ids }: { pageId: string; ids: Id[] }) {
   if (!verbund) return null;
   const members = memberPages({ pages }, verbund);
   const owner = common(ids.map((id) => ownerOf({ pages }, id)));
+  // Nur Grundflächen ausgewählt: Plätze ohne Grundflächen (#17) sind kein Ziel (bei gemischter Auswahl Hinweis beim Umhängen)
+  const areaIds = new Set(members.flatMap((p) => p.areas.map((a) => a.id)));
+  const onlyAreas = ids.every((id) => areaIds.has(id));
   return (
     <div className="field">
       <label htmlFor="obj-owner">Festplatz</label>
@@ -96,11 +99,14 @@ function OwnerField({ pageId, ids }: { pageId: string; ids: Id[] }) {
         }}
       >
         {!owner && <option value={MIXED_OWNER}>verschiedene</option>}
-        {members.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
+        {members.map((p) => {
+          const blocked = onlyAreas && p.useAreas === false && p.id !== owner;
+          return (
+            <option key={p.id} value={p.id} disabled={blocked}>
+              {blocked ? `${p.name} (verwendet keine Grundflächen)` : p.name}
+            </option>
+          );
+        })}
       </select>
       <p className="hint">Gehört diesem Platz und zählt nur dort (Statistik, Strom, Standgeld, Nummerierung). Verschieben ändert die Zuordnung nicht.</p>
     </div>
