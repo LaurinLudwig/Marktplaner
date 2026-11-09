@@ -21,7 +21,7 @@ const REF = 'verbund:u';
 async function seed(page: Page, { shift = 0 } = {}) {
   view = shift ? VIEW_FAR : VIEW;
   await page.evaluate(
-    ({ dx, view, ref }) => {
+    ({ dx, v, ref }) => {
       const s = (window as any).__marktplanerStore.getState();
       const base = { nrLocked: false, owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null, parts: null, frontOverride: null, rot: 0, w: 3, d: 3, cy: -1.5 };
       s.change('Testdaten', (p: any) => {
@@ -49,9 +49,9 @@ async function seed(page: Page, { shift = 0 } = {}) {
           view: null,
         });
       });
-      for (const id of [s.project.pages[0].id, 'S', ref]) s.setView(id, view);
+      for (const id of [s.project.pages[0].id, 'S', ref]) s.setView(id, v);
     },
-    { dx: shift, view, ref: REF },
+    { dx: shift, v: view, ref: REF },
   );
 }
 
