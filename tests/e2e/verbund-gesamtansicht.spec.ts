@@ -10,9 +10,16 @@ import { artifact, collectErrors, hoverTooltip, MOD, openApp, tabbar } from './h
 
 const st = (page: Page) => page.evaluate(() => (window as any).__marktplanerStore.getState());
 const VIEW = { scale: 8, tx: 100, ty: 300 };
+/**
+ * Für „Ausrichten“ liegt die Seestraße 100 m weiter rechts (x 145–195): Bei 8 px/m läge sie außerhalb der Zeichenfläche
+ * (rund 980 px breit), deshalb dort 4 px/m. Gilt für den laufenden Test (jeder Test ruft zuerst `seed`).
+ */
+const VIEW_FAR = { scale: 4, tx: 100, ty: 300 };
+let view = VIEW;
 const REF = 'verbund:u';
 
 async function seed(page: Page, { shift = 0 } = {}) {
+  view = shift ? VIEW_FAR : VIEW;
   await page.evaluate(
     ({ dx, view, ref }) => {
       const s = (window as any).__marktplanerStore.getState();
@@ -44,14 +51,14 @@ async function seed(page: Page, { shift = 0 } = {}) {
       });
       for (const id of [s.project.pages[0].id, 'S', ref]) s.setView(id, view);
     },
-    { dx: shift, view: VIEW, ref: REF },
+    { dx: shift, view, ref: REF },
   );
 }
 
-/** Weltpunkt → Bildschirmpunkt (Ansicht `VIEW`). */
+/** Weltpunkt → Bildschirmpunkt (Ansicht des laufenden Tests, `seed`). */
 async function w2s(page: Page, p: { x: number; y: number }) {
   const box = (await page.locator('svg.canvas').boundingBox())!;
-  return { x: box.x + VIEW.tx + p.x * VIEW.scale, y: box.y + VIEW.ty + p.y * VIEW.scale };
+  return { x: box.x + view.tx + p.x * view.scale, y: box.y + view.ty + p.y * view.scale };
 }
 
 async function dragWorld(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
