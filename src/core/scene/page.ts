@@ -2,36 +2,63 @@
  * Szene einer Page für das PDF (M8, spec.md §9): Ebenen in fester Reihenfolge aus den Bausteinen (objects.ts,
  * paper.ts), gefiltert nach Export-Profil. Erwartet das bereits geschwärzte Projekt (`redactProject`). Die
  * Ebenen-Sichtbarkeit der Zeichenfläche spielt keine Rolle.
+ *
+ * Festplatz-Verbund (#15 Teil c): Die Gesamtansicht ist die `mergedPage` (Objekte aller Mitglieder, Blatt und
+ * Papier-Elemente des Verbunds) mit einem Hintergrund je Mitglied. Eine Einzelansicht zeigt ihre Nachbarn blass mit
+ * „Nr · Platz“ (Ebene „Nachbarn“ des Profils).
  */
 import { blankedPlaceholders, profileLayers, type ExportProfile } from '../exportProfiles';
 import { pageFree } from '../hiddenFree';
 import { markerSize, typeMap } from '../infra';
-import type { Background, FestplatzPage, Project, Rect, Vec } from '../model/types';
+import type { FestplatzPage, Project, Rect, Vec } from '../model/types';
 import { cachedDuplicates } from '../numbering';
 import { pagePaper, type PaperKind } from '../paper';
 import { boundsOfRects } from '../geometry/rect';
 import { mmToM, shownOnPaper, type SheetFrame } from '../sheet';
 import type { Bounds } from '../viewport';
 import { activeAreas } from '../pageAreas';
-import { pageEnv } from '../verbund';
+import { neighbourCaption, ownerOf, pageEnv } from '../verbund';
+import { viewBackgrounds, type ViewBackground } from '../verbundView';
 import { activeNarrow, activeWarnings, cachedWarningData } from '../warnings';
 import { cachedStandLabels } from '../labelLayout';
-import { areaLabelBounds, areaLabelPrim, areaPrims, freeLabelPrim, freePrims, infraLabelPrim, infraPrims, overlapPrim, standLabelPrims, standPrims, warnIconPrims, warnKind, type WarnKind } from './objects';
+import {
+  areaLabelBounds,
+  areaLabelPrim,
+  areaPrims,
+  freeLabelPrim,
+  freePrims,
+  infraLabelPrim,
+  infraPrims,
+  neighbourLabelPrim,
+  overlapPrim,
+  standLabelPrims,
+  standPrims,
+  warnIconPrims,
+  warnKind,
+  type WarnKind,
+} from './objects';
 import { legendPrims, northArrowPrims, scaleBarPrims, titleBlockPrims } from './paper';
 import { PAPER_HATCH_MM } from './paperStyle';
 import type { Prim } from './prims';
 import { resolveStandColor } from '../objects';
 import { templateOf } from '../shape';
-import { pageStands } from '../footprint';
+import { footprint, pageStands } from '../footprint';
 
-export const SCENE_ORDER = ['grid', 'areas', 'free', 'stands', 'infra', 'warnings', 'labels'] as const;
+/** Ebenen der Szene von unten nach oben; Nachbarn (#15) unter den eigenen Objekten wie auf der Zeichenfläche. */
+export const SCENE_ORDER = ['grid', 'areas', 'free', 'neighbours', 'stands', 'infra', 'warnings', 'labels'] as const;
 export type SceneLayerId = (typeof SCENE_ORDER)[number];
 
 export interface SceneLayer {
   id: SceneLayerId;
   /** Weltkoordinaten (Meter). */
   prims: Prim[];
+  /** Blass und gestrichelt (Nachbarn aus dem Verbund, #15): Deckkraft `FADED_OPACITY`, Linien `FADED_DASH_MM`. */
+  faded?: boolean;
 }
+
+/** Nachbarn im PDF (#15 Teil c): Deckkraft und Strichmuster (mm) wie `.layer-neighbours` auf der Zeichenfläche. */
+export const FADED_OPACITY = 0.4;
+export const FADED_DASH_MM: readonly number[] = [1.2, 0.7];
 
 export interface ScenePaperElement {
   kind: PaperKind;
@@ -42,11 +69,16 @@ export interface ScenePaperElement {
 }
 
 export interface PageScene {
+  /** ID der Page bzw. `verbund:<id>` (Gesamtansicht eines Verbunds, #15). */
   pageId: string;
+  /** Name für Lesezeichen und Fortschritt („Seestraße“, „Unterstadt (gesamt)“). */
   name: string;
   frame: SheetFrame;
-  /** Hintergrund, falls das Profil ihn zeigt. */
-  background: Background | null;
+  /**
+   * Hintergründe, falls das Profil sie zeigt, von unten nach oben: der der Page bzw. in der Gesamtansicht je Mitglied
+   * einer (Reihenfolge des Verbunds, keine Masken).
+   */
+  backgrounds: ViewBackground[];
   /** Unter dem Hintergrund nichts; danach die Ebenen in `SCENE_ORDER`. */
   layers: SceneLayer[];
   paper: ScenePaperElement[];
@@ -54,8 +86,13 @@ export interface PageScene {
 
 const intersects = (a: Bounds, b: Bounds) => a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
 
-export function pageScene(page: FestplatzPage, project: Project, profile: ExportProfile): PageScene {
+/**
+ * Szene einer Page oder der Gesamtansicht eines Verbunds (`page` = `mergedPage`, #15 Teil c). `name` ersetzt den Namen
+ * für Lesezeichen und Fortschritt (Gesamtansicht: „Unterstadt (gesamt)“); im Schriftfeld steht weiter `page.name`.
+ */
+export function pageScene(page: FestplatzPage, project: Project, profile: ExportProfile, name = page.name): PageScene {
   const L = profile.layers;
+  const env = pageEnv(project, page);
   const types = typeMap(project.infraTypes);
   const settings = project.settings;
   const fontSize = settings.labelFontSize;
@@ -79,7 +116,7 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
   const mode = profile.warnings;
   // Stände, wie sie belegen (#16): Vorlagen mit „belegt wie gezeichnet“ eingesetzt
   const calc = pageStands(page, project.shapeTemplates);
-  const wd = cachedWarningData(calc, page.infra, pageEnv(project, page), project);
+  const wd = cachedWarningData(calc, page.infra, env, project);
   const pw = wd.page;
   const iw = wd.infra;
   const dups = mode === 'all' ? cachedDuplicates(project.pages, settings.numbering.scope) : null;
@@ -104,6 +141,16 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
   if (L.areas) push('areas', areas.flatMap((a) => areaPrims(a)));
   if (L.areas && L.free) push('free', free.flatMap((r) => freePrims(r, mmToM(PAPER_HATCH_MM, frame.scale))));
   const templates = new Map(project.shapeTemplates.map((t) => [t.id, t]));
+  // Nachbarn aus dem Verbund (#15 Teil c, Entscheidung Laurin 2026-11-07): blass wie auf der Zeichenfläche, ohne
+  // Warnungen; Stände nur mit „Geschäfte“, Infrastruktur nur mit „Infrastruktur“. Die Gesamtansicht hat keine.
+  const nbOn = L.neighbours;
+  const nbStands = nbOn && L.stands ? env.neighbours.stands.filter((s) => intersects(footprint(s).bounds, view)) : [];
+  const nbInfra = nbOn && L.infra ? env.neighbours.infra.filter(onSheet) : [];
+  const nbPrims: Prim[] = [
+    ...nbStands.flatMap((s) => standPrims(s, resolveStandColor(s, s.categoryId ? cats.get(s.categoryId) : undefined, settings.defaultStandColor), null, templateOf(s, templates))),
+    ...nbInfra.flatMap((o) => (types.has(o.typeId) ? infraPrims(o, types.get(o.typeId)!, fontSize, mSize, false) : [])),
+  ];
+  if (nbPrims.length) layers.push({ id: 'neighbours', prims: nbPrims, faded: true });
   if (L.stands)
     push(
       'stands',
@@ -142,6 +189,8 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
         const p = t && infraLabelPrim(o, t, fontSize, mSize);
         if (p) labels.push(p);
       }
+    // „SE-02 · Seestraße“ in der Mitte des Nachbarstands (wie auf der Zeichenfläche)
+    for (const s of nbStands) labels.push(neighbourLabelPrim(s, neighbourCaption(s, project.pages.find((p) => p.id === ownerOf(project, s.id))?.name ?? ''), fontSize));
     push('labels', labels);
   }
 
@@ -154,7 +203,7 @@ export function pageScene(page: FestplatzPage, project: Project, profile: Export
   if (pp.legend) add('legend', pp.legend.layout, legendPrims(pp.legend.layout));
   add('titleBlock', pp.titleBlock.layout, titleBlockPrims(pp.titleBlock.layout));
 
-  return { pageId: page.id, name: page.name, frame, background: L.background ? page.background : null, layers, paper };
+  return { pageId: page.id, name, frame, backgrounds: L.background ? viewBackgrounds(project, page) : [], layers, paper };
 }
 
 /** Raster im Blatt: feine Linien im Abstand `size`, kräftige alle 10; Linien unter 2 mm Abstand auf dem Papier entfallen. */

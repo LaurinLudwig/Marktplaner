@@ -28,7 +28,11 @@ export interface Rect {
   rot: number;
 }
 
-export const LAYER_IDS = ['background', 'areas', 'free', 'stands', 'infra', 'labels', 'sheet'] as const;
+/**
+ * Ebenen einer Page bzw. der Gesamtansicht eines Verbunds. `neighbours` (#15 Teil c, Formatversion 17): Nachbarn aus dem
+ * Festplatz-Verbund in der Einzelansicht (nur Darstellung; sie belegen weiter Freiflächen und zählen für Warnungen).
+ */
+export const LAYER_IDS = ['background', 'areas', 'free', 'stands', 'infra', 'neighbours', 'labels', 'sheet'] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
 
 export interface LayerState {

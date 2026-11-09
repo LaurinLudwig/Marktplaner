@@ -371,17 +371,17 @@ describe('#15 Gesamtansicht: Form, Tab-Wechsel', () => {
 });
 
 describe('#15 Sperren in der Gesamtansicht', () => {
-  it('Nummerierung, Hintergrund, Kalibrieren, Schriftfeld und Page-Befehle gesperrt; Ausrichten nur hier', async () => {
+  it('Nummerierung, Hintergrund, Kalibrieren und Page-Befehle gesperrt; Ausrichten nur hier; Schriftfeld und Legende frei (Teil c)', async () => {
     const { COMMANDS, runCommand } = await import('../app/commands');
     const enabled = (id: string) => COMMANDS[id]!.enabled?.() !== false;
-    const locked = ['numbering.renumber', 'numbering.lockAll', 'numbering.unlockAll', 'file.importBackground', 'tool.calibrate', 'tool.titleBlock', 'view.legend', 'view.grid', 'page.duplicate', 'page.delete'];
+    const locked = ['numbering.renumber', 'numbering.lockAll', 'numbering.unlockAll', 'file.importBackground', 'tool.calibrate', 'view.grid', 'page.duplicate', 'page.delete'];
     s().change('Nr', (p) => {
       p.pages[0]!.stands[0]!.nr = '1';
       p.pages[1]!.stands[0]!.nrLocked = true;
     });
     expect(locked.filter(enabled)).toEqual([]);
     expect(enabled('tool.align')).toBe(true);
-    for (const id of ['tool.select', 'tool.stand', 'tool.area', 'tool.infra', 'edit.selectAll', 'page.rename']) expect(enabled(id)).toBe(true);
+    for (const id of ['tool.select', 'tool.stand', 'tool.area', 'tool.infra', 'edit.selectAll', 'page.rename', 'tool.titleBlock', 'view.legend']) expect(enabled(id)).toBe(true);
     expect(runCommand('numbering.renumber')).toBe(false);
     expect(COMMANDS['numbering.renumber']!.disabledMessage).toContain('Gesamtansicht');
     // In der Einzelansicht: Ausrichten gesperrt, Fixierungen und Page-Befehle wieder möglich

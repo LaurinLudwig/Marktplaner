@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Background } from '../core/model/types';
 import { sheetFrame, type SheetFrame } from '../core/sheet';
 import { BUILTIN_PROFILES } from '../core/exportProfiles';
-import { createPage, createProject, DEFAULT_SHEET, LEGACY_SHEET } from '../core/model/defaults';
-import { dqtLumaSum, ijgLumaSum, outputFormat, rasterFactor, rasterPlan } from './pdfBackground';
+import { createPage, createProject, createVerbund, DEFAULT_SHEET, LEGACY_SHEET } from '../core/model/defaults';
+import { dqtLumaSum, ijgLumaSum, MAX_OUT_PX, outputFormat, rasterBudgets, rasterFactor, rasterPlan } from './pdfBackground';
 import { estimateExportBytes, sizeText } from './pdfEstimate';
 
 /** Rasterhintergründe im PDF (M8-06): Ausschnitt, Ziel-Auflösung, nie hochrechnen, Kacheln. */
@@ -136,5 +136,50 @@ describe('Große freie Blätter (#13)', () => {
     p.pages[0]!.background = image(20000, 6000, 0.025, 0, 0);
     const bytes = estimateExportBytes(p, BUILTIN_PROFILES[0]!, null, { stands: false, free: false, infra: false }, 300, { 'bild.jpg': new Uint8Array(12_000_000) });
     expect(Number.isFinite(bytes)).toBe(true);
+  });
+});
+
+describe('Mehrere Hintergründe je Seite (#15 Teil c, Gesamtansicht)', () => {
+  const big = sheetFrame({ ...createPage('P'), sheet: { ...DEFAULT_SHEET, format: 'region', scale: 100, region: { cx: 250, cy: 75, w: 500, h: 150 } } }, null);
+
+  it('höchstens 200 Megapixel je Seite insgesamt: alle gleichmäßig gesenkt, jeder nach seinem Anteil', () => {
+    // zwei SVG-Hälften bei 300 dpi: je ≈ 523 MP, zusammen ≈ 1046 MP
+    const left = image(2500, 1500, 0.1, 0, 0, 'svg');
+    const right = image(2500, 1500, 0.1, 250, 0, 'svg');
+    const budgets = rasterBudgets([left, right], big, 300);
+    expect(budgets[0]! + budgets[1]!).toBeCloseTo(MAX_OUT_PX, -3);
+    expect(budgets[0]).toBeCloseTo(budgets[1]!, -3);
+    const plans = [rasterPlan(left, big, 300, budgets[0])!, rasterPlan(right, big, 300, budgets[1])!];
+    const total = plans[0]!.outPx + plans[1]!.outPx;
+    expect(total).toBeLessThanOrEqual(MAX_OUT_PX * 1.001);
+    expect(total).toBeGreaterThan(MAX_OUT_PX * 0.95);
+    // gleiche Auflösung für beide (gleichmäßig gesenkt)
+    expect(plans[0]!.factor).toBeCloseTo(plans[1]!.factor, 6);
+    // ein PDF-Hintergrund zählt nicht mit; einer allein bekommt die ganze Seite
+    const pdf: Background = { ...left, kind: 'pdf', assetId: 'plan.pdf' };
+    const withPdf = rasterBudgets([pdf, right], big, 300);
+    expect(withPdf[0]).toBe(0);
+    expect(withPdf[1]).toBeCloseTo(MAX_OUT_PX, -3);
+    // unter der Grenze: keine Senkung
+    expect(rasterBudgets([image(400, 300, 1), image(400, 300, 1, 100)], frame, 200)).toEqual([MAX_OUT_PX, MAX_OUT_PX]);
+  });
+
+  it('Schätzung der Gesamtansicht: Hintergründe beider Mitglieder auf der Seite, Anhang zählt jedes Objekt einmal', () => {
+    const p = createProject('P');
+    const a = p.pages[0]!;
+    const b = { ...createPage('B'), id: 'B' };
+    a.sheet = { ...LEGACY_SHEET, scale: 1000 };
+    b.sheet = { ...LEGACY_SHEET, scale: 1000 };
+    a.background = { ...image(4000, 3000, 0.05, -200, -150), assetId: 'a.jpg' };
+    b.background = { ...image(4000, 3000, 0.05, 0, -150), assetId: 'b.jpg' };
+    p.pages.push(b);
+    p.groups = [{ ...createVerbund('U', [a.id, 'B']), id: 'g', sheet: { ...LEGACY_SHEET, scale: 1000 } }];
+    const assets = { 'a.jpg': new Uint8Array(1_200_000), 'b.jpg': new Uint8Array(1_200_000) };
+    const intern = BUILTIN_PROFILES[0]!;
+    const none = { stands: false, free: false, infra: false };
+    const onlyA = estimateExportBytes(p, intern, [a.id], none, 200, assets);
+    const overview = estimateExportBytes(p, intern, ['verbund:g'], none, 200, assets);
+    // beide Hintergründe liegen auf dem Blatt der Gesamtansicht → deutlich mehr als einer
+    expect(overview).toBeGreaterThan(onlyA * 1.5);
   });
 });

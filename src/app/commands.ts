@@ -68,9 +68,8 @@ function nextInfraType() {
   s().setUi({ tool: 'infra', infraTypeId: next.id });
 }
 
-/** Shift+L: Legende der aktiven Page ein- oder ausblenden (Undo-Schritt, M7). */
+/** Shift+L: Legende der aktiven Page bzw. Gesamtansicht (#15 Teil c) ein- oder ausblenden (Undo-Schritt, M7). */
 function toggleLegend() {
-  if (inOverview()) return;
   const page = activePage();
   if (page) setPaperVisible(page.id, 'legend', !page.legend.visible);
 }
@@ -136,12 +135,9 @@ export const COMMANDS: Record<string, Command> = {
   'tool.stand': { run: setTool('stand'), enabled: onDrawingPage },
   'tool.infra': { run: setTool('infra'), enabled: onDrawingPage },
   'tool.infraNext': { run: nextInfraType, enabled: onDrawingPage },
-  'tool.titleBlock': {
-    run: setTool('titleBlock'),
-    enabled: onSinglePage,
-    disabledMessage: 'Schriftfeld: In der Gesamtansicht gesperrt; Blatt, Schriftfeld und Legende des Verbunds kommen mit dem PDF der Gesamtansicht.',
-  },
-  'view.legend': { run: toggleLegend, enabled: onSinglePage },
+  // Gesamtansicht (#15 Teil c): Blatt, Schriftfeld und Legende des Verbunds
+  'tool.titleBlock': { run: setTool('titleBlock'), enabled: onDrawingPage },
+  'view.legend': { run: toggleLegend, enabled: onDrawingPage },
   'tool.measure': { run: setTool('measure'), enabled: onDrawingPage },
   'tool.calibrate': {
     run: setTool('calibrate'),

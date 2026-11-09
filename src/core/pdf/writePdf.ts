@@ -5,6 +5,9 @@
  *   werden über je eine affine Abbildung in Punkte umgerechnet; y zeigt im PDF nach oben.
  * - Schrift: IBM Plex Sans in drei Schnitten, als Teilmenge eingebettet (durchsuchbarer Text, Umlaute).
  * - Hintergrund: PDF als Form-XObject (Vektor), Rasterbilder als vorbereitete Kacheln (siehe app/pdfBackground.ts).
+ *   Mehrere Hintergründe je Seite (Gesamtansicht eines Verbunds, #15 Teil c) liegen in der Reihenfolge der Szene
+ *   übereinander, alle auf das Blatt beschnitten; eine PDF-Datei wird je Dokument nur einmal eingebettet, auch wenn
+ *   mehrere Seiten oder Mitglieder sie zeigen.
  * - Datenschutz: Das PDF enthält nur, was in der Szene steht; keine optionalen Inhalte, Anmerkungen, Formulare,
  *   Dateianhänge oder XMP. Metadaten: Titel, Ersteller mit Programm, Version und Urheber.
  * - Vermerk „Marktplaner, Version …, Urheber, Link“ klein und grau am unteren Rand jeder Seite (#5).
@@ -56,7 +59,7 @@ import {
   type PDFRef,
 } from 'pdf-lib';
 import type { Background } from '../model/types';
-import type { PageScene } from '../scene/page';
+import { FADED_DASH_MM, FADED_OPACITY, type PageScene } from '../scene/page';
 import { paperStyle, type PaperColor, type PaperStyle } from '../scene/paperStyle';
 import { isIcon, type Prim, type TextPrim } from '../scene/prims';
 import { UserError } from '../errors';
@@ -88,7 +91,8 @@ export type PreparedBackground =
 
 export interface PdfPageInput {
   scene: PageScene;
-  background?: PreparedBackground | null;
+  /** Vorbereitete Hintergründe in der Reihenfolge von `scene.backgrounds` (null = fehlt, wird ausgelassen). */
+  backgrounds?: readonly (PreparedBackground | null)[];
 }
 
 export interface AppendixColumn {
@@ -198,8 +202,8 @@ class PageWriter {
    * Primitive zeichnen. `m` bildet Szenen-Einheiten auf Punkte ab (gleichmäßige Skalierung `k` pt je Einheit,
    * y gespiegelt); `ptPerMm` rechnet Papier-Strichstärken um.
    */
-  prims(prims: readonly Prim[], m: Mat, k: number) {
-    for (const p of prims) this.prim(p, m, k);
+  prims(prims: readonly Prim[], m: Mat, k: number, faded = false) {
+    for (const p of prims) this.prim(p, m, k, faded);
   }
 
   private stroked(st: PaperStyle, k: number, geomWidth?: number): number {
@@ -207,9 +211,11 @@ class PageWriter {
     return st.width !== undefined ? mmToPt(st.width) : mmToPt(0.25);
   }
 
-  private prim(p: Prim, m: Mat, k: number) {
+  /** `faded`: blass und gestrichelt (Nachbarn aus dem Verbund, #15): Deckkraft × `FADED_OPACITY`, Linien gestrichelt. */
+  private prim(p: Prim, m: Mat, k: number, faded = false) {
     const st = paperStyle(p.s, p.v);
     if (p.t === 'text') return this.text(p, m, k, st);
+    const f = faded ? FADED_OPACITY : 1;
     const fillC = colorOf(st.fill, p.color);
     const strokeC = colorOf(st.stroke, p.color);
     if (!fillC && !strokeC) return;
@@ -217,8 +223,8 @@ class PageWriter {
     const lw = strokeC ? this.stroked(st, k, geomWidth) : 0;
     if (strokeC && !(lw > 0)) return;
     const dashSrc = p.t === 'line' || p.t === 'path' ? p.dash : undefined;
-    const dash = dashSrc ? dashSrc.map((d) => d * k) : st.dash?.map(mmToPt);
-    const gs = this.opacity(fillC ? (st.fillOpacity ?? 1) : 1, strokeC ? (st.strokeOpacity ?? 1) : 1);
+    const dash = dashSrc ? dashSrc.map((d) => d * k) : (st.dash ?? (faded ? FADED_DASH_MM : undefined))?.map(mmToPt);
+    const gs = this.opacity(fillC ? (st.fillOpacity ?? 1) * f : 1, strokeC ? (st.strokeOpacity ?? 1) * f : 1);
 
     if (p.t === 'path') {
       // SVG-Pfad (Symbole, Schraffur, Maßlinie) unter einer lokalen Abbildung; Strichstärke in lokalen Einheiten
@@ -268,6 +274,8 @@ class PageWriter {
     const { font, key } = this.font(p.weight);
     const size = p.size * k;
     const color = colorOf(st.fill, p.color) ?? rgb(0, 0, 0);
+    // Blasse Schrift (Nachbarn, #15): Deckkraft der Füllung; der weiße Rand bleibt deckend
+    const gs = this.opacity(st.fillOpacity ?? 1, 1);
     p.lines.forEach((line, i) => {
       if (!line) return;
       const at = apply(m, p.x, p.y + i * p.lineHeight);
@@ -280,6 +288,7 @@ class PageWriter {
         // Weißer Rand zuerst (wie paint-order: stroke auf der Zeichenfläche), dann die Schrift
         this.push(setStrokingColor(rgb(1, 1, 1)), setLineWidth(size * 0.22), setLineJoin(LineJoinStyle.Round), ...run(TextRenderingMode.Outline));
       }
+      if (gs) this.push(setGraphicsState(gs));
       this.push(setFillingColor(color), ...run(TextRenderingMode.Fill));
       this.push(popGraphicsState());
     });
@@ -359,9 +368,10 @@ export async function writePdf(input: PdfInput): Promise<Uint8Array> {
     pw.push(pushGraphicsState(), setFillingColor(rgb(1, 1, 1)), rectangle(0, 0, W, H), fill(), popGraphicsState());
     pw.push(pushGraphicsState(), rectangle(0, 0, W, H), clip(), endPath());
 
-    const bg = scene.background;
-    const prepared = pin.background;
-    if (bg && prepared) {
+    // Hintergründe von unten nach oben (Gesamtansicht: je Mitglied einer, #15 Teil c)
+    for (const [i, { background: bg }] of scene.backgrounds.entries()) {
+      const prepared = pin.backgrounds?.[i];
+      if (!prepared) continue;
       const toPt = mul(world, bgToWorld(bg));
       const gs = pw.opacity(bg.opacity, bg.opacity);
       pw.push(pushGraphicsState());
@@ -387,7 +397,7 @@ export async function writePdf(input: PdfInput): Promise<Uint8Array> {
       pw.push(popGraphicsState());
     }
 
-    for (const layer of scene.layers) pw.prims(layer.prims, world, k);
+    for (const layer of scene.layers) pw.prims(layer.prims, world, k, !!layer.faded);
     // Papier-Elemente in mm auf dem Papier
     const pk = PT_PER_MM;
     for (const el of scene.paper) pw.prims(el.prims, [pk, 0, 0, -pk, pk * el.at.x, H - pk * el.at.y], pk);

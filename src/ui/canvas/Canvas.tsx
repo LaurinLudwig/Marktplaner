@@ -15,7 +15,7 @@ import { findSnap, rectSnapSource } from '../../core/snap';
 import { defaultView, fitBounds, focusBounds, screenToWorld, worldToScreen, zoomAt, type Bounds } from '../../core/viewport';
 import { cachedDuplicates } from '../../core/numbering';
 import { activeAreas, usesAreas } from '../../core/pageAreas';
-import { memberPages, neighbourCaption, ownerOf, pageEnv, withNeighbours, type Neighbours } from '../../core/verbund';
+import { memberPages, neighbourCaption, NO_NEIGHBOURS, ownerOf, pageEnv, withNeighbours, type Neighbours } from '../../core/verbund';
 import { verbundOfRef } from '../../core/verbundView';
 import { useAlignTool } from './tools/useAlignTool';
 import { activeNarrow, cachedWarningData } from '../../core/warnings';
@@ -203,7 +203,10 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const env = useMemo(() => pageEnv({ pages, groups, categories }, page), [pages, groups, categories, page]);
   const nb = env.neighbours;
   const nbStands = occupancyStands(nb.stands, shapeTemplates) as Stand[];
-  const neighbours = useMemo(() => ({ stands: nbStands, infra: nb.infra }), [nbStands, nb.infra]);
+  // Ebene „Nachbarn“ (#15 Teil c): blendet nur Darstellung, Doppelklick und Fang aus; Freiflächen und Warnungen
+  // rechnen weiter mit den Nachbarn
+  const nbShown = page.layers.neighbours.visible;
+  const neighbours = useMemo(() => (nbShown ? { stands: nbStands, infra: nb.infra } : { stands: NO_NEIGHBOURS.stands as Stand[], infra: NO_NEIGHBOURS.infra }), [nbShown, nbStands, nb.infra]);
   const neighbourCaptions = useMemo(() => new Map(nb.stands.map((s) => [s.id, neighbourCaption(s, pages.find((p) => p.id === ownerOf({ pages }, s.id))?.name ?? '')])), [nb.stands, pages]);
   // Belegende Infrastruktur-Objekte (M7-05) zählen wie Stände; Nachbarn belegen mit (#15)
   const occupants = useMemo(
@@ -228,9 +231,17 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const projectName = useStore((s) => s.project.name);
   const titleFields = useStore((s) => s.project.titleBlock);
   const freeShown = free.some((a) => a.free.length > 0);
+  // Gesamtansicht (#15 Teil c): Blatt des Verbunds; ohne Objekte umfasst es die Hintergründe aller Mitglieder
+  const memberSource = verbund ? pages : null;
   const paper = useMemo(
-    () => pagePaper(page, { name: projectName, categories, infraTypes, titleBlock: titleFields, shapeTemplates, settings: { minFreeWidth, defaultStandColor } }, page.layers, freeShown),
-    [page, projectName, categories, infraTypes, titleFields, shapeTemplates, minFreeWidth, defaultStandColor, freeShown],
+    () =>
+      pagePaper(
+        page,
+        { name: projectName, categories, infraTypes, titleBlock: titleFields, shapeTemplates, settings: { minFreeWidth, defaultStandColor }, ...(memberSource ? { pages: memberSource, groups } : {}) },
+        page.layers,
+        freeShown,
+      ),
+    [page, projectName, categories, infraTypes, titleFields, shapeTemplates, minFreeWidth, defaultStandColor, freeShown, memberSource, groups],
   );
   const paperVisible = useMemo(
     () => ({ titleBlock: page.titleBlock.visible, legend: page.legend.visible, scaleBar: page.scaleBar.visible, northArrow: page.northArrow.visible }),
@@ -306,8 +317,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
     labels: standLabels,
   };
   const measureTool = useMeasureTool(ctx, tool === 'measure');
-  // Gesamtansicht eines Verbunds (#15): Kalibrieren, Schriftfeld, Ausschnitt, Mittelpunkt und Richtung der Nummerierung
-  // sind gesperrt; „Ausrichten“ gibt es nur hier. Ein gesperrtes Werkzeug fällt auf das Auswahlwerkzeug zurück
+  // Gesamtansicht eines Verbunds (#15): Kalibrieren, Mittelpunkt und Richtung der Nummerierung sind gesperrt;
+  // „Ausrichten“ gibt es nur hier. Schriftfeld und Ausschnitt gelten dort für das Blatt des Verbunds (Teil c). Ein gesperrtes Werkzeug fällt auf das Auswahlwerkzeug zurück
   const overview = verbund !== null;
   const lockedHere = overview ? OVERVIEW_LOCKED_TOOLS.has(tool) : tool === 'align';
   useEffect(() => {
@@ -323,10 +334,10 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const areaTool = useCreateTool(ctx, 'area', tool === 'area' && !areasOff && !spaceDown);
   const standTool = useCreateTool(ctx, 'stand', tool === 'stand' && !spaceDown);
   const infraTool = useInfraTool(ctx, tool === 'infra' && !spaceDown);
-  const titleBlockTool = useTitleBlockTool(ctx, tool === 'titleBlock' && !overview && !spaceDown);
+  const titleBlockTool = useTitleBlockTool(ctx, tool === 'titleBlock' && !spaceDown);
   const centerTool = useCenterTool(ctx, tool === 'numberCenter' && !overview && !spaceDown);
   const directionTool = useDirectionTool(ctx, tool === 'numberDirection' && !overview && !spaceDown);
-  const regionTool = useRegionTool(ctx, tool === 'sheetRegion' && !overview && !spaceDown);
+  const regionTool = useRegionTool(ctx, tool === 'sheetRegion' && !spaceDown);
   const alignTool = useAlignTool(ctx, tool === 'align' && overview && !spaceDown);
   const activeTool = lockedHere
     ? null
@@ -728,7 +739,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
 }
 
 /** In der Gesamtansicht eines Verbunds gesperrte Werkzeuge (#15, spec.md §12). */
-const OVERVIEW_LOCKED_TOOLS: ReadonlySet<string> = new Set(['calibrate', 'titleBlock', 'numberCenter', 'numberDirection', 'sheetRegion']);
+const OVERVIEW_LOCKED_TOOLS: ReadonlySet<string> = new Set(['calibrate', 'numberCenter', 'numberDirection']);
 
 /** Fangquelle ohne ein Objekt (Endpunkt-Griffe einer Linie fangen nicht an der Linie selbst). */
 function snapSourceWithout(page: FestplatzPage, exclude: Id, neighbours: Neighbours) {

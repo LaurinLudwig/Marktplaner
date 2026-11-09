@@ -4,7 +4,7 @@
  * Rechnungen des Werkzeugs „Ausrichten“. Reine Logik ohne Oberfläche; die Grundlagen stehen in core/verbund.ts.
  */
 import { measure } from './measure';
-import type { FestplatzPage, Id, Project, Rect, Vec, Verbund } from './model/types';
+import type { Background, FestplatzPage, Id, Project, Rect, Vec, Verbund } from './model/types';
 import { usesAreas } from './pageAreas';
 import { assignPage, mergedPage, memberPages, ownerOf, VERBUND_PREFIX, verbundRef, type PageTransform } from './verbund';
 import type { PartsRect } from './footprint';
@@ -28,17 +28,34 @@ const viewCache = new WeakMap<FestplatzPage, FestplatzPage>();
 
 /**
  * Sicht der Gesamtansicht auf der Zeichenfläche: die `mergedPage` ohne Hintergrund (die Hintergründe zeichnet die
- * Zeichenfläche je Mitglied, keiner ist dort auswählbar oder verschiebbar) und ohne die Ebene „Blatt“ (Blatt, Schriftfeld
- * und Legende des Verbunds kommen mit dem PDF der Gesamtansicht, Teil c). Behält ihre Identität, solange die
+ * Zeichenfläche je Mitglied, keiner ist dort auswählbar oder verschiebbar; `viewBackgrounds`). Blatt, Schriftfeld,
+ * Legende, Maßstabsbalken, Nordpfeil und Ebenen sind die des Verbunds (Teil c). Behält ihre Identität, solange die
  * `mergedPage` gleich bleibt.
  */
 function overviewPage(merged: FestplatzPage): FestplatzPage {
   let out = viewCache.get(merged);
   if (!out) {
-    out = { ...merged, background: null, layers: { ...merged.layers, sheet: { visible: false, locked: true } } };
+    out = { ...merged, background: null };
     viewCache.set(merged, out);
   }
   return out;
+}
+
+/** Hintergrund eines Mitglieds in einer Ansicht; `pageId` = Besitzer-Page. */
+export interface ViewBackground {
+  pageId: Id;
+  background: Background;
+}
+
+/**
+ * Hintergründe einer Page bzw. der Gesamtansicht eines Verbunds (Teil c, Entscheidung 2026-11-06): in der Gesamtansicht
+ * (`page.id` = `verbund:<id>`, `mergedPage` oder `pageView`) je Mitglied sein Hintergrund in der Reihenfolge des
+ * Verbunds (spätere oben, keine Masken), sonst der Hintergrund der Page. Ohne `project.pages` nur der eigene.
+ */
+export function viewBackgrounds(project: Partial<Pick<Project, 'pages'>> & GroupsOf, page: Pick<FestplatzPage, 'id' | 'background'>): ViewBackground[] {
+  const verbund = project.pages ? verbundOfRef(project, page.id) : null;
+  if (verbund && project.pages) return memberPages({ pages: project.pages }, verbund).flatMap((m) => (m.background ? [{ pageId: m.id, background: m.background }] : []));
+  return page.background ? [{ pageId: page.id, background: page.background }] : [];
 }
 
 /**

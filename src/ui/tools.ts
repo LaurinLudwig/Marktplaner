@@ -59,7 +59,6 @@ export const TOOL_GROUPS: ToolbarItem[][] = [
       kind: 'tool',
       tool: 'titleBlock',
       description: 'Klick setzt das Schriftfeld an diese Stelle; verschieben mit dem Auswahlwerkzeug',
-      overviewHint: 'In der Gesamtansicht gesperrt: Blatt, Schriftfeld und Legende des Verbunds kommen mit dem PDF der Gesamtansicht',
     },
     {
       shortcut: 'tool.align',

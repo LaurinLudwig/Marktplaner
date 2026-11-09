@@ -7,10 +7,11 @@ import type { PreparedBackground } from '../core/pdf/writePdf';
 import { platform } from '../platform';
 import { currentProfile, useExportSettings } from '../state/exportSettings';
 import { useStore } from '../state/store';
-import { verbundOfRef } from '../core/verbundView';
+import { pageView, viewBackgrounds } from '../core/verbundView';
+import { entryPages, selectedEntries, type ExportEntry } from '../core/pdf/exportDoc';
 import { showError } from './dialogs';
 import { notify } from './notify';
-import { bitmapCanvas, engineJpegQuality, prepareBackground } from './pdfBackground';
+import { backgroundKey, bitmapCanvas, engineJpegQuality, prepareBackground, rasterBudgets } from './pdfBackground';
 import type { ExportJob, ExportMessage } from './pdfExport.worker';
 
 /**
@@ -22,7 +23,7 @@ import type { ExportJob, ExportMessage } from './pdfExport.worker';
  */
 
 export interface ExportScope {
-  /** null = Gesamtplan. */
+  /** Seiten: Page-IDs und Gesamtansichten `verbund:<id>` (#15 Teil c); null = Gesamtplan (alle in Tab-Reihenfolge). */
   pageIds: Id[] | null;
   appendix: Record<AppendixPart, boolean>;
 }
@@ -30,7 +31,7 @@ export interface ExportScope {
 interface ExportUi {
   open: boolean;
   scope: ExportScope;
-  /** Page der Vorschau. */
+  /** Seite der Vorschau (Page oder `verbund:<id>`). */
   previewPageId: Id | null;
   /** Laufender Export (nicht modal, unten in der Statuszeile). */
   job: { share: number; label: string } | null;
@@ -49,19 +50,18 @@ export function openExportDialog() {
     notify('Es gibt noch keinen Festplatz zum Exportieren.');
     return;
   }
-  // Gesamtansicht eines Verbunds (#15): Vorschau auf sein erstes Mitglied (das PDF der Gesamtansicht folgt mit Teil c)
-  const ref = verbundOfRef(s.project, s.ui.activePage)?.pageIds[0] ?? s.ui.activePage;
-  const active = s.project.pages.find((p) => p.id === ref);
-  useExportUi.setState({ open: true, previewPageId: active?.id ?? s.project.pages[0]!.id });
+  // Vorschau der aktiven Seite, auch der Gesamtansicht eines Verbunds (#15 Teil c); sonst der erste Festplatz
+  const active = s.ui.activePage !== 'start' && pageView(s.project, s.ui.activePage) ? s.ui.activePage : null;
+  useExportUi.setState({ open: true, previewPageId: active ?? s.project.pages[0]!.id });
 }
 
 export const closeExportDialog = () => useExportUi.setState({ open: false });
 export const setExportScope = (patch: Partial<ExportScope>) => useExportUi.setState((s) => ({ scope: { ...s.scope, ...patch } }));
 export const setPreviewPage = (id: Id) => useExportUi.setState({ previewPageId: id });
 
-/** Pages des Exports in Tab-Reihenfolge. */
-export function scopePages(project: Project, scope: ExportScope) {
-  return scope.pageIds ? project.pages.filter((p) => scope.pageIds!.includes(p.id)) : project.pages;
+/** Seiten des Exports in Tab-Reihenfolge: Pages und Gesamtansichten von Verbünden (#15 Teil c). */
+export function scopePages(project: Project, scope: ExportScope): ExportEntry[] {
+  return selectedEntries(project, scope.pageIds);
 }
 
 // ---------- Worker ----------
@@ -72,29 +72,51 @@ function newWorker(): Worker {
   return new Worker(new URL('./pdfExport.worker.ts', import.meta.url), { type: 'module' });
 }
 
-/** SVG-Hintergründe auf dem Hauptthread rastern (der Worker kann SVG nicht dekodieren). */
-async function prepareSvg(project: Project, profile: ExportProfile, pageIds: Id[], dpi: ExportDpi | number, assets: Record<string, Uint8Array>): Promise<Record<Id, PreparedBackground | null>> {
-  const out: Record<Id, PreparedBackground | null> = {};
+/**
+ * SVG-Hintergründe auf dem Hauptthread rastern (der Worker kann SVG nicht dekodieren), je Seite und Besitzer-Page
+ * (`backgroundKey`): Die Gesamtansicht eines Verbunds hat ein anderes Blatt als die Einzelansicht (#15 Teil c).
+ */
+async function prepareSvg(project: Project, profile: ExportProfile, entries: readonly ExportEntry[], dpi: ExportDpi | number, assets: Record<string, Uint8Array>): Promise<Record<string, PreparedBackground | null>> {
+  const out: Record<string, PreparedBackground | null> = {};
   if (!profile.layers.background) return out;
   const jpegQuality = await engineJpegQuality(rasterQuality(dpi).jpeg);
-  for (const page of project.pages) {
-    const bg = page.background;
-    if (!pageIds.includes(page.id) || bg?.kind !== 'svg') continue;
-    const frame = exportFrame(page, project, profile);
-    out[page.id] = await prepareBackground(bg, assets[bg.assetId], frame, dpi, async (bytes, mime, format, q) => {
-      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
-      try {
-        const img = new Image();
-        img.src = url;
-        await img.decode();
-        return bitmapCanvas(img, format, q);
-      } finally {
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      }
-    }, jpegQuality);
+  for (const entry of entries) {
+    const bgs = viewBackgrounds(project, entry.page);
+    if (!bgs.some((b) => b.background.kind === 'svg')) continue;
+    const frame = exportFrame(entry.page, project, profile);
+    const budgets = rasterBudgets(
+      bgs.map((b) => b.background),
+      frame,
+      dpi,
+    );
+    for (const [i, { pageId, background: bg }] of bgs.entries()) {
+      if (bg.kind !== 'svg') continue;
+      out[backgroundKey(entry.ref, pageId)] = await prepareBackground(
+        bg,
+        assets[bg.assetId],
+        frame,
+        dpi,
+        async (bytes, mime, format, q) => {
+          const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
+          try {
+            const img = new Image();
+            img.src = url;
+            await img.decode();
+            return bitmapCanvas(img, format, q);
+          } finally {
+            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+          }
+        },
+        jpegQuality,
+        budgets[i],
+      );
+    }
   }
   return out;
 }
+
+/** Hintergründe der Seiten (je Mitglied in der Gesamtansicht). */
+const entryBackgrounds = (project: Project, entries: readonly ExportEntry[]) => entries.flatMap((e) => viewBackgrounds(project, e.page));
 
 interface RunOptions {
   project: Project;
@@ -124,12 +146,13 @@ function run(opts: RunOptions): { done: Promise<Uint8Array>; cancel: () => void 
   void (async () => {
     try {
       const { project, profile, scope, dpi } = opts;
-      const pageIds = scopePages(project, scope).map((p) => p.id);
+      const entries = scopePages(project, scope);
+      const pageIds = entries.map((e) => e.ref);
       const all = useStore.getState().assets;
       const assets: Record<string, Uint8Array> = {};
       if (profile.layers.background)
-        for (const p of project.pages) if (pageIds.includes(p.id) && p.background && p.background.kind !== 'svg' && all[p.background.assetId]) assets[p.background.assetId] = all[p.background.assetId]!;
-      const prepared = await prepareSvg(project, profile, pageIds, dpi, all);
+        for (const { background: bg } of entryBackgrounds(project, entries)) if (bg.kind !== 'svg' && all[bg.assetId]) assets[bg.assetId] = all[bg.assetId]!;
+      const prepared = await prepareSvg(project, profile, entries, dpi, all);
       if (cancelled) return;
       const job: ExportJob = { id, project, profile, req: { pageIds, appendix: scope.appendix }, assets, prepared, dpi };
       // Worker-Nachricht (kein Fenster, kein targetOrigin)
@@ -155,10 +178,12 @@ class ExportAborted extends Error {
 
 let running: { cancel: () => void } | null = null;
 
-/** Fehlende Hintergrunddateien: Export ohne sie, mit Hinweis (§9). */
-function missingBackgrounds(project: Project, pageIds: Id[]): string[] {
+/** Fehlende Hintergrunddateien: Export ohne sie, mit Hinweis (§9); je Festplatz einmal, auch über Gesamtansichten. */
+function missingBackgrounds(project: Project, entries: readonly ExportEntry[]): string[] {
   const assets = useStore.getState().assets;
-  return project.pages.filter((p) => pageIds.includes(p.id) && p.background && !assets[p.background.assetId]).map((p) => p.name);
+  return entryPages(project, entries)
+    .filter((p) => p.background && !assets[p.background.assetId])
+    .map((p) => p.name);
 }
 
 /** Export starten: Dialog schließt, Fortschritt in der Statuszeile, danach Dateidialog bzw. Download. */
@@ -174,7 +199,7 @@ export async function startExport() {
     return;
   }
   closeExportDialog();
-  const missing = profile.layers.background ? missingBackgrounds(project, pages.map((p) => p.id)) : [];
+  const missing = profile.layers.background ? missingBackgrounds(project, pages) : [];
   if (missing.length) notify(`Hintergrund fehlt in der Projektdatei, exportiert wird ohne: ${missing.join(', ')}`, 'error', 8000);
   useExportUi.setState({ job: { share: 0, label: 'Vorbereiten …' } });
   const r = run({ project, profile, scope, dpi, onProgress: (share, label) => useExportUi.setState({ job: { share, label } }) });
@@ -203,8 +228,8 @@ export function cancelExport() {
 let preview: { cancel: () => void } | null = null;
 
 /**
- * Vorschau: das echte PDF der Page (Rasterbilder mit 72 dpi, ohne Anhang). Eine laufende Vorschau wird abgebrochen.
- * null = abgebrochen oder fehlgeschlagen (Meldung im Dialog).
+ * Vorschau: das echte PDF der Seite (Page oder Gesamtansicht; Rasterbilder mit 72 dpi, ohne Anhang). Eine laufende
+ * Vorschau wird abgebrochen. null = abgebrochen oder fehlgeschlagen (Meldung im Dialog).
  */
 export async function previewPdf(pageId: Id): Promise<Uint8Array | null> {
   preview?.cancel();

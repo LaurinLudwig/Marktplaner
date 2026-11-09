@@ -593,7 +593,7 @@ Entscheidungen 2026-10-12 (M6-Planung).
 Entscheidungen 2026-10-12 (M7-Planung). Schriftfeld und Legende sind Papier-Elemente: Ihre Größe ist in mm auf dem
 Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem Maßstab gleich groß und lesbar.
 
-**Blatt** (pro Festplatz-Page):
+**Blatt** (pro Festplatz-Page; ebenso je Festplatz-Verbund für seine Gesamtansicht, §12 „PDF der Gesamtansicht“):
 - Einstellungen: Papierformat A4–A0 (Hoch/Quer, Maßstab 1:n oder „an Seite anpassen“) oder ein freies Blatt ohne
   festes Papierformat (#13): „Plan“ oder „Ausschnitt“, Maßstab 1:n oder über eine Zielbreite in mm.
   - Standard neuer Pages (#13, Entscheidung Laurin 2026-11-05): „Plan“, Maßstab über die Zielbreite 841 mm (Breite
@@ -684,15 +684,16 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
   - Jede Verschiebung ist ein Undo-Schritt.
 - Einschränkungen: Papier-Elemente kommen nicht in Auswahlrechteck oder Mehrfachauswahl und sind nicht kopierbar.
   Entf blendet ein ausgewähltes Element aus (Undo-Schritt).
-- Sichtbarkeit: Pro Page sind Schriftfeld, Legende, Maßstabsbalken und Nordpfeil ein-/ausblendbar (Bereich „Blatt“;
-  Legende auch mit Shift+L). Sie gilt auch für das PDF; das Export-Profil ändert sie nicht.
+- Sichtbarkeit: Pro Page (und pro Verbund in der Gesamtansicht, #15) sind Schriftfeld, Legende, Maßstabsbalken und
+  Nordpfeil ein-/ausblendbar (Bereich „Blatt“; Legende auch mit Shift+L). Sie gilt auch für das PDF; das Export-Profil
+  ändert sie nicht.
 - Alles zum Verschieben, Fangen, Begrenzen und Ausblenden gilt für alle vier Papier-Elemente gleich (seit M8).
 - Ebene „Blatt“: Rahmen und Papier-Elemente liegen auf dieser eigenen Ebene. Sie ist ein-/ausblendbar und sperrbar.
 
 **Schriftfeld:**
 - Auf jeder Festplatz-Page, einheitliches festes Layout auf allen Pages, 180 mm breit (nach ISO 7200):
   - Zeile 1: Projektname (5 mm Schrifthöhe).
-  - Zeile 2: Festplatz (3,5 mm).
+  - Zeile 2: Festplatz (3,5 mm); in der Gesamtansicht eines Verbunds sein Name („Unterstadt“, #15).
   - Zeile 3: „Maßstab 1:500 bei Druck in Originalgröße (A1 quer) · Datum · Version“ (2,5 mm), beim freien Blatt mit
     dem Papiermaß („… (1.236 × 341 mm)“, #13). Leere Angaben
     entfallen. Maßstab und Format kommen aus dem Blatt. Der Zusatz steht da, weil „an Seite anpassen“ im Druckdialog
@@ -708,7 +709,8 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
   Klickstelle (Anker wie beim Ziehen) und wählt es aus.
 
 **Legende:**
-- Die Einträge entstehen automatisch aus dem, was auf der Page tatsächlich sichtbar vorkommt. Ausgeblendete Ebenen
+- Die Einträge entstehen automatisch aus dem, was auf der Page tatsächlich sichtbar vorkommt (Gesamtansicht eines
+  Verbunds: auf allen Mitgliedern; Nachbarn einer Einzelansicht erzeugen keine Einträge, #15). Ausgeblendete Ebenen
   fehlen; ab M8 gilt das auch für die Ebenen des Export-Profils.
 - Reihenfolge der Einträge:
   1. Grundfläche (wenn es eine gibt und die Page Grundflächen verwendet, §2)
@@ -733,7 +735,8 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
 - Standardposition: oben links, 10 mm Abstand.
 
 **Nordpfeil** (seit M8, Entscheidung 2026-10-12): Papier-Element, 20 × 20 mm, gestaltet wie der Nordpfeil der
-Zeichenfläche (Kreis, Nadel), gedreht um die Nordrichtung der Page (§1). Das „N“ steht aufrecht an der Spitze.
+Zeichenfläche (Kreis, Nadel), gedreht um die Nordrichtung der Page (§1); in der Gesamtansicht eines Verbunds um die
+des ersten Mitglieds (wie die Zeichenfläche dort, §12). Das „N“ steht aufrecht an der Spitze.
 Standardposition: oben rechts, 10 mm Abstand.
 
 ### 9. PDF-Export
@@ -750,6 +753,8 @@ Schrift.
 - Jede Page wird als eine PDF-Seite exportiert, genau ihr Blatt (§8): Format A4–A0, „Plan“ oder „Ausschnitt“ (#13),
   Hoch/Quer, Maßstab 1:n, Zielbreite oder „an
   Seite anpassen“. Der Export-Dialog zeigt und ändert diese Werte; die Änderung gilt für die Page (Undo-Schritt).
+- Die Gesamtansicht eines Festplatz-Verbunds („Unterstadt (gesamt)“, #15 Teil c) ist eine eigene Seite mit dem Blatt
+  des Verbunds (§12 „PDF der Gesamtansicht“); der Export-Dialog zeigt und ändert es wie das einer Page.
 - Seitengröße exakt in mm (1 pt = 25,4/72 mm; A1 quer = 841 × 594 mm). Bei 1:500 ist 1 cm auf dem Papier exakt 5 m.
   Ein freies Blatt hat genau sein Papiermaß (Plan: volle mm, Ausschnitt: Ausschnitt / n), auch über 5.080 mm (mit
   Warnung, §8).
@@ -760,21 +765,34 @@ Schrift.
 - Inhalt außerhalb des Blatts wird abgeschnitten.
 
 **Inhalt einer Seite** in dieser Reihenfolge, jeweils gemäß Export-Profil: Hintergrund, Raster, Grundflächen,
-Freiflächen, Geschäfte (in ihrer Form, §3; ohne Hitbox), Infrastruktur, Warnungen, Beschriftung; darüber die sichtbaren Papier-Elemente der Page
+Freiflächen, Nachbarn (#15), Geschäfte (in ihrer Form, §3; ohne Hitbox), Infrastruktur, Warnungen, Beschriftung; darüber die sichtbaren Papier-Elemente der Page
 (Schriftfeld, Legende, Maßstabsbalken, Nordpfeil). Die Ebenen-Sichtbarkeit der Zeichenfläche spielt keine Rolle. Die
 Legende entsteht aus den Ebenen des Profils.
 - Raster: in der Rasterweite der Page, kräftige Linien alle 10; Linien mit weniger als 2 mm Abstand auf dem Papier
   entfallen. Ob es erscheint, entscheidet nur das Profil („Raster ein/aus“ der Zeichenfläche zählt nicht).
 - Objekte, die das Blatt nicht berühren, kommen nicht ins PDF.
-- Nachbarn aus dem Festplatz-Verbund (#15, §12) zeichnet das PDF einer Page nicht (bis zur Entscheidung mit der
-  Gesamtansicht im PDF, Teil c von #15). Sie belegen aber auch im PDF die Freiflächen und zählen für die Warnungen
-  der eigenen Stände, damit PDF und Zeichenfläche übereinstimmen.
+- **Nachbarn** aus dem Festplatz-Verbund (#15 Teil c, Entscheidung Laurin 2026-11-07): Das PDF einer Page zeigt sie wie
+  die Zeichenfläche blass (Deckkraft 40 %, Linien gestrichelt 1,2/0,7 mm) unter den eigenen Objekten, Nachbarstände
+  mit „SE-02 · Seestraße“ in der Mitte (80 % der Schriftgröße, blasse Schrift mit weißem Rand, auf der Ebene
+  „Beschriftung“). Ebene „Nachbarn“ des Profils; Nachbarstände nur zusammen mit „Geschäfte“, Nachbar-Infrastruktur nur
+  mit „Infrastruktur“. Sie zeigen keine Warnungen und erzeugen keinen Legendeneintrag (es sind dieselben Kategorien und
+  Typen wie auf dem Nachbarplatz; der Zusatz „· Seestraße“ erklärt sie). Nummer und Name erscheinen nur, soweit das
+  Profil die Felder erlaubt (Schwärzung wie bei eigenen Ständen; ohne beide „Stand · Seestraße“). Unabhängig von der
+  Ebene belegen Nachbarn auch im PDF die Freiflächen und zählen für die Warnungen der eigenen Stände, damit PDF und
+  Zeichenfläche übereinstimmen.
 
 **Hintergrund.**
 - PDF-Hintergründe werden als Vektor übernommen (Originalseite eingebettet, je Datei nur einmal), mit Lage, Drehung,
   Maßstab und Deckkraft wie auf der Zeichenfläche.
+- **Mehrere Hintergründe je Seite** (Gesamtansicht eines Verbunds, #15 Teil c): je Mitglied sein Hintergrund, in der
+  Reihenfolge des Verbunds übereinander (spätere oben, keine Masken, Entscheidung 2026-11-06), alle auf das Blatt
+  beschnitten. Jede PDF-Datei wird je Dokument nur einmal eingebettet (Form-XObject), auch wenn mehrere Mitglieder oder
+  Seiten sie zeigen; jedes Mitglied zeichnet sie mit seiner eigenen Lage. Rasterhintergründe werden je Mitglied auf den
+  Ausschnitt des Blatts der Gesamtansicht beschnitten und vorbereitet wie bei einer Page.
 - Große Blätter (#13): Je Seite entstehen höchstens 200 Megapixel aus Rasterhintergründen (auch bei „Original“ und
-  bei gerasterten SVG); darüber wird die Auflösung gleichmäßig gesenkt. Über 16 Megapixel wird in Kacheln von
+  bei gerasterten SVG); darüber wird die Auflösung gleichmäßig gesenkt. Die Grenze gilt für alle Rasterhintergründe einer
+  Seite zusammen (Gesamtansicht, #15): Liegen sie zusammen darüber, wird die Auflösung aller im selben Verhältnis
+  gesenkt (jeder bekommt seinen Anteil); PDF-Hintergründe zählen nicht mit. Über 16 Megapixel wird in Kacheln von
   höchstens 2048 Pixeln je Seite gearbeitet, damit keine Leinwandgrenze des Browsers erreicht wird.
 - Rasterbilder (PNG, JPEG): nur der Ausschnitt auf dem Blatt; heruntergerechnet, wenn sie feiner sind als die
   Ziel-Auflösung, nie hochgerechnet. Qualität im Export-Dialog: „E-Mail“, 150, 200, 300 dpi oder Original; Standard
@@ -797,7 +815,8 @@ Hintergrund; E-23). Symbole (Material Symbols) und alle Formen sind Vektoren.
 
 **Export-Profile** (pro Rechner, nicht in der Projektdatei; Entscheidung Laurin):
 - Ein Profil legt fest:
-  - Ebenen: Hintergrund, Raster, Grundflächen, Freiflächen, Geschäfte, Infrastruktur, Beschriftung (je an/aus);
+  - Ebenen: Hintergrund, Raster, Grundflächen, Freiflächen, Geschäfte, Infrastruktur, Nachbarn (#15 Teil c),
+    Beschriftung (je an/aus);
   - Warnungen: keine, „Rettungswege“ (nur „Infrastruktur“ = Stand in Freihaltefläche und „Durchfahrt zu eng“) oder
     alle;
   - erlaubte Felder für Standbeschriftung und Anhang: Nummer, Name, Eigentümer, Ware, Breite, Tiefe, Strom,
@@ -810,10 +829,15 @@ Hintergrund; E-23). Symbole (Material Symbols) und alle Formen sind Vektoren.
   - „Sanität/Ordnungsamt“: alle Ebenen außer Raster, Warnungen „Rettungswege“, ohne Eigentümer, Strom,
     Anschlussart und Notiz; Anhang Standliste und Infrastrukturliste.
   - „Händler“: ohne Freiflächen, Raster und Warnungen; nur Nummer und Name; kein Anhang.
+  - „Nachbarn“ ist in allen drei an (#15 Teil c): Der alte Illustrator-Plan zeigte Nachbarstände auf beiden Plätzen,
+    sie helfen Händlern, Sanität und Ordnungsamt bei der Orientierung an der Platzgrenze, und sie zeigen nur
+    „Nr · Platz“ bzw. den Namen – also nichts, was das Profil nicht ohnehin erlaubt.
 - Eigene Profile im Export-Dialog über „Profile verwalten …“ anlegen (als Kopie des gewählten), umbenennen
   („Profilname“), bearbeiten, löschen (mit Rückfrage). Kein Undo-Schritt, keine Änderungsmarkierung am Projekt.
 - Die Raster-Auflösung und das zuletzt gewählte Profil merkt sich der Rechner ebenfalls.
-- Fehlt in einem gespeicherten Profil eine Angabe, gilt sie als nicht erlaubt. Eine unlesbare Profildatei führt zu
+- Fehlt in einem gespeicherten Profil eine Angabe, gilt sie als nicht erlaubt. Ausnahme: Profile, die vor #15 Teil c
+  gespeichert wurden, kennen die Ebene „Nachbarn“ nicht; sie folgt dort der Ebene „Geschäfte“ (Nachbarn sind Stände
+  anderer Plätze; welche Felder sie zeigen, regeln weiter die erlaubten Felder). Eine unlesbare Profildatei führt zu
   den mitgelieferten Profilen mit deutscher Meldung.
 
 **Datenschutz.** Nicht erlaubte Felder kommen im PDF überhaupt nicht vor: nicht im sichtbaren Inhalt, nicht im
@@ -829,25 +853,33 @@ https://github.com/LaurinLudwig“. Die Version kommt beim Bauen aus `package.js
 unter den Papier-Elementen und ist in den Export-Profilen nicht abschaltbar; er steht nicht in der Projektdatei.
 
 **Umfang.**
-- „Gesamtplan“: alle Festplatz-Pages in Tab-Reihenfolge. „Auswahl“: einzelne Pages per Häkchen.
+- „Gesamtplan“: alle Festplatz-Pages und Gesamtansichten von Verbünden (#15 Teil c) in Tab-Reihenfolge (die
+  Gesamtansicht vor ihrem ersten Mitglied). „Auswahl“: einzelne Seiten per Häkchen.
 - Jede Seite hat das Format ihres Blatts; ein PDF kann verschiedene Formate enthalten.
 - Anhang gemäß Profil (im Dialog abwählbar): Standliste (sortiert nach Festplatz, dann Nummer natürlich; Spalten =
   erlaubte Felder), Freiflächenliste (Festplatz, Grundfläche, Breite, Tiefe, Fläche), Infrastrukturliste (Festplatz,
   Typ, Bezeichnung, Maße, erlaubte Felder). A4 quer, Kopfzeile auf jeder Seite, „Anhang – Seite 2 von 5“. Die Listen
   enthalten nur Pages des Exports. Ausgeblendete Freiflächen (§4, M11) fehlen im Plan, in der Legende und im Anhang.
-- Lesezeichen je Page und je Liste des Anhangs.
+- Anhang und Gesamtansicht (#15 Teil c): Eine Gesamtansicht steht im Anhang für ihre Mitglieder. Die Listen sind
+  ohnehin nach Festplatz gegliedert und jedes Objekt gehört genau einem Platz; so steht jedes Objekt genau einmal unter
+  seinem Platz, auch wenn Gesamt- und Einzelansicht exportiert werden. Ein eigener Anhang je Gesamtansicht oder je
+  Mitglied wiederholte nur dieselben Zeilen; Kennzahlen hat das PDF nicht (sie stehen auf der Start-Page, §7).
+- Lesezeichen je Seite („Seestraße“, „Unterstadt (gesamt)“) und je Liste des Anhangs.
 
 **Bedienung.**
 - „Als PDF exportieren …“ im Menü, Kurzbefehl Cmd/Strg+P, auch auf der Start-Page.
-- Dialog: Profil (mit „Profile verwalten …“), Umfang, Anhang, Raster-Auflösung, Blatt je Page, Vorschau.
-- Vorschau: das echte PDF der gewählten Page (Rasterbilder dafür mit 72 dpi), mit pdf.js gezeichnet, aktualisiert
-  kurz nach jeder Änderung.
+- Dialog: Profil (mit „Profile verwalten …“), Umfang, Anhang, Raster-Auflösung, Blatt je Seite (Page bzw.
+  Gesamtansicht „Unterstadt (gesamt)“ mit dem Blatt des Verbunds), Vorschau.
+- Vorschau: das echte PDF der gewählten Seite (Rasterbilder dafür mit 72 dpi), mit pdf.js gezeichnet, aktualisiert
+  kurz nach jeder Änderung. Geöffnet in der Gesamtansicht zeigt sie die Gesamtansicht.
 - Der Export läuft im Hintergrund auf einem Stand des Projekts zum Zeitpunkt des Starts; die Oberfläche bleibt
   bedienbar. Fortschritt unten links, nicht modal („PDF: Page 3 von 8“, Balken, Prozent) mit „Abbrechen“.
 - Speichern über den Dateidialog (Desktop) bzw. als Download (Browser). Dateiname-Vorschlag
-  „{Projekt} – {Profil} – {JJJJ-MM-TT}.pdf“, bei genau einer Page „{Projekt} – {Festplatz} – {Profil} – {Datum}.pdf“;
+  „{Projekt} – {Profil} – {JJJJ-MM-TT}.pdf“, bei genau einer Seite „{Projekt} – {Festplatz} – {Profil} – {Datum}.pdf“
+  (Gesamtansicht: „… – Unterstadt (gesamt) – …“);
   im Dateinamen unzulässige Zeichen werden durch „-“ ersetzt.
-- Fehlt die Datei eines Hintergrunds, wird ohne ihn exportiert, mit Hinweis.
+- Fehlt die Datei eines Hintergrunds, wird ohne ihn exportiert, mit Hinweis (je Festplatz einmal, auch wenn ihn eine
+  Gesamtansicht zeigt).
 
 **Abnahmekriterium Dauer** (M8): 8 Pages A1 quer mit je einem JPEG-Hintergrund 8000 × 6000 px, 500 Stände, Profil
 „Intern“ mit Anhang, 300 dpi: Median aus 3 Läufen höchstens 60 s in Chromium und WebKit, während des Exports kein
@@ -880,7 +912,7 @@ Chromium und WebKit. Geprüft mit `npm run test:perf`.
   Version 6 seit M10, Version 7 seit M11: ausgeblendete Freiflächen je Page, Version 8 seit M12: Form der Stände und
   Formvorlagen, Version 14 seit #13: freies Blatt „Plan“/„Ausschnitt“ mit Rand, Zielbreite und Ausschnitt, Version 15
   seit #16: eigene Form je Stand, Frontmeter von Hand, „belegt wie gezeichnet“ und Drehung je Teil, Version 16 seit
-  #15: Festplatz-Verbünde `groups`).
+  #15: Festplatz-Verbünde `groups`, Version 17 seit #15 Teil c: Ebene „Nachbarn“ `neighbours` je Page und Verbund).
 - Projekt als Vorlage fürs nächste Jahr duplizieren.
 - Import einer Händlerliste aus CSV/XLSX (Spalten zuordnen). Importierte Händler landen in einer
   Liste „noch nicht platziert“ und können per Drag & Drop platziert werden. [Phase 2]
@@ -962,7 +994,7 @@ Entscheidungen 2026-11-03 und 2026-11-06 (#15). Mehrere Festplätze hängen räu
 Rand (Unterstadt: Müllerwiese, Ziegelturm, Bleiche, Schifftor, Seestraße und Escher; dazu „Oberstadt“ aus Obermarkt und
 Untermarkt). Im alten Illustrator-Plan erscheinen Nachbarstände deshalb doppelt. Umsetzung in Teilen: **a** (Kern,
 Dateiformat, Verbund verwalten, Lage, Nachbarn in der Einzelansicht) und **b** (Gesamtansicht mit Bearbeiten, Werkzeug
-„Ausrichten“) sind umgesetzt; **c** (PDF der Gesamtansicht) folgt.
+„Ausrichten“) und **c** (Blatt und PDF der Gesamtansicht, Nachbarn im PDF einer Einzelansicht) sind umgesetzt.
 
 **Grundsätze.**
 - **Gemeinsames Koordinatensystem:** Beim Einrichten wird jede Page einmal samt Hintergrund und allen Objekten an ihre
@@ -1010,7 +1042,11 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   über die Grenze vollständig ist). Hat die Page keine Objekte, gilt die Fläche ihres Hintergrunds; ohne beides hat sie
   keine Nachbarn.
 - Darstellung: blass, gestrichelt, unter den eigenen Objekten, mit „SE-02 · Seestraße“ (Nummer, ohne Nummer der Name,
-  und der Platz) in der Mitte des Stands; auf den Ebenen „Geschäfte“ bzw. „Infrastruktur“ der Page.
+  und der Platz) in der Mitte des Stands; auf den Ebenen „Geschäfte“ bzw. „Infrastruktur“ der Page und zusätzlich auf
+  der Ebene **„Nachbarn“** (Teil c, Formatversion 17): Sie erscheint im Ebenen-Panel, sobald die Page Nachbarn hat, ist
+  ein-/ausblendbar (Ansichtseinstellung wie die anderen Ebenen, kein Undo-Schritt) und nicht sperrbar (Nachbarn sind
+  ohnehin nicht bearbeitbar). Ausgeblendet sind Nachbarn unsichtbar, weder Doppelklick- noch Fangziel; sie belegen
+  aber weiter Freiflächen und zählen für Überlappung und Abstand.
 - Nur sichtbar, nicht bearbeitbar: Klick, Auswahlrechteck und „Alles auswählen“ treffen sie nicht. Ein **Doppelklick**
   (Auswahlwerkzeug) springt zum Besitzer-Platz, zoomt auf das Objekt und wählt es dort aus.
 - Sie belegen Freiflächen (§4), zählen für Überlappung und Abstand (§3; Warnungen nur an eigenen Ständen) und sind
@@ -1018,7 +1054,8 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   „freihalten“ (Entscheidung Laurin 2026-11-09); sie wird nur blass angezeigt und belegt Freiflächen. Für Statistik,
   Strom, Nummerierung, Standgeld und CSV zählen Nachbarn nicht.
 - „außerhalb“: über alle wirkenden Grundflächen des Verbunds (§3); auf einer Page ohne Grundflächen (#17) bleibt es aus.
-- Im PDF einer Page werden Nachbarn nicht gezeichnet (§9).
+- Im PDF einer Page erscheinen Nachbarn blass mit „Nr · Platz“, abschaltbar über die Ebene „Nachbarn“ des
+  Export-Profils (Teil c, Entscheidung Laurin 2026-11-07, §9).
 
 **Gesamtansicht** (Teil b, Entscheidungen 2026-11-03 und 2026-11-06):
 - **Tab** „Unterstadt (gesamt)“ (kursiv, mit Verbund-Symbol) steht direkt vor dem ersten Mitglied in der Tab-Reihenfolge;
@@ -1030,8 +1067,8 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   geht nur in der Einzelansicht), dazu die Objekte aller Mitglieder (wirkende Grundflächen, Stände, Infrastruktur). Es
   gibt keine Nachbarn: Alle Objekte sind bearbeitbar. Raster und Nordrichtung kommen vom ersten Mitglied, Ebenen und
   Ansicht vom Verbund (Ansicht in `Verbund.view` gespeichert, kein Undo-Schritt; hat der Verbund noch keine, passt die
-  Gesamtansicht beim ersten Öffnen Objekte und Hintergründe ins Fenster). Die Ebene „Blatt“ fehlt bis zum PDF der
-  Gesamtansicht (Teil c).
+  Gesamtansicht beim ersten Öffnen Objekte und Hintergründe ins Fenster). Dazu das Blatt des Verbunds mit seinen
+  Papier-Elementen auf der Ebene „Blatt“ des Verbunds (Teil c, „PDF der Gesamtansicht“).
 - **Bearbeiten wie in der Einzelansicht:** Auswählen (Klick, Auswahlrechteck, Alles auswählen – auch über Platzgrenzen),
   Verschieben, Größe, Drehen, Pfeiltasten, Felder der Steuerungs- und Seitenleiste, Löschen, Kopieren/Einfügen,
   Duplizieren, Alt+Ziehen, Form und Teile, „Zu einem Stand zusammenfassen“ (der Stand bleibt auf dem Platz seines
@@ -1054,12 +1091,13 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   Objekte, und ein Hinweis nennt die Grundflächen, die bleiben. Das Stromlimit (§6) gilt wie beim Ändern.
 - **Gesperrt** (Tooltip bzw. Hinweis „In der Gesamtansicht gesperrt: nur in der Einzelansicht des Festplatzes möglich“):
   „Neu nummerieren“, „Alle Fixierungen lösen“/„Alle Nummern fixieren“, die Werkzeuge „Mittelpunkt setzen“ und „Richtung
-  setzen“, Hintergrund importieren, Kalibrieren, Schriftfeld, Legende ein/aus, Raster ein/aus (es gilt das des ersten
+  setzen“, Hintergrund importieren, Kalibrieren, Raster ein/aus (es gilt das des ersten
   Platzes), Festplatz duplizieren und löschen sowie alle Page-Einstellungen (Hintergrund, Nummerierung, Grundflächen,
   Raster, Norden, Strom). Die Platznummer eines Stands und ihr Schloss lassen sich in der Seitenleiste ändern (Attribut).
 - **Seitenleiste ohne Auswahl:** Bereich „Verbund“ (Name, Mitglieder mit Reihenfolge, Lage, Herausnehmen, Aufnehmen,
   Löschen – dieselbe Karte wie in den Projekteinstellungen; Knopf „Plätze ausrichten …“) und „Nur in der Einzelansicht“
-  mit den gesperrten Funktionen und Links zu den Plätzen; dazu die Ebenen. Den Bereich „Strom“ gibt es dort nicht.
+  mit den gesperrten Funktionen und Links zu den Plätzen; darunter der Bereich „Blatt“ des Verbunds (Teil c) und die
+  Ebenen. Den Bereich „Strom“ gibt es dort nicht.
 
 **Werkzeug „Ausrichten“** (A, nur in der Gesamtansicht; Entscheidung 2026-11-03):
 - **Platz wählen:** Klick auf eines seiner Objekte (auch auf gesperrten, sichtbaren Ebenen) oder Auswahl im Panel des
@@ -1084,10 +1122,32 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   beim Übernehmen auf 0,01 m und 0,1° (§ Begriffe). „Lage“ (Zahlenfelder in den Projekteinstellungen) und Ziehen mit
   „Ausrichten“ runden weiter auf 0,1° bzw. 0,01 m.
 
-**PDF der Gesamtansicht** (Teil c, folgt): eigenes Blatt mit Schriftfeld und Legende des Verbunds.
+**PDF der Gesamtansicht** (Teil c): Der Verbund hat ein eigenes Blatt (z. B. Übersichtsplan „Unterstadt“), gespeichert in
+seinen Feldern `sheet`, `titleBlock`, `titleBlockText`, `legend`, `scaleBar`, `northArrow` und `layers`.
+- **Blatt in der Gesamtansicht:** sichtbar und bearbeitbar wie bei einer Page (§8): alle Formate einschließlich „Plan“
+  und „Ausschnitt“ (#13), Seitenleisten-Bereich „Blatt“, Ziehen von Rahmen, Marke und Papier-Elementen, Pfeiltasten,
+  „Ausschnitt aufziehen“, Werkzeug „Schriftfeld“ (T), Legende mit Shift+L, Entf blendet ein Papier-Element aus. Jede
+  Änderung ist ein Undo-Schritt und betrifft nur den Verbund, nie seine Mitglieder; die Ebene „Blatt“ des Verbunds ist
+  ein- und ausblendbar und sperrbar. Vorgaben wie bei einer neuen Page („Plan“, Zielbreite 841 mm).
+- **Inhalt** eines Plans bzw. eines angepassten DIN-Blatts: alle Mitglieder (ihre wirkenden Grundflächen, Stände und
+  Infrastruktur); ohne Objekte die Hintergründe aller Mitglieder. Die Mitte beim Wechsel auf einen festen Maßstab
+  kommt ebenso aus allen Mitgliedern.
+- **Schriftfeld:** Projektname, als Festplatz der Name des Verbunds, Maßstab und Format seines Blatts, Freitext des
+  Verbunds („Freitext der Gesamtansicht“). **Legende** über alle Mitglieder (Einträge wie §8). **Nordpfeil:** Nordrichtung
+  des ersten Mitglieds, wie Nordpfeil und Raster der Zeichenfläche der Gesamtansicht (alle Mitglieder liegen nach dem
+  Ausrichten in einem Koordinatensystem; ist das erste Mitglied genordet, sind es alle). Einstellen in dessen
+  Einzelansicht; die Seitenleiste des ausgewählten Nordpfeils sagt das.
+- **Export:** Der Export-Dialog bietet die Gesamtansicht als eigene Seite „Unterstadt (gesamt)“ vor ihren Mitgliedern an
+  (Häkchen, Vorschau, Blatt des Verbunds; §9). Die Seite enthält die Objekte aller Mitglieder (keine Nachbarn, keine
+  doppelten Stände) und je Mitglied seinen Hintergrund (§9 „Mehrere Hintergründe je Seite“). Warnungen und Freiflächen
+  rechnen über alle Mitglieder wie auf der Zeichenfläche. Im Anhang steht die Gesamtansicht für ihre Mitglieder (§9).
+- Ein Verbund ohne Mitglieder hat keine Gesamtansicht und damit auch keine Seite im Export.
 
 **Dateiformat:** Formatversion 16, Projekt `groups`: je Verbund `{ id, name, pageIds, sheet, titleBlock, titleBlockText,
 legend, scaleBar, northArrow, layers, view }` (Papierfelder wie bei einer Page; Vorgaben wie bei einer neuen Page).
+Formatversion 17 (Teil c): Ebene `neighbours` („Nachbarn“) in `layers` jeder Page und jedes Verbunds; die Migration
+16 → 17 ergänzt sie sichtbar und nicht gesperrt (bisher waren Nachbarn immer sichtbar). In der Gesamtansicht hat sie
+keine Wirkung (dort gibt es keine Nachbarn).
 Beim Laden entfallen unbekannte und doppelte Mitglieder; eine Page in mehreren Verbünden bleibt im ersten. Ein Verbund
 ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
 

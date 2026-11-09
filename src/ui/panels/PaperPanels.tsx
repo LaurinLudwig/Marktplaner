@@ -6,6 +6,8 @@ import { PAPER_KIND_LABEL, pagePaper } from '../../core/paper';
 import { anchorToPaper, dinPrintHint, exceedsPdfLimit, isFreeFormat, paperSizeText, PDF_MAX_MM, scaleText, SHEET_FORMAT_LABEL, shownOnPaper, TITLE_BLOCK_MAX_TEXT_LINES } from '../../core/sheet';
 import { fixSheetScale, setPaperVisible, setSheet, setTitleBlockField, setTitleBlockText, todayText } from '../../state/paper';
 import { useStore, type PaperElement } from '../../state/store';
+import { memberPages } from '../../core/verbund';
+import { verbundOfRef } from '../../core/verbundView';
 import { keyLabel, tip } from '../shortcuts/tip';
 import { NumberField } from './NumberField';
 import { TextField } from './TextField';
@@ -191,6 +193,9 @@ function DinPrintHint({ paper, scale }: { paper: { w: number; h: number }; scale
 /** Seitenleiste bei ausgewähltem Papier-Element (M7, M8): Lage, Felder des Schriftfelds, Hinweise. */
 export function PaperElementPanel({ page, element }: { page: FestplatzPage; element: PaperElement }) {
   const project = useStore((s) => s.project);
+  // Gesamtansicht eines Verbunds (#15 Teil c): Papier-Elemente des Verbunds; Norden kommt vom ersten Mitglied
+  const verbund = verbundOfRef(project, page.id);
+  const first = verbund ? memberPages(project, verbund)[0] : undefined;
   if (element === 'sheet') return <SheetPanel page={page} />;
   const anchor = page[element];
   const title = PAPER_KIND_LABEL[element];
@@ -218,15 +223,25 @@ export function PaperElementPanel({ page, element }: { page: FestplatzPage; elem
         )}
         {element === 'titleBlock' && (
           <>
-            <TextField id="tb-text" label="Freitext dieser Page" value={page.titleBlockText} multiline onCommit={(t) => setTitleBlockText(page.id, t)} />
+            <TextField id="tb-text" label={verbund ? 'Freitext der Gesamtansicht' : 'Freitext dieser Page'} value={page.titleBlockText} multiline onCommit={(t) => setTitleBlockText(page.id, t)} />
             {lines > TITLE_BLOCK_MAX_TEXT_LINES && <p className="hint">Nur die ersten {TITLE_BLOCK_MAX_TEXT_LINES} Zeilen erscheinen im Schriftfeld.</p>}
             <TitleBlockFields />
-            <p className="hint">Projektname: „{project.name}“, Festplatz: „{page.name}“ (umbenennen per Doppelklick auf den Tab).</p>
+            <p className="hint">
+              Projektname: „{project.name}“, {verbund ? 'Verbund' : 'Festplatz'}: „{page.name}“ (umbenennen per Doppelklick auf den Tab).
+            </p>
           </>
         )}
-        {element === 'legend' && <p className="hint">Die Einträge entstehen automatisch aus dem, was auf der Page sichtbar ist (Ebenen).</p>}
+        {element === 'legend' && (
+          <p className="hint">Die Einträge entstehen automatisch aus dem, was {verbund ? 'auf allen Plätzen des Verbunds' : 'auf der Page'} sichtbar ist (Ebenen).</p>
+        )}
         {element === 'scaleBar' && <p className="hint">Länge und Einteilung folgen dem Maßstab des Blatts.</p>}
-        {element === 'northArrow' && <p className="hint">Der Pfeil folgt der Nordrichtung der Page (Bereich „Festplatz“).</p>}
+        {element === 'northArrow' && (
+          <p className="hint">
+            {verbund
+              ? `Der Pfeil folgt der Nordrichtung des ersten Platzes im Verbund${first ? ` („${first.name}“)` : ''}; einstellen in dessen Einzelansicht.`
+              : 'Der Pfeil folgt der Nordrichtung der Page (Bereich „Festplatz“).'}
+          </p>
+        )}
         <button type="button" className="btn" onClick={() => setPaperVisible(page.id, element, false)} {...tip({ shortcut: element === 'legend' ? 'view.legend' : undefined, label: `${title} ausblenden`, ariaLabel: false })}>
           {title} ausblenden
         </button>
