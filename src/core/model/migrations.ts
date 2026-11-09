@@ -31,10 +31,11 @@
  *  14  Freies Blatt (#13): Blatt `format` auch 'plan' und 'region', dazu `margin`, `targetWidth`, `region`.
  *  15  Zusammengesetzte Form (#16): Geschäft `parts` (eigene Form) und `frontOverride` (Frontmeter von Hand),
  *      Formvorlage `occupies` („belegt wie gezeichnet“), Teil einer Form `rot` (Drehung je Teil).
+ *  16  Festplatz-Verbund (#15): Projekt `groups` (Verbünde mit Mitgliedern, Blatt, Papier-Elementen, Ebenen, Ansicht).
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 15;
+export const CURRENT_SCHEMA_VERSION = 16;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -187,6 +188,8 @@ export const MIGRATIONS: Record<number, Migration> = {
       isObj(pg) ? { ...pg, stands: mapList(pg.stands, (s) => (isObj(s) ? { parts: null, frontOverride: null, ...s } : s)) } : pg,
     ),
   }),
+  /** 15 → 16 (#15): Noch kein Festplatz-Verbund; jede Page steht für sich. */
+  15: (p) => ({ groups: [], ...p }),
 };
 
 export function migrate(project: unknown, fromVersion: number): unknown {

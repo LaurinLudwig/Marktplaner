@@ -6,6 +6,7 @@ import { filterInfraRows, infraRows, sortInfraRows, type InfraRow } from '../cor
 import type { FestplatzPage, Id, InfraTypeDef, Project, ShapeTemplate } from '../core/model/types';
 import { filterRows, sortRows, standRows, type StandRow } from '../core/standTable';
 import type { useStartPage } from '../state/startPage';
+import type { VerbundProject } from '../core/verbund';
 
 /**
  * Angezeigte Zeilen der Start-Page-Listen (M6), gemeinsam für Tabelle und CSV-Export: Filter, Sortierung und die
@@ -35,16 +36,17 @@ export function displayedStandRows(project: Project, st: Pick<StartState, 'stand
 
 /** Zwischenspeicher der Freiflächen je Page: nur geänderte Grundflächen werden neu berechnet. */
 const freeCaches = new Map<Id, FreeSpaceCache>();
-export function freeOf(minWidth: number, types: readonly InfraTypeDef[], templates: readonly ShapeTemplate[]) {
+/** `verbund`: Pages und Verbünde des Projekts; Nachbarn aus dem Verbund (#15) belegen die Freiflächen mit. */
+export function freeOf(minWidth: number, types: readonly InfraTypeDef[], templates: readonly ShapeTemplate[], verbund?: VerbundProject) {
   return (page: FestplatzPage) => {
     let c = freeCaches.get(page.id);
     if (!c) freeCaches.set(page.id, (c = createFreeSpaceCache()));
-    return pageFree(page, { minFreeWidth: minWidth, infraTypes: types, shapeTemplates: templates }, c);
+    return pageFree(page, { minFreeWidth: minWidth, infraTypes: types, shapeTemplates: templates, ...(verbund ? { verbund } : {}) }, c);
   };
 }
 
 export function allFreeRows(project: Project): FreeSpaceRow[] {
-  return freeSpaceRows(project, freeOf(project.settings.minFreeWidth, project.infraTypes, project.shapeTemplates));
+  return freeSpaceRows(project, freeOf(project.settings.minFreeWidth, project.infraTypes, project.shapeTemplates, project));
 }
 
 export function displayedFreeRows(all: readonly FreeSpaceRow[], st: Pick<StartState, 'freeFilter' | 'freeSort'>): FreeSpaceRow[] {

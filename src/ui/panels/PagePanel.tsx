@@ -10,6 +10,8 @@ import { keyLabel, tip } from '../shortcuts/tip';
 import { NumberField } from './NumberField';
 import { AreaOrderPanel } from './AreaOrderPanel';
 import { NumberingPanel } from './NumberingPanel';
+import { groupOf } from '../../core/verbund';
+import { openProjectSettings } from '../../app/startPageNav';
 
 const KIND_LABEL = { pdf: 'PDF', svg: 'SVG', image: 'Bild' } as const;
 
@@ -125,6 +127,7 @@ export function PagePanel({ page }: { page: FestplatzPage }) {
           )}
         </div>
       </section>
+      <VerbundInfo page={page} />
       <NumberingPanel page={page} />
       <AreaOrderPanel page={page} />
       <section className="panel" aria-label="Raster">
@@ -170,5 +173,31 @@ export function PagePanel({ page }: { page: FestplatzPage }) {
         </div>
       </section>
     </>
+  );
+}
+
+/**
+ * Festplatz-Verbund der Page (#15), nur Anzeige: Name und die anderen Mitglieder; verwaltet wird in den
+ * Projekteinstellungen. Ohne Verbund erscheint der Bereich nicht.
+ */
+function VerbundInfo({ page }: { page: FestplatzPage }) {
+  const group = useStore((s) => groupOf(s.project, page.id));
+  const pages = useStore((s) => s.project.pages);
+  if (!group) return null;
+  const others = group.pageIds.filter((id) => id !== page.id).flatMap((id) => pages.find((p) => p.id === id)?.name ?? []);
+  return (
+    <section className="panel" aria-label="Festplatz-Verbund">
+      <div className="panel-head">Festplatz-Verbund</div>
+      <div className="panel-body form">
+        <p data-testid="page-verbund">
+          <strong>{group.name}</strong>
+          {others.length ? ` · mit ${others.join(', ')}` : ''}
+        </p>
+        <p className="hint">Stände und Infrastruktur der Nachbarplätze erscheinen blass; ein Doppelklick springt zu ihrem Platz.</p>
+        <button type="button" className="btn" onClick={openProjectSettings}>
+          Verbünde verwalten …
+        </button>
+      </div>
+    </section>
   );
 }

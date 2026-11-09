@@ -32,11 +32,14 @@ export interface PagePaper {
   northArrow: PaperElement<{ w: number; h: number; angle: number }>;
 }
 
-type ProjectPart = Pick<Project, 'name' | 'categories' | 'infraTypes' | 'titleBlock' | 'shapeTemplates'> & { settings: Pick<Project['settings'], 'minFreeWidth' | 'defaultStandColor'> };
+type ProjectPart = Pick<Project, 'name' | 'categories' | 'infraTypes' | 'titleBlock' | 'shapeTemplates'> &
+  Partial<Pick<Project, 'pages' | 'groups'>> & { settings: Pick<Project['settings'], 'minFreeWidth' | 'defaultStandColor'> };
 
 /** Wird auf der Page mindestens eine Freifläche angezeigt? (für den Legendeneintrag „Freifläche“) */
 export function hasFreeSpace(page: FestplatzPage, project: ProjectPart): boolean {
-  return pageFree(page, { minFreeWidth: project.settings.minFreeWidth, infraTypes: project.infraTypes, shapeTemplates: project.shapeTemplates }).some((a) => a.free.length > 0);
+  // Nachbarn aus dem Verbund (#15) belegen mit, sofern das Projekt seine Pages mitgibt
+  const verbund = project.pages ? { pages: project.pages, groups: project.groups ?? [], categories: project.categories } : undefined;
+  return pageFree(page, { minFreeWidth: project.settings.minFreeWidth, infraTypes: project.infraTypes, shapeTemplates: project.shapeTemplates, ...(verbund ? { verbund } : {}) }).some((a) => a.free.length > 0);
 }
 
 /** Element `kind` der Page (Anker und Layout), unabhängig davon, ob es sichtbar ist. */

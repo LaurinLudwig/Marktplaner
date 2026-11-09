@@ -1,7 +1,7 @@
 import { normAngle, roundAngle } from '../geometry/rect';
 import { newId } from '../id';
 import { UserError } from '../errors';
-import { createPage, defaultLayers, DEFAULT_INFRA_TYPES, DEFAULT_LEGEND_ANCHOR, DEFAULT_NORTH_ARROW_ANCHOR, DEFAULT_SCALE_BAR_ANCHOR, DEFAULT_SETTINGS, DEFAULT_SHEET, DEFAULT_TITLE_BLOCK_ANCHOR } from './defaults';
+import { createPage, createVerbund, defaultLayers, DEFAULT_INFRA_TYPES, DEFAULT_LEGEND_ANCHOR, DEFAULT_NORTH_ARROW_ANCHOR, DEFAULT_SCALE_BAR_ANCHOR, DEFAULT_SETTINGS, DEFAULT_SHEET, DEFAULT_TITLE_BLOCK_ANCHOR } from './defaults';
 import { clampToLimits, GEOMETRIES, INFRA_LIMITS, isInfraIcon } from '../infra';
 import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 import { clampDigits, clampStart } from '../numbering';
@@ -32,6 +32,7 @@ import {
   type Stand,
   type StandShape,
   type Vec,
+  type Verbund,
 } from './types';
 
 export class ProjectFileError extends UserError {
@@ -86,6 +87,7 @@ function normalizeProject(p: Obj): Project {
   const infraTypes = normalizeInfraTypes(p.infraTypes);
   const shapeTemplates = normalizeShapeTemplates(p.shapeTemplates);
   const templateIds = new Set(shapeTemplates.map((t) => t.id));
+  const pages = p.pages.map((pg, i) => normalizePage(pg, i, ids, objectIds, categoryIds, infraTypes, templateIds));
   return {
     id: p.id,
     name: str(p.name, 'Projekt'),
@@ -114,13 +116,55 @@ function normalizeProject(p: Obj): Project {
       defaultStandColor: isColor(s.defaultStandColor) ? s.defaultStandColor : DEFAULT_SETTINGS.defaultStandColor,
       pricing: normalizePricing(s.pricing),
     },
-    pages: p.pages.map((pg, i) => normalizePage(pg, i, ids, objectIds, categoryIds, infraTypes, templateIds)),
+    pages,
     categories,
     infraTypes,
     shapeTemplates,
     titleBlock: { dateText: str(tb.dateText, ''), version: str(tb.version, '') },
     unplaced: arr(p.unplaced),
+    groups: normalizeGroups(p.groups, pages),
   };
+}
+
+/**
+ * Festplatz-Verbünde (#15). Unbrauchbare Einträge und doppelte IDs entfallen. Mitglieder: nur vorhandene Pages, jede
+ * höchstens einmal und in höchstens einem Verbund (der erste in der Liste behält sie). Ein Verbund ohne Mitglieder
+ * bleibt erhalten (er wird angelegt, bevor Mitglieder dazukommen). Blatt und Papier-Elemente wie bei einer Page.
+ */
+function normalizeGroups(raw: unknown, pages: readonly FestplatzPage[]): Verbund[] {
+  const pageIds = new Set(pages.map((pg) => pg.id));
+  const taken = new Set<string>();
+  const seen = new Set<string>();
+  const out: Verbund[] = [];
+  for (const g of arr(raw)) {
+    if (!isObj(g) || typeof g.id !== 'string' || !g.id || seen.has(g.id)) continue;
+    seen.add(g.id);
+    const members: string[] = [];
+    for (const id of arr(g.pageIds)) {
+      if (typeof id !== 'string' || !pageIds.has(id) || taken.has(id)) continue;
+      taken.add(id);
+      members.push(id);
+    }
+    const base = createVerbund(str(g.name, '').trim() || 'Verbund', members);
+    const layersRaw = isObj(g.layers) ? g.layers : {};
+    for (const id of LAYER_IDS) {
+      const l = layersRaw[id];
+      if (isObj(l)) base.layers[id] = { visible: bool(l.visible, true), locked: bool(l.locked, false) };
+    }
+    const view = isObj(g.view) ? g.view : null;
+    out.push({
+      ...base,
+      id: g.id,
+      sheet: normalizeSheet(g.sheet),
+      titleBlock: normalizeAnchor(g.titleBlock, DEFAULT_TITLE_BLOCK_ANCHOR),
+      titleBlockText: str(g.titleBlockText, ''),
+      legend: normalizeAnchor(g.legend, DEFAULT_LEGEND_ANCHOR),
+      scaleBar: normalizeAnchor(g.scaleBar, DEFAULT_SCALE_BAR_ANCHOR),
+      northArrow: normalizeAnchor(g.northArrow, DEFAULT_NORTH_ARROW_ANCHOR),
+      view: view ? { scale: num(view.scale, 10), tx: num(view.tx, 0), ty: num(view.ty, 0) } : null,
+    });
+  }
+  return out;
 }
 
 function normalizePage(

@@ -12,7 +12,8 @@ import { withinTol } from './geometry/tolerance';
 import type { Polygon } from './geometry/polygon';
 import { pageOccupants } from './infra';
 import { activeAreas, usesAreas, type AreasOf } from './pageAreas';
-import { pageStands } from './footprint';
+import { occupancyStands, pageStands } from './footprint';
+import { groupOf, memberPages, neighbourObjects, NO_NEIGHBOURS, withNeighbours, type VerbundProject } from './verbund';
 import type { FestplatzPage, HiddenFree, Id, InfraTypeDef, Project, ShapeTemplate, Vec } from './model/types';
 
 /** Gehört die Ausblendung `h` zu dieser Freifläche? Gleicher Schlüssel, Intervallenden bis 0,01 m verschoben. */
@@ -45,6 +46,11 @@ export interface FreeContext {
   infraTypes: readonly InfraTypeDef[];
   /** Formvorlagen: Stände mit einer Vorlage mit „belegt wie gezeichnet“ belegen mit ihren Teilen (#16); fehlt = keine. */
   shapeTemplates?: readonly ShapeTemplate[];
+  /**
+   * Projekt mit Pages und Verbünden (#15): Nachbarn aus dem Verbund belegen die Freiflächen mit (core/verbund.ts). Fehlt =
+   * nur die eigenen Objekte.
+   */
+  verbund?: VerbundProject;
 }
 
 /**
@@ -54,7 +60,13 @@ export interface FreeContext {
  */
 export function pageFree(page: AreasOf & Pick<FestplatzPage, 'stands' | 'infra' | 'hiddenFree'>, ctx: FreeContext, cache?: FreeSpaceCache): AreaFreeSpaces[] {
   if (!usesAreas(page)) return [];
-  const occupants = pageOccupants({ stands: pageStands(page, ctx.shapeTemplates ?? []), infra: page.infra }, ctx.infraTypes);
+  const templates = ctx.shapeTemplates ?? [];
+  // Nachbarn aus dem Verbund (#15) belegen wie eigene Stände und Infrastruktur
+  const nb = ctx.verbund && 'id' in page ? neighbourObjects(ctx.verbund, page as FestplatzPage) : NO_NEIGHBOURS;
+  const occupants = pageOccupants(
+    { stands: withNeighbours(pageStands(page, templates), occupancyStands(nb.stands, templates)), infra: withNeighbours(page.infra, nb.infra) },
+    ctx.infraTypes,
+  );
   return applyHidden(pageFreeSpaces(activeAreas(page), occupants, ctx.minFreeWidth, cache), page.hiddenFree);
 }
 
@@ -80,13 +92,17 @@ const pruneCaches = new Map<Id, FreeSpaceCache>();
  */
 export function expiredHiddenFree(before: Project, after: Project): Map<Id, readonly HiddenFree[]> {
   const out = new Map<Id, readonly HiddenFree[]>();
-  const ctx = { minFreeWidth: after.settings.minFreeWidth, infraTypes: after.infraTypes, shapeTemplates: after.shapeTemplates };
-  const ctxChanged = before.settings.minFreeWidth !== ctx.minFreeWidth || before.infraTypes !== ctx.infraTypes || before.shapeTemplates !== ctx.shapeTemplates;
+  const ctx = { minFreeWidth: after.settings.minFreeWidth, infraTypes: after.infraTypes, shapeTemplates: after.shapeTemplates, verbund: after };
+  // Im Verbund (#15) belegen Nachbarn mit: Auch Änderungen an Verbünden und an den anderen Mitgliedern zählen
+  const ctxChanged =
+    before.settings.minFreeWidth !== ctx.minFreeWidth || before.infraTypes !== ctx.infraTypes || before.shapeTemplates !== ctx.shapeTemplates || before.groups !== after.groups;
   const old = new Map(before.pages.map((p) => [p.id, p]));
   for (const page of after.pages) {
     if (!page.hiddenFree.length || !usesAreas(page)) continue;
     const prev = old.get(page.id);
-    if (!ctxChanged && prev && prev.useAreas === page.useAreas && prev.areas === page.areas && prev.stands === page.stands && prev.infra === page.infra && prev.hiddenFree === page.hiddenFree) continue;
+    const group = groupOf(after, page.id);
+    const siblingsSame = !group || memberPages(after, group).every((m) => m.id === page.id || (old.get(m.id)?.stands === m.stands && old.get(m.id)?.infra === m.infra));
+    if (!ctxChanged && siblingsSame && prev && prev.useAreas === page.useAreas && prev.areas === page.areas && prev.stands === page.stands && prev.infra === page.infra && prev.hiddenFree === page.hiddenFree) continue;
     let c = pruneCaches.get(page.id);
     if (!c) pruneCaches.set(page.id, (c = createFreeSpaceCache()));
     const keep = pruneHiddenFree(page.hiddenFree, pageFree({ ...page, hiddenFree: [] }, ctx, c));

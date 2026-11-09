@@ -9,7 +9,7 @@ import { fromLocal, normAngle, roundRect, toLocal } from './geometry/rect';
 import { EPS, exceedsTol, lessThan, TOL } from './geometry/tolerance';
 import { vec } from './geometry/vec';
 import { newId } from './id';
-import type { FestplatzPage, Id, InfraGeometry, InfraObject, InfraTypeDef, Rect, Stand, Vec } from './model/types';
+import type { Id, InfraGeometry, InfraObject, InfraTypeDef, Rect, Stand, Vec } from './model/types';
 import { MIN_DRAW_SIZE } from './objects';
 import { footprint, type PartsRect } from './footprint';
 import { partPolygon, partRect } from './shape';
@@ -166,7 +166,7 @@ export function occupyingRects(infra: readonly InfraObject[], types: ReadonlyMap
 const occupantCache = new WeakMap<readonly InfraObject[], { stands: readonly Stand[]; types: readonly InfraTypeDef[]; result: readonly (PartsRect & { id: Id })[] }>();
 
 /** Alles, was Grundflächen belegt: Stände und belegende Infrastruktur (zwischengespeichert je Page-Listen). */
-export function pageOccupants(page: Pick<FestplatzPage, 'infra'> & { stands: readonly Stand[] }, types: readonly InfraTypeDef[]): readonly (PartsRect & { id: Id })[] {
+export function pageOccupants(page: { infra: readonly InfraObject[]; stands: readonly Stand[] }, types: readonly InfraTypeDef[]): readonly (PartsRect & { id: Id })[] {
   if (!page.infra.length) return page.stands;
   const hit = occupantCache.get(page.infra);
   if (hit && hit.stands === page.stands && hit.types === types) return hit.result;

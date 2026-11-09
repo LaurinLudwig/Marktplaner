@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import type { AreaFreeSpaces, FreeSpace } from '../../../core/freeSpace';
-import type { Area, Category, FestplatzPage, Id, InfraTypeDef, ShapeTemplate, Stand, Vec } from '../../../core/model/types';
+import type { Area, Category, FestplatzPage, Id, InfraObject, InfraTypeDef, ShapeTemplate, Stand, Vec } from '../../../core/model/types';
 import { resolveStandColor } from '../../../core/objects';
 import { isShaped, templateOf, unionOutline } from '../../../core/shape';
 import type { Bounds } from '../../../core/viewport';
@@ -77,6 +77,10 @@ interface Props {
   distanceWarnings: DistanceWarnings;
   /** Platz der Standbeschriftungen (#9) aus der gespeicherten Page (Canvas.tsx). */
   labels: ReadonlyMap<Id, LabelPlacement>;
+  /** Nachbarn aus dem Festplatz-Verbund (#15): blass und gestrichelt, nicht auswählbar. */
+  neighbours: { stands: readonly Stand[]; infra: readonly InfraObject[] };
+  /** Beschriftung der Nachbarstände („SE-02 · Seestraße“). */
+  neighbourCaptions: ReadonlyMap<Id, string>;
 }
 
 
@@ -106,6 +110,8 @@ export const ObjectsLayer = memo(function ObjectsLayer({
   infraWarnObjects,
   distanceWarnings,
   labels,
+  neighbours,
+  neighbourCaptions,
 }: Props) {
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const tplById = useMemo(() => new Map(shapeTemplates.map((t) => [t.id, t])), [shapeTemplates]);
@@ -156,6 +162,13 @@ export const ObjectsLayer = memo(function ObjectsLayer({
           <FreeList free={free} spacing={hatchSpacing} />
         </g>
       )}
+      {/* Nachbarn aus dem Verbund (#15) unter den eigenen Objekten: nur sichtbar, nicht auswählbar */}
+      {((L.stands.visible && neighbours.stands.length > 0) || (L.infra.visible && neighbours.infra.length > 0)) && (
+        <g className="layer-neighbours" data-testid="neighbours">
+          {L.stands.visible && <NeighbourStandList stands={neighbours.stands} catById={catById} tplById={tplById} defaultColor={defaultColor} captions={neighbourCaptions} />}
+          {L.infra.visible && <InfraList infra={neighbours.infra} types={infraTypes} selected={NO_IDS} fontSize={fontSize} markerSize={markerSize} warn={NO_IDS} neighbour />}
+        </g>
+      )}
       {L.stands.visible && (
         <g className={`layer-stands${L.stands.locked ? ' locked' : ''}`}>
           <StandList stands={staticStands} catById={catById} tplById={tplById} defaultColor={defaultColor} selected={selected} warnKinds={staticKinds} />
@@ -180,6 +193,7 @@ export const ObjectsLayer = memo(function ObjectsLayer({
           {L.stands.visible && <StandLabelList stands={staticStands} labels={labels} fontSize={fontSize} />}
           {L.stands.visible && movingStands.length > 0 && <StandLabelList stands={movingStands} labels={movingLabels} fontSize={fontSize} />}
           {L.infra.visible && <InfraLabelList infra={page.infra} types={infraTypes} fontSize={fontSize} markerSize={markerSize} />}
+          {L.stands.visible && <NeighbourLabelList stands={neighbours.stands} captions={neighbourCaptions} fontSize={fontSize} />}
         </g>
       )}
     </>
@@ -187,6 +201,43 @@ export const ObjectsLayer = memo(function ObjectsLayer({
 });
 
 const NO_STANDS: Stand[] = [];
+const NO_IDS: ReadonlySet<Id> = new Set();
+
+/**
+ * Nachbarstände aus dem Festplatz-Verbund (#15): in ihrer Form und Farbe, blass und gestrichelt (CSS
+ * `.layer-neighbours`), ohne Auswahl und Warnung. `data-neighbour` statt `data-id`: Sie gehören einer anderen Page.
+ */
+const NeighbourStandList = memo(function NeighbourStandList({
+  stands,
+  catById,
+  tplById,
+  defaultColor,
+  captions,
+}: {
+  stands: readonly Stand[];
+  catById: Map<Id, Category>;
+  tplById: Map<Id, ShapeTemplate>;
+  defaultColor: string;
+  captions: ReadonlyMap<Id, string>;
+}) {
+  return stands.map((s) => {
+    const cat = s.categoryId ? catById.get(s.categoryId) : undefined;
+    return (
+      <g key={s.id} className="neighbour" data-neighbour={s.id} aria-label={captions.get(s.id)}>
+        <Prims prims={standPrims(s, resolveStandColor(s, cat, defaultColor), null, templateOf(s, tplById))} />
+      </g>
+    );
+  });
+});
+
+/** Beschriftung der Nachbarstände „SE-02 · Seestraße“ (Gruppe in Zentimetern), mittig, etwas kleiner. */
+const NeighbourLabelList = memo(function NeighbourLabelList({ stands, captions, fontSize }: { stands: readonly Stand[]; captions: ReadonlyMap<Id, string>; fontSize: number }) {
+  return stands.map((s) => (
+    <text key={s.id} className="neighbour-label" data-neighbour={s.id} x={s.cx * CM} y={s.cy * CM} fontSize={fontSize * CM * 0.8} textAnchor="middle" dominantBaseline="central">
+      {captions.get(s.id) ?? ''}
+    </text>
+  ));
+});
 
 /**
  * Konkurrenzschutz (#3): Um jeden ausgewählten Stand einer Kategorie mit Mindestabstand dessen Umriss (Rechteck bzw.

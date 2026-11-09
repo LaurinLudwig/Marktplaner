@@ -20,6 +20,9 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 - **Start-Page**: immer die erste Page, nicht löschbar. Enthält Statistik und Listen (siehe 7).
 - **Festplatz-Page**: eine Page pro Festplatz mit eigener Zeichenfläche. Pages lassen sich
   anlegen, umbenennen, umsortieren (Drag & Drop in der Tab-Leiste), duplizieren und löschen.
+- **Festplatz-Verbund** (#15): Pages, die räumlich zusammenhängen und sich am Rand überschneiden (z. B. „Unterstadt“),
+  in einem gemeinsamen Koordinatensystem. Eine Page gehört zu höchstens einem Verbund. Ein Objekt gehört genau der Page,
+  in deren Liste es steht (Besitz); auf den anderen Plätzen des Verbunds erscheint es als **Nachbar** (§12).
 - **Hintergrundplan**: pro Festplatz-Page importiert, per Kalibrierung auf Meter skaliert.
 - **Grundfläche**: Rechteck, frei rotierbar, mit einer markierten **Vorderseite**.
   Breite = Länge der Vorderseite, Tiefe = senkrecht dazu. [ANPASSEN: nur Rechtecke, keine Polygone]
@@ -131,7 +134,9 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
     entlang der Vorderseite an deren Enden und (mit Nachbar-Fang) an den Kanten benachbarter Stände, dort mit
     dem Fang-Abstand (siehe unten). Auf einer Page ohne Grundflächen (§2, #17) entfällt dieser Fang.
   - Nachbarstände: Ein Stand rastet mit dem Fang-Abstand neben einer Kante eines parallel stehenden Nachbarn
-    ein (Anliegen) oder fluchtet mit dessen Kanten (Fluchten ohne Abstand).
+    ein (Anliegen) oder fluchtet mit dessen Kanten (Fluchten ohne Abstand). Im Festplatz-Verbund (#15, §12) sind auch
+    die Nachbarstände der anderen Plätze Fangziele (bündig an den Nachbarplatz anschließen); ebenso fangen Mess- und
+    Linienwerkzeuge an Nachbarständen und Nachbar-Infrastruktur.
   - Fang-Abstand (M10, #2): projektweit in den Projekteinstellungen, Standard 0,3 m, 0–10 m, mit Undo; 0 = bündig.
     Es gibt nur diesen einen Fangpunkt je Kante (kein zusätzliches bündiges Einrasten). Projekte aus der Zeit vor
     Formatversion 6 bekommen beim Öffnen 0,3 m (Entscheidung Laurin 2026-10-23). Die Gasse liegt unter der
@@ -146,19 +151,27 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   Warnungen (Entscheidung 2026-10-11):
   - Außerhalb (orange): Ein Teil des Stands liegt mehr als 0,01 m außerhalb der Vereinigung aller
     Grundflächen, auch wenn er nur hinten herausragt. Ein Stand über zwei aneinanderliegenden
-    Grundflächen ist nicht außerhalb. Auf einer Page ohne Grundflächen (§2, #17) ist kein Stand außerhalb.
-  - Überlappung (rot, Vorrang vor orange): zwei Stände dringen mehr als 0,01 m ineinander ein.
+    Grundflächen ist nicht außerhalb. Auf einer Page ohne Grundflächen (§2, #17) ist kein Stand außerhalb. Im
+    Festplatz-Verbund (#15, §12) zählen die wirkenden Grundflächen aller Plätze des Verbunds: Ein Stand ist innerhalb,
+    wenn er in irgendeiner davon steht.
+  - Überlappung (rot, Vorrang vor orange): zwei Stände dringen mehr als 0,01 m ineinander ein. Im Festplatz-Verbund
+    (#15, §12) auch ein eigener Stand mit einem Nachbarstand; die Warnung erscheint nur am eigenen Stand (auf jedem
+    Platz also an dessen Stand), die Seitenleiste nennt den Nachbarn mit seinem Platz („Überlappt mit Nr. SE-02 ·
+    Crêpes (Seestraße)“).
   - Doppelte Nummer (orange, Entscheidung 2026-10-12): zwei Stände im selben Nummernkreis (§5) haben dieselbe
     Platznummer („12“ = „012“, Groß-/Kleinschreibung und Leerzeichen am Rand egal). Das Präfix gehört zur Nummer:
     „A-12“ = „A-012“, aber „A-12“ ≠ „B-12“. Leere Nummern sind nie doppelt.
     Die Seitenleiste nennt die anderen Stände mit dieser Nummer (auch auf anderen Pages).
   - Infrastruktur (rot, Entscheidung 2026-10-12): Der Stand dringt mehr als 0,01 m in ein Infrastruktur-Objekt ein,
-    dessen Typ „freihalten“ hat (§11). Die Seitenleiste nennt das Objekt.
+    dessen Typ „freihalten“ hat (§11). Die Seitenleiste nennt das Objekt. Im Festplatz-Verbund (#15, §12) zählt nur die
+    eigene Infrastruktur der Page: Infrastruktur eines Nachbarplatzes löst an eigenen Ständen keine Warnung aus
+    (Entscheidung Laurin 2026-11-09).
   - Abstand (orange, Konkurrenzschutz, #3): Zwei Stände derselben Kategorie stehen näher als deren Mindestabstand
     (Projekteinstellungen, Bereich „Kategorien“, Feld „Mindestabstand“ in m; leer = keine Prüfung). Gemessen wird
     Kante zu Kante: der kürzeste Abstand zwischen den beiden Standrechtecken (Hitbox B × T, auch bei Kreis/Oval und
     Vorlagen ohne „belegt wie gezeichnet“; bei Belegung wie gezeichnet zwischen den Teilen, #16), als Luftlinie, auf 0,01 m gerundet; genau der Mindestabstand ist erlaubt, Überschneidung zählt als 0 m. Geprüft wird
-    nur innerhalb einer Festplatz-Page, live auch beim Ziehen. Die Seitenleiste nennt die zu nahen Stände mit Abstand
+    nur innerhalb einer Festplatz-Page und, im Festplatz-Verbund (#15, §12), mit den Nachbarständen der anderen Plätze
+    (Warnung nur am eigenen Stand), live auch beim Ziehen. Die Seitenleiste nennt die zu nahen Stände mit Abstand
     („Zu nah an gleicher Kategorie: Schokofrüchte Meier, 23,40 m“); bei ausgewähltem Stand zeigt die Zeichenfläche
     den Mindestabstand als gestrichelten Umriss um den Stand (Ecken gerundet) und eine Linie zu jedem zu nahen Stand
     (zwischen den nächsten Punkten). Zählt am Page-Tab, in den Kennzahlen und im Filter „mit Warnung“; Chip „Abstand“
@@ -332,6 +345,9 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 - Jedes Geschäft, das die Grundfläche überlappt, belegt auf dieser Achse das Intervall seiner
   Projektion (Schnittmenge mit der Grundfläche). Bei Belegung wie gezeichnet (§3 „Form“, #16) zählen nur die Teile,
   die die Grundfläche erreichen; belegt wird das Intervall von der kleinsten bis zur größten Projektion dieser Teile.
+- Im Festplatz-Verbund (#15, §12) belegen Nachbarstände und belegende Nachbar-Infrastruktur der anderen Plätze die
+  Grundflächen genau wie eigene (ein Stand im Überschneidungsbereich belegt also auf beiden Plätzen). Ausgeblendete
+  Freiflächen verfallen auch, wenn ein Nachbar die Lücke verändert.
 - Infrastruktur-Objekte, deren Typ „belegt Fläche“ hat, belegen die Achse genau wie ein Geschäft (alle Regeln dieses
   Abschnitts gelten für sie mit). Bei Linien zählt das Rechteck aus Länge × Strichstärke, bei Linien ohne Stärke die
   Projektion der Linie (gerechnet als 5 cm breiter Streifen, damit die Eindringtiefe über der Toleranz liegt). Punkte (Marker) belegen nie (Entscheidung 2026-10-12).
@@ -414,7 +430,8 @@ Entscheidungen 2026-10-12 (M5-Planung).
     an B (nicht im PDF). Das Auswahlwerkzeug zieht A und B (Fang wie beim Setzen, ein Undo-Schritt, Esc bricht ab).
   - Erstes Umschalten: A und B laufen waagrecht durch die Mitte aller Stände (vom linken bis zum rechten Rand ihrer
     Hülle; ohne Stände der Grundflächen), nummeriert also wie links → rechts.
-  - Verschieben oder Drehen einer Page im Verbund (#15) bewegt A und B noch nicht mit; das kommt mit #15.
+  - Verschieben oder Drehen einer Page im Verbund (#15, §12) bewegt A und B mit (Entscheidung: A/B folgen der
+    Transformation).
   - Formatversion 13 (Page `numberingMode` zusätzlich `rightToLeft`, `topToBottom`, `bottomToTop`, `direction`,
     `counterClockwise`; Page `direction` mit `from` und `to` in Metern). `frontLtr` bleibt der Name für links → rechts.
 - **Uhrzeigersinn:** um einen pro Festplatz gesetzten Mittelpunkt (Klick auf die Zeichenfläche nach „Mittelpunkt
@@ -430,6 +447,8 @@ Entscheidungen 2026-10-12 (M5-Planung).
   gerundeten Winkel, gespiegelt (360° − Winkel); bei gleichem Winkel zuerst der Stand näher am Mittelpunkt, danach nach
   ID.
 - **Manuell:** Die Automatik lässt die Page aus.
+- **Verbund** (#15, §12): Nummeriert werden nur die eigenen Stände einer Page; Nachbarstände der anderen Plätze zählen
+  nicht mit (auch nicht für die Reihenfolge, den Mittelpunkt oder die Vorgabe der eigenen Richtung).
 - **Format:** Präfix der Page + Zahl, aufgefüllt auf die Stellenzahl (z. B. Präfix „A-“, 2 Stellen → „A-01“).
   Präfix pro Festplatz (Seitenleiste); Startnummer und Stellenzahl (1–4, Standard 1 = ohne führende Nullen)
   projektweit in den Projekteinstellungen der Start-Page (§7).
@@ -465,7 +484,8 @@ Entscheidungen 2026-10-12 (M5-Planung).
 
 ### 6. Strom
 Entscheidungen 2026-10-12 (M5-Planung).
-- Optionales Stromlimit pro Festplatz in kW. Es zählen alle Stände der Page, auch außerhalb von Grundflächen, und
+- Optionales Stromlimit pro Festplatz in kW. Es zählen alle Stände der Page (nur eigene, keine Nachbarn aus dem
+  Verbund, §12), auch außerhalb von Grundflächen, und
   seit M7 der Strom der Infrastruktur-Objekte (§11; Entscheidung 2026-10-12). Für sie gilt alles in diesem Abschnitt
   genauso (Summe, Anschlussarten, Hinweis, Blockieren). Die Anzeigen nennen zusätzlich „davon Infrastruktur x kW“.
 - Laufende Summe als Balken (grün / gelb ab 90 % / rot über Limit) mit „84 / 100 kW (84 %)“. Verglichen wird auf
@@ -488,6 +508,9 @@ Entscheidungen 2026-10-12 (M6-Planung).
   „Geschäfte“, „Freiflächen“, „Infrastruktur“ und „Einstellungen“ (Cmd/Strg+1/2/3/4 auf der Start-Page; „Infrastruktur“
   seit M7, Entscheidung 2026-10-12); deren Inhalt füllt die
   Resthöhe und scrollt selbst. Die Start-Page hat keine Werkzeug- und keine Seitenleiste.
+- **Besitz im Verbund** (#15, §12): Kennzahlen, Geschäftstabelle, Freiflächenliste, Standgeld und CSV zählen jeden
+  Stand genau einmal, bei seinem Platz. Nachbarstände wirken nur auf Freiflächen und Warnungen des Nachbarplatzes (die
+  Warnzahl eines Platzes zählt nur seine eigenen Stände).
 - **Kennzahlen** als Karten „Gesamt“ und je Festplatz (Reihenfolge der Tabs): Anzahl Geschäfte, Frontmeter
   (Summe der Breiten, bei Belegung wie gezeichnet der Frontmeter nach §3 „Form“, #16; das ist die belegte Fläche, eine
   m²-Angabe gibt es nicht), freie Frontmeter (Summe der Breiten
@@ -557,7 +580,8 @@ Entscheidungen 2026-10-12 (M6-Planung).
   (§11), die Infrastruktur-Typen (§11) und das Schriftfeld (Datum, Version; §8). Seit M10: Fang-Abstand zu
   Nachbarständen (§3) und Standardfarbe der Geschäfte ohne Kategorie (§3). Seit M12: Formvorlagen (§3 „Form“) mit
   einfachem Editor (Name, Tabelle der Teile mit Art, X, Y, B, T in Metern und seit #16 Drehung in Grad, Häkchen
-  „belegt wie gezeichnet“, Vorschau mit Vorderseite und Hüllrechteck). Alles mit Undo. Seitenbezogenes (Präfix, Modus, Stromlimit, Blockieren) bleibt in der
+  „belegt wie gezeichnet“, Vorschau mit Vorderseite und Hüllrechteck). Seit #15: Festplatz-Verbünde (§12). Alles mit
+  Undo. Seitenbezogenes (Präfix, Modus, Stromlimit, Blockieren) bleibt in der
   Seitenleiste der Festplatz-Page.
 - **Export:** Geschäftstabelle und Freiflächenliste als CSV (gefilterte, sortierte Zeilen, sichtbare Spalten;
   UTF-8 mit BOM, Semikolon, Zahlen mit Komma, damit Excel in Deutschland die Datei direkt öffnet; Textzellen, die
@@ -741,6 +765,9 @@ Legende entsteht aus den Ebenen des Profils.
 - Raster: in der Rasterweite der Page, kräftige Linien alle 10; Linien mit weniger als 2 mm Abstand auf dem Papier
   entfallen. Ob es erscheint, entscheidet nur das Profil („Raster ein/aus“ der Zeichenfläche zählt nicht).
 - Objekte, die das Blatt nicht berühren, kommen nicht ins PDF.
+- Nachbarn aus dem Festplatz-Verbund (#15, §12) zeichnet das PDF einer Page nicht (bis zur Entscheidung mit der
+  Gesamtansicht im PDF, Teil c von #15). Sie belegen aber auch im PDF die Freiflächen und zählen für die Warnungen
+  der eigenen Stände, damit PDF und Zeichenfläche übereinstimmen.
 
 **Hintergrund.**
 - PDF-Hintergründe werden als Vektor übernommen (Originalseite eingebettet, je Datei nur einmal), mit Lage, Drehung,
@@ -851,7 +878,8 @@ Chromium und WebKit. Geprüft mit `npm run test:perf`.
   verständlichen Meldung abgewiesen (Entscheidung 2026-10-11; Version 2 seit M4, Version 3 seit M5, Version 4 seit M7, Version 5 seit M8,
   Version 6 seit M10, Version 7 seit M11: ausgeblendete Freiflächen je Page, Version 8 seit M12: Form der Stände und
   Formvorlagen, Version 14 seit #13: freies Blatt „Plan“/„Ausschnitt“ mit Rand, Zielbreite und Ausschnitt, Version 15
-  seit #16: eigene Form je Stand, Frontmeter von Hand, „belegt wie gezeichnet“ und Drehung je Teil).
+  seit #16: eigene Form je Stand, Frontmeter von Hand, „belegt wie gezeichnet“ und Drehung je Teil, Version 16 seit
+  #15: Festplatz-Verbünde `groups`).
 - Projekt als Vorlage fürs nächste Jahr duplizieren.
 - Import einer Händlerliste aus CSV/XLSX (Spalten zuordnen). Importierte Händler landen in einer
   Liste „noch nicht platziert“ und können per Drag & Drop platziert werden. [Phase 2]
@@ -927,6 +955,76 @@ Löschen eines verwendeten Typs: Die App fragt nach und löscht seine Objekte mi
 - Infrastruktur-Objekte untereinander und Infrastruktur außerhalb von Grundflächen erzeugen keine Warnungen.
 
 **Nummerierung.** Infrastruktur-Objekte bekommen keine Platznummer und zählen in der Nummerierung nicht mit.
+
+### 12. Verbund / Gesamtansicht
+Entscheidungen 2026-11-03 und 2026-11-06 (#15). Mehrere Festplätze hängen räumlich zusammen und überschneiden sich am
+Rand (Unterstadt: Müllerwiese, Ziegelturm, Bleiche, Schifftor, Seestraße und Escher; dazu „Oberstadt“ aus Obermarkt und
+Untermarkt). Im alten Illustrator-Plan erscheinen Nachbarstände deshalb doppelt. Umsetzung in Teilen: **a** (Kern,
+Dateiformat, Verbund verwalten, Lage, Nachbarn in der Einzelansicht) ist umgesetzt; **b** (Gesamtansicht mit Bearbeiten,
+Werkzeug „Ausrichten“) und **c** (PDF der Gesamtansicht) folgen.
+
+**Grundsätze.**
+- **Gemeinsames Koordinatensystem:** Beim Einrichten wird jede Page einmal samt Hintergrund und allen Objekten an ihre
+  echte Lage verschoben bzw. gedreht. Danach rechnet nichts zwischen Pages um; Zeichnen, Fang, Warnungen und Freiflächen
+  über Platzgrenzen sind dadurch einfach.
+- **Besitz:** Ein Objekt gehört der Page, in deren Liste es steht (kein eigenes Feld). Es zählt nur dort: Statistik,
+  Strom, Standgeld, CSV, Nummerierung.
+- Eine Page gehört zu höchstens einem Verbund; ein Projekt kann mehrere Verbünde haben.
+- Hintergründe werden in der Gesamtansicht übereinandergelegt (gleiche Stadtgrundkarte), ohne Masken (Teil b).
+
+**Verbund verwalten** (Projekteinstellungen, Bereich „Festplatz-Verbünde“): „+“ legt einen Verbund an (Name „Verbund“,
+„Verbund 2“ …, ohne Mitglieder); Name, Löschen (mit Rückfrage; die Pages bleiben an ihrer Lage), „Festplatz aufnehmen“
+(Auswahl der Pages ohne Verbund), Reihenfolge (↑/↓) und Herausnehmen. Jede Änderung ist ein Undo-Schritt. Wird eine
+Page gelöscht, verlässt sie ihren Verbund im selben Undo-Schritt. Die Seitenleiste einer Page zeigt ihren Verbund mit
+den anderen Plätzen (Bereich „Festplatz-Verbund“, nur Anzeige, mit Link zu den Projekteinstellungen).
+
+**Lage** je Mitglied (Knopf neben dem Platz): Verschieben X/Y in m (auf 0,01 m) und Drehen in Grad im Uhrzeigersinn (auf
+0,1°) um die Mitte des Platzes (Mitte des Hüllrechtecks aus Grundflächen, Ständen und Infrastruktur; ohne sie die Mitte
+des Hintergrunds), „Anwenden“ = ein Undo-Schritt. Der Hinweis nennt, dass die ganze Page bewegt wird. Mitbewegt werden:
+- Grundflächen, Stände (Teile einer eigenen Form hängen am Stand), Infrastruktur (Linien über Mitte und Richtung,
+  Marker ohne Drehung), von Hand verschobene Beschriftungen (Versatz mitgedreht);
+- der Hintergrund (auch gesperrt; die Kalibrierung bleibt gültig);
+- das Blatt: Mitte; ein **Ausschnitt** (§8) bleibt achsenparallel, nur seine Mitte wandert (Breite und Höhe bleiben;
+  nach einer Drehung zeigt er also nicht mehr genau denselben Inhalt);
+- Mittelpunkt der Nummerierung im bzw. gegen den Uhrzeigersinn (die Startrichtung gilt relativ zum Norden und dreht mit
+  ihm), Start- und Zielpunkt der eigenen Richtung (A/B folgen der Bewegung), die Nordrichtung (+ Drehung);
+- die Ansicht der Page (der Drehpunkt bleibt an seiner Bildschirmstelle); Undo und Redo führen sie mit zurück bzw.
+  wieder vor, damit der Inhalt danach nicht versetzt erscheint.
+Unverändert bleiben Papier-Elemente (mm auf dem Papier), Raster und ausgeblendete Freiflächen (Schlüssel und Intervall
+beziehen sich auf die Achse der Grundfläche). Die bewegten Positionen werden nicht auf 0,01 m gerundet (nur Gleitkomma-Reste
+unter 10⁻⁸ m entfallen): Würde jedes Objekt nach einer Drehung einzeln gerundet, verschöben sich Stand und Grundfläche
+bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die Toleranz (Fehlwarnungen, andere Freiflächen).
+
+**Nachbarn in der Einzelansicht** (Entscheidung 2026-11-03):
+- Nachbarn einer Page sind die Stände und Infrastruktur-Objekte der anderen Plätze ihres Verbunds, deren Hüllrechteck die
+  **Ausdehnung** der Page berührt: das achsenparallele Hüllrechteck ihrer wirkenden Grundflächen, Stände und
+  Infrastruktur, erweitert um 10 m bzw. um den größten Mindestabstand einer Kategorie (§3, damit der Konkurrenzschutz
+  über die Grenze vollständig ist). Hat die Page keine Objekte, gilt die Fläche ihres Hintergrunds; ohne beides hat sie
+  keine Nachbarn.
+- Darstellung: blass, gestrichelt, unter den eigenen Objekten, mit „SE-02 · Seestraße“ (Nummer, ohne Nummer der Name,
+  und der Platz) in der Mitte des Stands; auf den Ebenen „Geschäfte“ bzw. „Infrastruktur“ der Page.
+- Nur sichtbar, nicht bearbeitbar: Klick, Auswahlrechteck und „Alles auswählen“ treffen sie nicht. Ein **Doppelklick**
+  (Auswahlwerkzeug) springt zum Besitzer-Platz, zoomt auf das Objekt und wählt es dort aus.
+- Sie belegen Freiflächen (§4), zählen für Überlappung und Abstand (§3; Warnungen nur an eigenen Ständen) und sind
+  Fangziele (§3). Infrastruktur eines Nachbarplatzes löst an eigenen Ständen keine Warnung aus, auch nicht
+  „freihalten“ (Entscheidung Laurin 2026-11-09); sie wird nur blass angezeigt und belegt Freiflächen. Für Statistik,
+  Strom, Nummerierung, Standgeld und CSV zählen Nachbarn nicht.
+- „außerhalb“: über alle wirkenden Grundflächen des Verbunds (§3); auf einer Page ohne Grundflächen (#17) bleibt es aus.
+- Im PDF einer Page werden Nachbarn nicht gezeichnet (§9).
+
+**Gesamtansicht** (Teil b, folgt): Tab „Unterstadt (gesamt)“ vor den Mitgliedern mit einem Hintergrund je Mitglied und
+den Objekten aller Mitglieder; Bearbeiten wie auf einer Page, neue Objekte gehören dem Platz, auf dessen Grundfläche sie
+stehen (sonst Auswahl „Neue Objekte auf: …“), Verschieben ändert die Zuordnung nie, Umhängen über das Feld „Festplatz“.
+Gesperrt: Nummerierung, Werkzeug „Mittelpunkt“, Hintergrund importieren und kalibrieren, Page-Einstellungen. Werkzeug
+„Ausrichten“ (Ziehen, Drehung als Zahl, 2-Punkt-Ausrichtung). Die Logik dafür steht bereit (`mergedPage`, `ownerOf`,
+`assignPage`, `transformPageContent` in `src/core/verbund.ts`).
+
+**PDF der Gesamtansicht** (Teil c, folgt): eigenes Blatt mit Schriftfeld und Legende des Verbunds.
+
+**Dateiformat:** Formatversion 16, Projekt `groups`: je Verbund `{ id, name, pageIds, sheet, titleBlock, titleBlockText,
+legend, scaleBar, northArrow, layers, view }` (Papierfelder wie bei einer Page; Vorgaben wie bei einer neuen Page).
+Beim Laden entfallen unbekannte und doppelte Mitglieder; eine Page in mehreren Verbünden bleibt im ersten. Ein Verbund
+ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
 
 ## Bedienung / UI
 

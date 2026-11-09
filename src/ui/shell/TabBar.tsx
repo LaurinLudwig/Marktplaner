@@ -7,9 +7,9 @@ import { fmt } from '../../core/format';
 import { cachedDuplicates } from '../../core/numbering';
 import { folderOf } from '../../core/recentFiles';
 import { pageSumKw } from '../../core/power';
-import { outsideRef } from '../../core/pageAreas';
+import { pageEnv } from '../../core/verbund';
 import { pageStands } from '../../core/footprint';
-import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, countWarnings, warningSevere, warningTotal } from '../../core/warnings';
+import { cachedWarningData, countWarnings, warningSevere, warningTotal } from '../../core/warnings';
 import { addPage, duplicatePage, movePage, renamePage } from '../../state/pages';
 import { checkRecent, clearRecent, useRecent } from '../../state/recent';
 import { selectCanRedo, selectCanUndo, selectDirty, START_PAGE, useStore } from '../../state/store';
@@ -254,10 +254,9 @@ function WarnBadge({ pageId }: { pageId: Id }) {
     const dups = cachedDuplicates(s.project.pages, s.project.settings.numbering.scope);
     // Stände, wie sie belegen (#16)
     const stands = pageStands(page, s.project.shapeTemplates);
-    const n = countWarnings(cachedPageWarnings(outsideRef(page), stands), stands, s.project.settings, dups, {
-      warnings: cachedInfraWarnings({ stands, infra: page.infra }, s.project.infraTypes, s.project.settings.minPassageWidth),
-      objects: page.infra,
-    }, cachedDistanceWarnings(stands, s.project.categories));
+    // Nachbarn aus dem Verbund (#15) zählen für Überlappung und Abstand; gezählt werden nur eigene
+    const w = cachedWarningData(stands, page.infra, pageEnv(s.project, page), s.project);
+    const n = countWarnings(w.page, stands, s.project.settings, dups, { warnings: w.infra, objects: page.infra }, w.distance);
     return warningTotal(n) ? `${warningTotal(n)}|${n.overlap}|${n.outside}|${n.duplicate}|${n.infra}|${n.narrow}|${warningSevere(n) ? 1 : 0}|${n.distance}` : '';
   });
   if (!summary) return null;

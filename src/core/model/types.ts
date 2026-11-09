@@ -383,6 +383,30 @@ export interface Vendor {
   note: string;
 }
 
+/**
+ * Festplatz-Verbund (#15, Formatversion 16): Pages, die räumlich zusammenhängen und sich am Rand überschneiden (z. B.
+ * „Unterstadt“). Alle Mitglieder liegen in einem gemeinsamen Koordinatensystem: Beim Einrichten wird eine Page samt
+ * Hintergrund und Objekten an ihre echte Lage verschoben bzw. gedreht (core/verbund.ts `transformPageContent`); danach
+ * gibt es keine Umrechnung zwischen Pages. Ein Objekt gehört der Page, in deren Liste es steht (kein eigenes Feld).
+ * Eine Page gehört zu höchstens einem Verbund. Blatt, Papier-Elemente, Ebenen und Ansicht gehören zur Gesamtansicht
+ * (Teil b/c von #15) und haben dieselben Typen wie bei einer Page.
+ */
+export interface Verbund {
+  id: Id;
+  name: string;
+  /** Mitglieder in der Reihenfolge des Verbunds (unabhängig von der Tab-Reihenfolge). */
+  pageIds: Id[];
+  sheet: Sheet;
+  titleBlock: PaperAnchor;
+  titleBlockText: string;
+  legend: PaperAnchor;
+  scaleBar: PaperAnchor;
+  northArrow: PaperAnchor;
+  layers: Record<LayerId, LayerState>;
+  /** Zuletzt verwendete Ansicht der Gesamtansicht (wie `FestplatzPage.view`). */
+  view: View | null;
+}
+
 export interface Project {
   id: Id;
   name: string;
@@ -396,6 +420,8 @@ export interface Project {
   /** Projektweite Felder des Schriftfelds (§8). */
   titleBlock: { dateText: string; version: string };
   unplaced: Vendor[];
+  /** Festplatz-Verbünde (#15, Formatversion 16); eine Page gehört zu höchstens einem. */
+  groups: Verbund[];
 }
 
 export interface ProjectFile {

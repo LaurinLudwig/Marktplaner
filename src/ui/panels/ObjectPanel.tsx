@@ -2,13 +2,14 @@ import { normAngle, rectCorners, roundRect } from '../../core/geometry/rect';
 import { openProjectSettings } from '../../app/startPageNav';
 import { CONNECTION_LABEL } from '../../core/label';
 import { PASSAGE_TYPE_ID, typeMap } from '../../core/infra';
-import { STAND_SHAPES, type Area, type Connection, type EdgeIndex, type FestplatzPage, type InfraObject, type ShapePart, type Stand, type StandShape } from '../../core/model/types';
+import { STAND_SHAPES, type Area, type Connection, type EdgeIndex, type FestplatzPage, type Id, type InfraObject, type ShapePart, type Stand, type StandShape } from '../../core/model/types';
 import { cachedDuplicates } from '../../core/numbering';
 import { SHAPE_LABEL } from '../../core/shape';
 import { feesOf, fmtEuro, hasPricing, sumFees, type Fee } from '../../core/fee';
 import { fmt, fmtInput } from '../../core/format';
-import { outsideRef, usesAreas } from '../../core/pageAreas';
-import { cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings, fmtGap } from '../../core/warnings';
+import { usesAreas } from '../../core/pageAreas';
+import { cachedInfraWarnings, cachedWarningData, fmtGap } from '../../core/warnings';
+import { ownerOf, pageEnv } from '../../core/verbund';
 import { Icon } from '../icons/Icon';
 import { tip } from '../shortcuts/tip';
 import { setNrLocked } from '../../state/numbering';
@@ -153,13 +154,22 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
   const shapeTemplates = useStore((s) => s.project.shapeTemplates);
   // Stände, wie sie belegen (#16)
   const calc = pageStands(page, shapeTemplates);
-  const w = cachedPageWarnings(outsideRef(page), calc);
   const infraTypes = useStore((s) => s.project.infraTypes);
-  const iw = cachedInfraWarnings({ stands: calc, infra: page.infra }, infraTypes, settings.minPassageWidth);
-  const dups = cachedDuplicates(pages, settings.numbering.scope);
+  const groups = useStore((s) => s.project.groups);
   const categories = useStore((s) => s.project.categories);
-  const dw = cachedDistanceWarnings(calc, categories);
-  const byId = new Map(page.stands.map((s) => [s.id, s]));
+  // Nachbarn aus dem Verbund (#15) zählen für Überlappung und Abstand (nicht Infrastruktur), „außerhalb“ über den Verbund
+  const env = pageEnv({ pages, groups, categories }, page);
+  const wd = cachedWarningData(calc, page.infra, env, { infraTypes, categories, shapeTemplates, settings });
+  const w = wd.page;
+  const iw = wd.infra;
+  const dups = cachedDuplicates(pages, settings.numbering.scope);
+  const dw = wd.distance;
+  const byId = new Map([...page.stands, ...env.neighbours.stands].map((s) => [s.id, s]));
+  /** Platzname eines Nachbarn („ (Seestraße)“), bei eigenen Objekten leer. */
+  const ownerSuffix = (id: Id) => {
+    const owner = ownerOf({ pages }, id);
+    return owner && owner !== page.id ? ` (${pages.find((p) => p.id === owner)?.name ?? ''})` : '';
+  };
   const outside = stands.filter((s) => w.byStand.get(s.id)?.outside);
   const overlap = stands.filter((s) => w.byStand.get(s.id)?.overlaps.length);
   const duplicate = stands.filter((s) => dups.has(s.id));
@@ -169,7 +179,7 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
   const closeText = (s: Stand) =>
     dw
       .get(s.id)!
-      .map((c) => `${byId.get(c.id)?.name.trim() || 'Stand ohne Namen'}, ${fmtGap(c.dist)}`)
+      .map((c) => `${byId.get(c.id)?.name.trim() || 'Stand ohne Namen'}${ownerSuffix(c.id)}, ${fmtGap(c.dist)}`)
       .join('; ');
   const ids = stands.map((s) => s.id);
   /** „RTW-Platz „Nord““ für die Objekte, in die der Stand eindringt. */
@@ -217,7 +227,7 @@ function StandWarnings({ page, stands }: { page: FestplatzPage; stands: Stand[] 
                   : `${r.hit.length} in Freihalteflächen`
                 : r.kind === 'overlap'
                 ? single
-                  ? `Überlappt mit ${w.byStand.get(stands[0]!.id)!.overlaps.map((id) => standName(byId.get(id)!)).join(', ')}`
+                  ? `Überlappt mit ${w.byStand.get(stands[0]!.id)!.overlaps.map((id) => (byId.get(id) ? standName(byId.get(id)!) : 'Stand') + ownerSuffix(id)).join(', ')}`
                   : `${r.hit.length} überlappen`
                 : r.kind === 'duplicate'
                   ? single

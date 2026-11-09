@@ -655,6 +655,11 @@ kbd {
 .world .stand.selected { stroke: var(--select); stroke-width: 2.5; }
 .world .layer-labels text { font-family: var(--f-ui); font-weight: 500; stroke: none; text-rendering: optimizeSpeed; }
 .world .stand-label { fill: var(--label-ink); }
+/* Nachbarn aus dem Festplatz-Verbund (#15): blass, gestrichelt, nicht auswählbar */
+.world .layer-neighbours { opacity: 0.4; pointer-events: none; }
+.world .layer-neighbours .stand, .world .layer-neighbours .stand-outline { stroke: var(--stand-stroke); stroke-width: 1.2; stroke-dasharray: 5 3; }
+.world .layer-neighbours .infra { stroke-dasharray: 5 3; }
+.world .neighbour-label { fill: var(--label-ink); fill-opacity: 0.55; font-style: italic; pointer-events: none; }
 .world .label-leader { stroke: var(--label-ink); stroke-opacity: 0.75; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .world .area-label { fill: var(--area-label-ink); }
 .world .layer-labels.halo text { paint-order: stroke; stroke-linejoin: round; }
@@ -1005,6 +1010,14 @@ kbd {
 .export-bar { width: 160px; height: 6px; border-radius: 3px; background: var(--panel-sunken); overflow: hidden; }
 .export-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
 .export-dialog .export-form p, .export-dialog .export-preview p { padding: 0; }
+
+/* ---------- Festplatz-Verbünde (#15) ---------- */
+.verbund-card { display: grid; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
+.verbund-card:last-child { border-bottom: none; }
+.verbund-head { display: flex; align-items: end; gap: 6px; }
+.verbund-head .grow { flex: 1; }
+.verbund-member { align-items: center; }
+.verbund-lage { padding: 6px 0 8px 12px; border-left: 2px solid var(--border); margin: 4px 0; }
 
 /* ---------- Formvorlagen (M12) ---------- */
 .shape-row { align-items: center; }

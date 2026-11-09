@@ -165,6 +165,23 @@ function validSelection(project: Project, active: PageRef, sel: Selection): Sele
   return ids.length === sel.ids.length ? sel : { kind: 'objects', ids };
 }
 
+/**
+ * Ansichten nach Undo/Redo: Hat der Schritt die gespeicherte Ansicht einer Page (`page.view`) geändert, gilt sie wieder
+ * als aktuelle Ansicht. Nur „Lage im Verbund“ (#15) ändert `page.view` in der Historie: Dort wandert die Ansicht mit dem
+ * Inhalt, und Undo/Redo führen sie mit zurück bzw. wieder vor (state/verbund.ts `movePageContent`).
+ */
+function syncViews(before: Project, after: Project, views: Record<Id, View>): Record<Id, View> {
+  if (before.pages === after.pages) return views;
+  const old = new Map(before.pages.map((p) => [p.id, p.view]));
+  let out = views;
+  for (const p of after.pages) {
+    if (!p.view || !old.has(p.id) || old.get(p.id) === p.view) continue;
+    if (out === views) out = { ...views };
+    out[p.id] = p.view;
+  }
+  return out;
+}
+
 /** Sorgt dafür, dass die aktive Page nach Undo/Löschen noch existiert. */
 function validActive(project: Project, active: PageRef): PageRef {
   if (active === START_PAGE || project.pages.some((p) => p.id === active)) return active;
@@ -252,12 +269,12 @@ export const useStore = create<AppState>()((set, get) => {
     undo() {
       const s = get();
       const r = H.undo(s.project, s.history);
-      if (r) set({ project: r.project, history: r.history, ui: normalizeUi(r.project, s.ui) });
+      if (r) set({ project: r.project, history: r.history, ui: normalizeUi(r.project, s.ui), views: syncViews(s.project, r.project, s.views) });
     },
     redo() {
       const s = get();
       const r = H.redo(s.project, s.history);
-      if (r) set({ project: r.project, history: r.history, ui: normalizeUi(r.project, s.ui) });
+      if (r) set({ project: r.project, history: r.history, ui: normalizeUi(r.project, s.ui), views: syncViews(s.project, r.project, s.views) });
     },
     loadBundle({ project, assets }, file) {
       const views: Record<Id, View> = {};

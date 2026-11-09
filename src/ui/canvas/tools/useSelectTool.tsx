@@ -271,7 +271,8 @@ export function useSelectTool(ctx: ToolContext, active: boolean): ToolHandlers {
       grabbed: g.grabbed,
       standIds: new Set(stored.stands.filter((x) => movingIds.has(x.id)).map((x) => x.id)),
       areas: frontSnapAreas(page).filter((a) => isTarget(a.id)),
-      stands: page.layers.stands.visible ? page.stands.filter((x) => isTarget(x.id)) : [],
+      // Nachbarstände aus dem Verbund (#15) sind Fangziele: bündig an den Nachbarplatz anschließen
+      stands: page.layers.stands.visible ? [...page.stands.filter((x) => isTarget(x.id)), ...ctx.neighbours.stands] : [],
       options,
       tol: SNAP_PX / ctx.view.scale,
       release: RELEASE_PX / ctx.view.scale,

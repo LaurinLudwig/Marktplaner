@@ -14,8 +14,10 @@ import type { FestplatzPage, Id, Rect, Stand, Vec, View } from '../../core/model
 import { findSnap, rectSnapSource } from '../../core/snap';
 import { defaultView, fitBounds, focusBounds, screenToWorld, worldToScreen, zoomAt, type Bounds } from '../../core/viewport';
 import { cachedDuplicates } from '../../core/numbering';
-import { activeAreas, outsideRef, usesAreas } from '../../core/pageAreas';
-import { activeNarrow, cachedDistanceWarnings, cachedInfraWarnings, cachedPageWarnings } from '../../core/warnings';
+import { activeAreas, usesAreas } from '../../core/pageAreas';
+import { neighbourCaption, ownerOf, pageEnv, withNeighbours, type Neighbours } from '../../core/verbund';
+import { activeNarrow, cachedWarningData } from '../../core/warnings';
+import { jumpToInfra, jumpToStand } from '../../app/jump';
 import { hideFreeSpace } from '../../state/freeSpaces';
 import { useStore } from '../../state/store';
 import { Menu } from '../shell/Menu';
@@ -190,18 +192,33 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   // Freiflächen und Warnungen live aus der Page mit Vorschau; der Zwischenspeicher rechnet nur
   // Grundflächen neu, deren Eingaben sich geändert haben (M4-04)
   const [freeCache] = useState(createFreeSpaceCache);
-  // Belegende Infrastruktur-Objekte (M7-05) zählen wie Stände
-  const occupants = useMemo(() => pageOccupants(page, infraTypes), [page, infraTypes]);
+  // Festplatz-Verbund (#15): Nachbarn der anderen Mitglieder (nur sichtbar) und „außerhalb“ über den Verbund
+  const pages = useStore((s) => s.project.pages);
+  const groups = useStore((s) => s.project.groups);
+  const env = useMemo(() => pageEnv({ pages, groups, categories }, page), [pages, groups, categories, page]);
+  const nb = env.neighbours;
+  const nbStands = occupancyStands(nb.stands, shapeTemplates) as Stand[];
+  const neighbours = useMemo(() => ({ stands: nbStands, infra: nb.infra }), [nbStands, nb.infra]);
+  const neighbourCaptions = useMemo(() => new Map(nb.stands.map((s) => [s.id, neighbourCaption(s, pages.find((p) => p.id === ownerOf({ pages }, s.id))?.name ?? '')])), [nb.stands, pages]);
+  // Belegende Infrastruktur-Objekte (M7-05) zählen wie Stände; Nachbarn belegen mit (#15)
+  const occupants = useMemo(
+    () => pageOccupants({ stands: withNeighbours(page.stands, nbStands), infra: withNeighbours(page.infra, nb.infra) }, infraTypes),
+    [page.stands, page.infra, nbStands, nb.infra, infraTypes],
+  );
   // Ausgeblendete Freiflächen (#8) fallen weg; während einer Geste passt ihr Intervall nicht mehr, sie erscheinen live
   // Ohne Grundflächen (#17) keine Freiflächen und keine Warnung „außerhalb“
   const areas = activeAreas(page);
-  const outside = outsideRef(page);
   const free = useMemo(() => applyHidden(pageFreeSpaces(areas, occupants, minFreeWidth, freeCache), page.hiddenFree), [areas, occupants, minFreeWidth, freeCache, page.hiddenFree]);
-  const warnings = useMemo(() => cachedPageWarnings(outside, page.stands), [outside, page.stands]);
-  const infraWarnings = useMemo(() => cachedInfraWarnings(page, infraTypes, minPassageWidth), [page, infraTypes, minPassageWidth]);
+  // Warnungen live aus der Page mit Vorschau (Konkurrenzschutz #3: Warnung und Linien folgen dem gezogenen Stand);
+  // Überlappung und Abstand auch mit Nachbarn (#15, Infrastruktur nur eigene), angezeigt nur an eigenen Ständen
+  const warnData = useMemo(
+    () => cachedWarningData(page.stands, page.infra, env, { infraTypes, categories, shapeTemplates, settings: { minPassageWidth } }),
+    [page.stands, page.infra, env, infraTypes, categories, shapeTemplates, minPassageWidth],
+  );
+  const warnings = warnData.page;
+  const infraWarnings = warnData.infra;
   const infraWarnStands = useMemo(() => new Set(infraWarnings.byStand.keys()), [infraWarnings]);
-  // Konkurrenzschutz (#3) live aus der Page mit Vorschau: Warnung und Linien folgen dem gezogenen Stand
-  const distanceWarnings = useMemo(() => cachedDistanceWarnings(page.stands, categories), [page.stands, categories]);
+  const distanceWarnings = warnData.distance;
   // Blatt, Schriftfeld, Legende (M7-10 bis M7-12)
   const projectName = useStore((s) => s.project.name);
   const titleFields = useStore((s) => s.project.titleBlock);
@@ -267,16 +284,17 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
     const rects: Rect[] = [];
     if (page.layers.areas.visible) rects.push(...areas);
     // Bei Belegung wie gezeichnet fangen die Kanten der Teile (#16)
-    if (page.layers.stands.visible) rects.push(...page.stands.flatMap(snapRects));
-    if (page.layers.infra.visible) rects.push(...page.infra);
+    if (page.layers.stands.visible) rects.push(...page.stands.flatMap(snapRects), ...neighbours.stands.flatMap(snapRects));
+    if (page.layers.infra.visible) rects.push(...page.infra, ...neighbours.infra);
     return rectSnapSource(rects);
-  }, [areas, page.stands, page.infra, page.layers]);
+  }, [areas, page.stands, page.infra, page.layers, neighbours]);
   const ctx: ToolContext = {
     page,
     view,
     toScreen: (p) => worldToScreen(view, p),
     toWorld: (p) => screenToWorld(view, p),
-    snap: (p, exclude) => findSnap(p, [exclude ? snapSourceWithout(page, exclude) : snapSource], SNAP_PX / view.scale),
+    snap: (p, exclude) => findSnap(p, [exclude ? snapSourceWithout(page, exclude, neighbours) : snapSource], SNAP_PX / view.scale),
+    neighbours,
     geometryOf: (typeId) => typesById.get(typeId)?.geometry,
     markerSize: markerSize(labelFontSize),
     paper,
@@ -481,6 +499,29 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
     if (fs) setFreeMenu({ x: e.clientX, y: e.clientY, fs });
   };
 
+  /**
+   * Doppelklick auf einen Nachbarn aus dem Verbund (#15, Auswahlwerkzeug): springt zu seinem Besitzer-Platz und wählt
+   * ihn dort aus. Eigene Objekte haben Vorrang (sie liegen darüber).
+   */
+  const onDoubleClick = (e: React.MouseEvent<HTMLElement>) => {
+    // Nach einem Klick des Auswahlwerkzeugs hält <main> den Zeiger (setPointerCapture): Dann ist <main> selbst das Ziel
+    if (!(onCanvas(e) || e.target === e.currentTarget) || tool !== 'select' || (!neighbours.stands.length && !neighbours.infra.length)) return;
+    const r = svgRef.current!.getBoundingClientRect();
+    const v = viewRef.current;
+    const w = screenToWorld(v, { x: e.clientX - r.left, y: e.clientY - r.top });
+    const tol = { geometry: ctx.geometryOf, tol: { line: 5 / v.scale, point: Math.max(ctx.markerSize / 2, 5 / v.scale) } };
+    const own = pickObject(page, w, 0, tol);
+    if (own && own.kind !== 'area') return;
+    // Nachbarn sind nur sichtbar: Treffer nach Sichtbarkeit der Ebenen, auch wenn die eigene Ebene gesperrt ist
+    const visibleOnly = Object.fromEntries(Object.entries(page.layers).map(([k, l]) => [k, { visible: l.visible, locked: false }])) as FestplatzPage['layers'];
+    const hit = pickObject({ ...page, layers: visibleOnly, areas: [], stands: neighbours.stands, infra: neighbours.infra as FestplatzPage['infra'] }, w, 0, tol);
+    if (!hit) return;
+    const owner = ownerOf(useStore.getState().project, hit.id);
+    if (!owner) return;
+    if (hit.kind === 'stand') jumpToStand(owner, hit.id);
+    else if (hit.kind === 'infra') jumpToInfra(owner, hit.id);
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
     if (!onCanvas(e)) return;
     (document.activeElement as HTMLElement | null)?.blur?.();
@@ -544,6 +585,7 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
       onPointerCancel={endDrag}
       onPointerLeave={() => !drag.current && setCursor(null)}
       onContextMenu={onContextMenu}
+      onDoubleClick={onDoubleClick}
     >
       {/* Ebenen von unten nach oben: Plan (zwischengespeichert), Raster und Klickfläche, Objekte
           (zwischengespeichert), Werkzeuge. Ereignisse behandelt <main> für alle SVG-Ebenen. */}
@@ -585,6 +627,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
             infraWarnStands={infraWarnStands}
             infraWarnObjects={infraWarnObjects}
             distanceWarnings={distanceWarnings}
+            neighbours={neighbours}
+            neighbourCaptions={neighbourCaptions}
           />
           {page.layers.sheet.visible && (
             <PaperLayer
@@ -642,11 +686,11 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
 }
 
 /** Fangquelle ohne ein Objekt (Endpunkt-Griffe einer Linie fangen nicht an der Linie selbst). */
-function snapSourceWithout(page: FestplatzPage, exclude: Id) {
+function snapSourceWithout(page: FestplatzPage, exclude: Id, neighbours: Neighbours) {
   const rects: Rect[] = [];
   if (page.layers.areas.visible) rects.push(...activeAreas(page));
-  if (page.layers.stands.visible) rects.push(...page.stands.filter((x) => x.id !== exclude).flatMap(snapRects));
-  if (page.layers.infra.visible) rects.push(...page.infra.filter((o) => o.id !== exclude));
+  if (page.layers.stands.visible) rects.push(...page.stands.filter((x) => x.id !== exclude).flatMap(snapRects), ...neighbours.stands.flatMap(snapRects));
+  if (page.layers.infra.visible) rects.push(...page.infra.filter((o) => o.id !== exclude), ...neighbours.infra);
   return rectSnapSource(rects.filter((r) => (r as Rect & { id?: Id }).id !== exclude));
 }
 
