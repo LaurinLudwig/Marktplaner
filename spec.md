@@ -22,7 +22,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
   anlegen, umbenennen, umsortieren (Drag & Drop in der Tab-Leiste), duplizieren und löschen.
 - **Festplatz-Verbund** (#15): Pages, die räumlich zusammenhängen und sich am Rand überschneiden (z. B. „Unterstadt“),
   in einem gemeinsamen Koordinatensystem. Eine Page gehört zu höchstens einem Verbund. Ein Objekt gehört genau der Page,
-  in deren Liste es steht (Besitz); auf den anderen Plätzen des Verbunds erscheint es als **Nachbar** (§12).
+  in deren Liste es steht (Besitz); auf den anderen Plätzen des Verbunds erscheint es als **Nachbar** (§12). Die
+  **Gesamtansicht** eines Verbunds (eigener Tab „Unterstadt (gesamt)“) zeigt alle Plätze aneinandergelegt und bearbeitbar.
 - **Hintergrundplan**: pro Festplatz-Page importiert, per Kalibrierung auf Meter skaliert.
 - **Grundfläche**: Rechteck, frei rotierbar, mit einer markierten **Vorderseite**.
   Breite = Länge der Vorderseite, Tiefe = senkrecht dazu. [ANPASSEN: nur Rechtecke, keine Polygone]
@@ -960,8 +961,8 @@ Löschen eines verwendeten Typs: Die App fragt nach und löscht seine Objekte mi
 Entscheidungen 2026-11-03 und 2026-11-06 (#15). Mehrere Festplätze hängen räumlich zusammen und überschneiden sich am
 Rand (Unterstadt: Müllerwiese, Ziegelturm, Bleiche, Schifftor, Seestraße und Escher; dazu „Oberstadt“ aus Obermarkt und
 Untermarkt). Im alten Illustrator-Plan erscheinen Nachbarstände deshalb doppelt. Umsetzung in Teilen: **a** (Kern,
-Dateiformat, Verbund verwalten, Lage, Nachbarn in der Einzelansicht) ist umgesetzt; **b** (Gesamtansicht mit Bearbeiten,
-Werkzeug „Ausrichten“) und **c** (PDF der Gesamtansicht) folgen.
+Dateiformat, Verbund verwalten, Lage, Nachbarn in der Einzelansicht) und **b** (Gesamtansicht mit Bearbeiten, Werkzeug
+„Ausrichten“) sind umgesetzt; **c** (PDF der Gesamtansicht) folgt.
 
 **Grundsätze.**
 - **Gemeinsames Koordinatensystem:** Beim Einrichten wird jede Page einmal samt Hintergrund und allen Objekten an ihre
@@ -970,13 +971,20 @@ Werkzeug „Ausrichten“) und **c** (PDF der Gesamtansicht) folgen.
 - **Besitz:** Ein Objekt gehört der Page, in deren Liste es steht (kein eigenes Feld). Es zählt nur dort: Statistik,
   Strom, Standgeld, CSV, Nummerierung.
 - Eine Page gehört zu höchstens einem Verbund; ein Projekt kann mehrere Verbünde haben.
-- Hintergründe werden in der Gesamtansicht übereinandergelegt (gleiche Stadtgrundkarte), ohne Masken (Teil b).
+- Hintergründe werden in der Gesamtansicht übereinandergelegt (gleiche Stadtgrundkarte), ohne Masken.
 
 **Verbund verwalten** (Projekteinstellungen, Bereich „Festplatz-Verbünde“): „+“ legt einen Verbund an (Name „Verbund“,
 „Verbund 2“ …, ohne Mitglieder); Name, Löschen (mit Rückfrage; die Pages bleiben an ihrer Lage), „Festplatz aufnehmen“
 (Auswahl der Pages ohne Verbund), Reihenfolge (↑/↓) und Herausnehmen. Jede Änderung ist ein Undo-Schritt. Wird eine
 Page gelöscht, verlässt sie ihren Verbund im selben Undo-Schritt. Die Seitenleiste einer Page zeigt ihren Verbund mit
-den anderen Plätzen (Bereich „Festplatz-Verbund“, nur Anzeige, mit Link zu den Projekteinstellungen).
+den anderen Plätzen (Bereich „Festplatz-Verbund“, nur Anzeige, mit „Gesamtansicht“ und einem Link zu den
+Projekteinstellungen). Zusätzlich über das **Tab-Menü** (Rechtsklick, Teil b):
+- Tab einer Page ohne Verbund: „Neuer Verbund mit „Seestraße““ (Name wie bei „+“, die Page als erstes Mitglied), „In
+  Verbund aufnehmen ▸“ (Liste der Verbünde) und „Verbünde verwalten …“ (Projekteinstellungen);
+- Tab einer Page im Verbund: „Gesamtansicht „Unterstadt (gesamt)““, „Aus Verbund „Unterstadt“ nehmen“ und „Verbünde
+  verwalten …“;
+- Tab der Gesamtansicht: „Verbund umbenennen“ (auch Doppelklick und F2), „Festplatz aufnehmen ▸“ (Pages ohne Verbund),
+  „Verbünde verwalten …“ und „Verbund löschen“ (mit Rückfrage).
 
 **Lage** je Mitglied (Knopf neben dem Platz): Verschieben X/Y in m (auf 0,01 m) und Drehen in Grad im Uhrzeigersinn (auf
 0,1°) um die Mitte des Platzes (Mitte des Hüllrechtecks aus Grundflächen, Ständen und Infrastruktur; ohne sie die Mitte
@@ -1012,12 +1020,59 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
 - „außerhalb“: über alle wirkenden Grundflächen des Verbunds (§3); auf einer Page ohne Grundflächen (#17) bleibt es aus.
 - Im PDF einer Page werden Nachbarn nicht gezeichnet (§9).
 
-**Gesamtansicht** (Teil b, folgt): Tab „Unterstadt (gesamt)“ vor den Mitgliedern mit einem Hintergrund je Mitglied und
-den Objekten aller Mitglieder; Bearbeiten wie auf einer Page, neue Objekte gehören dem Platz, auf dessen Grundfläche sie
-stehen (sonst Auswahl „Neue Objekte auf: …“), Verschieben ändert die Zuordnung nie, Umhängen über das Feld „Festplatz“.
-Gesperrt: Nummerierung, Werkzeug „Mittelpunkt“, Hintergrund importieren und kalibrieren, Page-Einstellungen. Werkzeug
-„Ausrichten“ (Ziehen, Drehung als Zahl, 2-Punkt-Ausrichtung). Die Logik dafür steht bereit (`mergedPage`, `ownerOf`,
-`assignPage`, `transformPageContent` in `src/core/verbund.ts`).
+**Gesamtansicht** (Teil b, Entscheidungen 2026-11-03 und 2026-11-06):
+- **Tab** „Unterstadt (gesamt)“ (kursiv, mit Verbund-Symbol) steht direkt vor dem ersten Mitglied in der Tab-Reihenfolge;
+  ein Verbund ohne Mitglieder hat keinen. Der Tab lässt sich nicht ziehen (die Reihenfolge folgt den Pages); Ctrl+Tab
+  (nächste/vorherige Page) hält dort an, Alt+1 … 9 zählen nur Festplätze. Verliert der Verbund sein letztes Mitglied
+  oder wird er gelöscht, wechselt die App auf den ersten Festplatz.
+- **Zeichenfläche:** je Mitglied sein Hintergrund, übereinandergelegt in der Reihenfolge des Verbunds (spätere oben,
+  keine Masken; Ebene „Hintergrund“ des Verbunds blendet alle aus, sperrbar ist dort keiner, auswählen und verschieben
+  geht nur in der Einzelansicht), dazu die Objekte aller Mitglieder (wirkende Grundflächen, Stände, Infrastruktur). Es
+  gibt keine Nachbarn: Alle Objekte sind bearbeitbar. Raster und Nordrichtung kommen vom ersten Mitglied, Ebenen und
+  Ansicht vom Verbund (Ansicht in `Verbund.view` gespeichert, kein Undo-Schritt). Die Ebene „Blatt“ fehlt bis zum PDF der
+  Gesamtansicht (Teil c).
+- **Bearbeiten wie in der Einzelansicht:** Auswählen (Klick, Auswahlrechteck, Alles auswählen – auch über Platzgrenzen),
+  Verschieben, Größe, Drehen, Pfeiltasten, Felder der Steuerungs- und Seitenleiste, Löschen, Kopieren/Einfügen,
+  Duplizieren, Alt+Ziehen, Form und Teile, „Zu einem Stand zusammenfassen“ (der Stand bleibt auf dem Platz seines
+  größten Ausgangsstands), Freifläche ausblenden (bei der Besitzer-Page ihrer Grundfläche). Jede Änderung wirkt auf die
+  Objekte in den Listen ihrer Besitzer-Pages und ist **ein** Undo-Schritt, auch wenn sie mehrere Pages betrifft.
+  Freiflächen, Fang und Warnungen rechnen über alle Mitglieder.
+- **Neue Objekte** (Zeichnen, Einfügen) gehören dem Platz, auf dessen wirkender Grundfläche sie stehen (mehr als 0,01 m
+  hinein; Linien und Punkte mit 0,05 m Breite). Stehen sie auf mehreren oder auf keiner, entscheidet die Auswahl **„Neue
+  Objekte auf: …“** rechts in der Steuerungsleiste (nur in der Gesamtansicht; je Verbund, anfangs das erste Mitglied; nur
+  für die Sitzung, nicht in der Projektdatei, kein Undo-Schritt). Kopien (Duplizieren, Alt+Ziehen) ohne eindeutige
+  Grundfläche gehören dem Platz ihres Originals. Grundflächen kommen nur auf Plätze, die Grundflächen verwenden (§2, #17);
+  sonst auf das erste solche Mitglied.
+- **Verschieben ändert die Zuordnung nie.** Umhängen geht nur über das Feld **„Festplatz“** der Seitenleiste (oberstes
+  Feld der Auswahl; bei verschiedenen Besitzern „verschiedene“): Die Objekte wechseln in die Liste der gewählten Page,
+  Lage und Attribute bleiben, eine Grundfläche nimmt ihre ausgeblendeten Freiflächen mit; ein Undo-Schritt, auch für
+  eine Mehrfachauswahl. Grundflächen kommen nicht auf eine Page ohne Grundflächen; das Stromlimit (§6) gilt wie beim
+  Ändern.
+- **Gesperrt** (Tooltip bzw. Hinweis „In der Gesamtansicht gesperrt: nur in der Einzelansicht des Festplatzes möglich“):
+  „Neu nummerieren“, „Alle Fixierungen lösen“/„Alle Nummern fixieren“, die Werkzeuge „Mittelpunkt setzen“ und „Richtung
+  setzen“, Hintergrund importieren, Kalibrieren, Schriftfeld, Legende ein/aus, Raster ein/aus (es gilt das des ersten
+  Platzes), Festplatz duplizieren und löschen sowie alle Page-Einstellungen (Hintergrund, Nummerierung, Grundflächen,
+  Raster, Norden, Strom). Die Platznummer eines Stands und ihr Schloss lassen sich in der Seitenleiste ändern (Attribut).
+- **Seitenleiste ohne Auswahl:** Bereich „Verbund“ (Name, Mitglieder mit Reihenfolge, Lage, Herausnehmen, Aufnehmen,
+  Löschen – dieselbe Karte wie in den Projekteinstellungen; Knopf „Plätze ausrichten …“) und „Nur in der Einzelansicht“
+  mit den gesperrten Funktionen und Links zu den Plätzen; dazu die Ebenen. Den Bereich „Strom“ gibt es dort nicht.
+
+**Werkzeug „Ausrichten“** (A, nur in der Gesamtansicht; Entscheidung 2026-11-03):
+- **Platz wählen:** Klick auf eines seiner Objekte (auch auf gesperrten, sichtbaren Ebenen) oder Auswahl im Panel des
+  Werkzeugs; der gewählte Platz ist gestrichelt umrandet (Hüllrechteck seiner Objekte).
+- **Ziehen** verschiebt die ganze Page samt Hintergrund (wie „Lage“): Vorschau während des Ziehens (Objekte, Hintergrund,
+  Freiflächen und Warnungen live), beim Loslassen ein Undo-Schritt (Verschiebung auf 0,01 m). Ziehen auf einem Objekt
+  eines anderen Platzes wählt diesen und verschiebt ihn; Bewegungen bis 3 px zählen als Klick. Esc bricht ab.
+- **Drehen um … °** (Zahlenfeld im Panel, im Uhrzeigersinn um die Mitte des Platzes wie „Lage“, auf 0,1°): Enter oder
+  „Drehen“ = ein Undo-Schritt; das Feld leert sich danach.
+- **2-Punkt-Ausrichtung** („2 Punkte …“, Vorlage: Kalibrieren): A1 auf diesem Plan, passender Punkt B1 auf dem
+  Referenzplan, dann A2 und B2. Fang an Grundflächen-Ecken und Standmitten sichtbarer Ebenen (A an diesem Platz, B an den
+  anderen; Cmd/Strg = ohne Fang, z. B. für Gebäudeecken im Hintergrund). Ergebnis: Drehung um den Winkel zwischen A1→A2
+  und B1→B2, Verschiebung der Mitte von A1/A2 auf die Mitte von B1/B2; der **Maßstab bleibt 1** (gleiche
+  Stadtgrundkarte). Weichen die Abstände A1–A2 und B1–B2 um mehr als 0,01 m ab, nennt das Panel beide Abstände und die
+  Abweichung in m (der Fehler verteilt sich zur Hälfte auf jedes Paar). Vorschau bis „Anwenden“ (ein Undo-Schritt;
+  Drehung auf 0,1°, Verschiebung auf 0,01 m gerundet wie bei „Lage“); Esc oder „Abbrechen“ verwirft die Punkte. Fallen
+  die Punkte eines Plans zusammen, beginnt die Auswahl mit Hinweis neu.
 
 **PDF der Gesamtansicht** (Teil c, folgt): eigenes Blatt mit Schriftfeld und Legende des Verbunds.
 
@@ -1042,9 +1097,11 @@ ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
 ### Layout
 - **Oben: Tab-Leiste mit den Pages.** Start-Page ganz links, danach die Festplatz-Pages.
   Durchschalten per Klick oder Shortcut. „+“-Tab legt eine neue Festplatz-Page an,
-  Doppelklick benennt um, Rechtsklick öffnet ein Kontextmenü (Duplizieren, Löschen).
+  Doppelklick benennt um, Rechtsklick öffnet ein Kontextmenü (Duplizieren, Löschen; seit #15 auch Verbund anlegen,
+  aufnehmen, herausnehmen). Vor dem ersten Mitglied eines Festplatz-Verbunds steht der Tab seiner Gesamtansicht (§12).
 - **Darunter: Steuerungsleiste** (wie in Illustrator), kontextabhängig: zeigt X, Y, Breite,
-  Tiefe, Drehung des ausgewählten Objekts zum direkten Bearbeiten.
+  Tiefe, Drehung des ausgewählten Objekts zum direkten Bearbeiten. In der Gesamtansicht eines Verbunds rechts die
+  Auswahl „Neue Objekte auf: …“ (§12).
 - **Links: vertikale Werkzeugleiste nur aus Icons, ohne Text.** Beim Hovern erscheint ein
   Tooltip mit Name, kurzer Funktionsbeschreibung und Shortcut, z. B.
   „Geschäft erstellen (G) – Neuen Stand auf der Zeichenfläche aufziehen“.
@@ -1054,7 +1111,8 @@ ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
   Infrastruktur-Objekte (als aufklappbare Werkzeuggruppe: der Knopf zeigt den zuletzt genutzten Typ, Klick auf das
   Dreieck, Rechtsklick oder langes Drücken öffnet die Liste aller Typen), Messwerkzeug, Kalibrierung,
   Schriftfeld, sowie Umschalter für Fang (Vorderkante, Raster, Nachbarstände; einzeln
-  schaltbar), Raster ein/aus.
+  schaltbar), Raster ein/aus. Nur in der Gesamtansicht eines Verbunds: „Ausrichten“ (§12); dort gesperrte Werkzeuge
+  (Kalibrieren, Schriftfeld, Raster ein/aus) sind ausgegraut und nennen im Tooltip den Grund.
 - **Mitte: Zeichenfläche** mit Zoom (Mausrad, Strg/Cmd + / −, „an Fenster anpassen“) und Pan
   („An Fenster anpassen“, Strg/Cmd+0, Nacharbeit M8 2026-10-14: Objekte, Hintergrund und, solange die Ebene „Blatt“
   sichtbar ist, das ganze Blatt samt Marke und Papier-Elementen; eine leere Page zeigt die Standardansicht)
@@ -1084,6 +1142,7 @@ ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
   der Gruppe (zyklisch, wie in Illustrator), T = Schriftfeld, Shift+L = Legende ein/aus. Der zuletzt genutzte Typ ist
   eine Ansichtseinstellung (kein Undo-Schritt, nur für die Sitzung).
 - PDF-Export (M8): Cmd/Strg+P öffnet den Export-Dialog (wie „Drucken“ in Illustrator), auf allen Pages.
+- Verbund (#15): A = Werkzeug „Ausrichten“ (nur in der Gesamtansicht); F2 benennt dort den Verbund um.
 - Start-Page (M6): Tab und Shift+Tab springen dort zwischen Bedienelementen (Panels ausblenden gibt es nur auf
   Festplatz-Pages). Tasten der Geschäftstabelle siehe §7.
 - Textfelder (korrigiert 2026-10-12, Laurin): Solange ein Textfeld den Fokus hat, greifen nur Speichern, Speichern
@@ -1126,7 +1185,9 @@ ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
   - Während eines Ziehens werden Kurzbefehle nicht ausgeführt (außer Esc zum Abbrechen).
   - Ein Ziehen, Drehen oder Aufziehen ist genau ein Undo-Schritt; ebenso eine Feldänderung in der
     Seiten- oder Steuerungsleiste. Jeder einzelne Pfeiltasten-Druck ist ein eigener Undo-Schritt; nur
-    eine gedrückt gehaltene Taste (Tastenwiederholung) ergibt zusammen einen Schritt (QA-M3-05).
+    eine gedrückt gehaltene Taste (Tastenwiederholung) ergibt zusammen einen Schritt (QA-M3-05). Das gilt auch in der
+    Gesamtansicht eines Verbunds, wenn eine Geste Objekte mehrerer Pages ändert (§12); ebenso ist Umhängen und jede
+    Ausrichtung („Ausrichten“, „Lage“) ein Schritt.
   - Esc bricht eine laufende Interaktion (Ziehen, Aufziehen, Messen, Kalibrieren) immer zuerst ab, erst
     danach greifen globale Kurzbefehle wie „Auswahl aufheben“ (QA-M3-01).
 - Oberfläche auf Deutsch, auch alle Fehlermeldungen.
