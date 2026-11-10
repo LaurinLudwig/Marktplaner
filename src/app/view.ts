@@ -7,7 +7,7 @@ import { mmToM } from '../core/sheet';
 import { defaultView, fitBounds, zoomAt, type Bounds } from '../core/viewport';
 import { START_PAGE, useStore } from '../state/store';
 import { pageView, verbundOfRef } from '../core/verbundView';
-import { memberPages } from '../core/verbund';
+import { memberPages, worldBackground } from '../core/verbund';
 
 /** Ansicht der aktiven Page (Standardansicht, falls noch keine gesetzt ist). */
 export function currentView(): View | null {
@@ -47,7 +47,8 @@ export function zoomBy(factor: number) {
 export function pageBounds(page: FestplatzPage, project?: Pick<Project, 'pages' | 'groups'>): Bounds | null {
   const objects = boundsOfRects([...activeAreas(page), ...page.stands, ...page.infra]);
   const verbund = project ? verbundOfRef(project, page.id) : null;
-  const backgrounds = verbund && project ? memberPages(project, verbund).map((m) => m.background) : [page.background];
+  // Gesamtansicht: Hintergründe im System des Verbunds (#27)
+  const backgrounds = verbund && project ? memberPages(project, verbund).map((m) => worldBackground(verbund, m)) : [page.background];
   const bg = page.layers.background.visible ? backgrounds.flatMap((b) => (b ? bgCorners(b.transform, b.pxSize) : [])) : [];
   if (!bg.length) return objects;
   const xs = bg.map((p) => p.x);

@@ -10,7 +10,10 @@ import { keyLabel, tip } from '../shortcuts/tip';
 import { NumberField } from './NumberField';
 import { AreaOrderPanel } from './AreaOrderPanel';
 import { NumberingPanel } from './NumberingPanel';
-import { groupOf, verbundRef } from '../../core/verbund';
+import { groupOf, placementOf, straightenAngle, verbundRef } from '../../core/verbund';
+import { notify } from '../../app/notify';
+import { rotatePageView } from '../../state/verbund';
+import { useState } from 'react';
 import { openProjectSettings } from '../../app/startPageNav';
 
 const KIND_LABEL = { pdf: 'PDF', svg: 'SVG', image: 'Bild' } as const;
@@ -177,8 +180,8 @@ export function PagePanel({ page }: { page: FestplatzPage }) {
 }
 
 /**
- * Festplatz-Verbund der Page (#15), nur Anzeige: Name und die anderen Mitglieder; verwaltet wird in den
- * Projekteinstellungen. Ohne Verbund erscheint der Bereich nicht.
+ * Festplatz-Verbund der Page (#15): Name und die anderen Mitglieder (verwaltet wird in den Projekteinstellungen) und
+ * „Platz in der Einzelansicht drehen …“ (#27). Ohne Verbund erscheint der Bereich nicht.
  */
 function VerbundInfo({ page }: { page: FestplatzPage }) {
   const group = useStore((s) => groupOf(s.project, page.id));
@@ -202,7 +205,78 @@ function VerbundInfo({ page }: { page: FestplatzPage }) {
             Verbünde verwalten …
           </button>
         </div>
+        <RotateInPlace page={page} />
       </div>
     </section>
+  );
+}
+
+const roundAngle3 = (a: number) => Math.round(a * 1000) / 1000;
+/** Drehung auf −180 … 180°. */
+const signedAngle = (a: number) => {
+  const r = (((a % 360) + 540) % 360) - 180;
+  return Math.abs(r) < 1e-9 ? 0 : r;
+};
+
+/**
+ * „Platz in der Einzelansicht drehen …“ (#27, spec.md §12): dreht den Inhalt der Page in ihren eigenen Koordinaten um
+ * die eingegebene Drehung (im Uhrzeigersinn um die Mitte des Platzes) und gleicht die Lage im Verbund aus – in der
+ * Gesamtansicht und für die Nachbarn bleibt alles an seiner Stelle. Vorschläge: „Hintergrund gerade“ (−Drehung des
+ * Hintergrunds; stellt einen mit Formatversion 17 ausgerichteten Platz wieder gerade) und „wie in der Gesamtansicht“
+ * (Drehung der Lage; danach ist die Lage-Drehung 0). Ein Undo-Schritt.
+ */
+function RotateInPlace({ page }: { page: FestplatzPage }) {
+  const [open, setOpen] = useState(false);
+  const [theta, setTheta] = useState(0);
+  const lageRot = useStore((s) => signedAngle(placementOf(groupOf(s.project, page.id), page.id).rot));
+  const straight = straightenAngle(page);
+  const apply = (v: number) => {
+    if (!v) return;
+    if (rotatePageView(page.id, v)) {
+      notify(`„${page.name}“ in der Einzelansicht um ${fmt(v, 3)}° gedreht; im Verbund bleibt er an seiner Stelle. Rückgängig mit Strg/Cmd+Z.`, 'success');
+      setTheta(0);
+    }
+  };
+  if (!open)
+    return (
+      <button
+        type="button"
+        className="btn"
+        data-testid="rotate-in-place-open"
+        onClick={() => setOpen(true)}
+        {...tip({ label: 'Platz in der Einzelansicht drehen', desc: 'Dreht den Inhalt dieses Platzes in der Einzelansicht; in der Gesamtansicht bleibt er an seiner Stelle', ariaLabel: false })}
+      >
+        Platz in der Einzelansicht drehen …
+      </button>
+    );
+  return (
+    <div className="verbund-rotate form" data-testid="rotate-in-place">
+      <div className="fields-2">
+        <NumberField id="rotate-in-place" label="Einzelansicht drehen um" unit="°" value={theta} step={1} digits={3} min={-360} max={360} onCommit={setTheta} />
+        <button type="button" className="btn primary align-end" data-testid="rotate-in-place-apply" onClick={() => apply(theta)}>
+          Drehen
+        </button>
+      </div>
+      <div className="btn-row">
+        {straight !== 0 && (
+          <button type="button" className="btn" data-testid="rotate-in-place-straighten" onClick={() => apply(straight)} {...tip({ label: 'Hintergrund gerade stellen', desc: `Dreht um ${fmt(roundAngle3(straight), 3)}°, sodass der Hintergrund ungedreht liegt`, ariaLabel: false })}>
+            Hintergrund gerade ({fmt(roundAngle3(straight), 3)}°)
+          </button>
+        )}
+        {lageRot !== 0 && (
+          <button type="button" className="btn" data-testid="rotate-in-place-overview" onClick={() => apply(lageRot)} {...tip({ label: 'Wie in der Gesamtansicht', desc: `Dreht um ${fmt(roundAngle3(lageRot), 3)}°, sodass die Einzelansicht so liegt wie in der Gesamtansicht`, ariaLabel: false })}>
+            Wie in der Gesamtansicht ({fmt(roundAngle3(lageRot), 3)}°)
+          </button>
+        )}
+        <button type="button" className="btn" onClick={() => setOpen(false)}>
+          Schließen
+        </button>
+      </div>
+      <p className="hint">
+        Dreht Hintergrund, Grundflächen, Stände und Infrastruktur dieses Platzes in seiner Einzelansicht (im Uhrzeigersinn um seine Mitte, mit
+        Nordrichtung, Blatt-Mitte und Nummerierungs-Mittelpunkt). Die Lage im Verbund gleicht die Drehung aus: In der Gesamtansicht und für die
+        Nachbarn bleibt alles an seiner Stelle.
+      </p>
+    </div>
   );
 }

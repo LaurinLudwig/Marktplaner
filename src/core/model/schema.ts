@@ -129,7 +129,8 @@ function normalizeProject(p: Obj): Project {
 /**
  * Festplatz-Verbünde (#15). Unbrauchbare Einträge und doppelte IDs entfallen. Mitglieder: nur vorhandene Pages, jede
  * höchstens einmal und in höchstens einem Verbund (der erste in der Liste behält sie). Ein Verbund ohne Mitglieder
- * bleibt erhalten (er wird angelegt, bevor Mitglieder dazukommen). Blatt und Papier-Elemente wie bei einer Page.
+ * bleibt erhalten (er wird angelegt, bevor Mitglieder dazukommen). Blatt und Papier-Elemente wie bei einer Page. Lagen
+ * (#27) nur für Mitglieder; fehlt eine, gilt die Identität.
  */
 function normalizeGroups(raw: unknown, pages: readonly FestplatzPage[]): Verbund[] {
   const pageIds = new Set(pages.map((pg) => pg.id));
@@ -152,6 +153,12 @@ function normalizeGroups(raw: unknown, pages: readonly FestplatzPage[]): Verbund
       if (isObj(l)) base.layers[id] = { visible: bool(l.visible, true), locked: bool(l.locked, false) };
     }
     const view = isObj(g.view) ? g.view : null;
+    // Lage je Mitglied (#27, Formatversion 18): nur für Mitglieder, fehlende bzw. unbrauchbare = Identität
+    const placementsRaw = isObj(g.placements) ? g.placements : {};
+    for (const id of members) {
+      const pl = placementsRaw[id];
+      if (isObj(pl)) base.placements[id] = { x: num(pl.x, 0), y: num(pl.y, 0), rot: normAngle(num(pl.rot, 0)) };
+    }
     out.push({
       ...base,
       id: g.id,

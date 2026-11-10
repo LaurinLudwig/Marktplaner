@@ -388,18 +388,35 @@ export interface Vendor {
 }
 
 /**
+ * Lage eines Festplatzes im Verbund (#27, Formatversion 18): starre Abbildung aus dem eigenen Koordinatensystem der Page
+ * in das gemeinsame System des Verbunds (Gesamtansicht), Maßstab 1:
+ *
+ *   welt = R(rot) · lokal + (x, y)
+ *
+ * `rot` in Grad im Uhrzeigersinn (wie überall), gedreht um den Ursprung der Page; (x, y) in Metern. Ungerundet
+ * gespeichert (nur Gleitkomma-Reste unter 10⁻⁸ entfallen). Identität = { x: 0, y: 0, rot: 0 }.
+ */
+export interface Placement {
+  x: number;
+  y: number;
+  rot: number;
+}
+
+/**
  * Festplatz-Verbund (#15, Formatversion 16): Pages, die räumlich zusammenhängen und sich am Rand überschneiden (z. B.
- * „Unterstadt“). Alle Mitglieder liegen in einem gemeinsamen Koordinatensystem: Beim Einrichten wird eine Page samt
- * Hintergrund und Objekten an ihre echte Lage verschoben bzw. gedreht (core/verbund.ts `transformPageContent`); danach
- * gibt es keine Umrechnung zwischen Pages. Ein Objekt gehört der Page, in deren Liste es steht (kein eigenes Feld).
- * Eine Page gehört zu höchstens einem Verbund. Blatt, Papier-Elemente, Ebenen und Ansicht gehören zur Gesamtansicht
- * (Teil b/c von #15) und haben dieselben Typen wie bei einer Page.
+ * „Unterstadt“). Jede Page behält ihr eigenes Koordinatensystem (Entscheidung 2026-11-10, #27); der Verbund speichert
+ * je Mitglied nur seine Lage (`placements`, core/verbund.ts `placementOf`). Gesamtansicht, Nachbarn, Zuordnung und das
+ * PDF der Gesamtansicht rechnen mit der Lage um. Ein Objekt gehört der Page, in deren Liste es steht (kein eigenes
+ * Feld). Eine Page gehört zu höchstens einem Verbund. Blatt, Papier-Elemente, Ebenen und Ansicht gehören zur
+ * Gesamtansicht (Teil b/c von #15) und haben dieselben Typen wie bei einer Page; sie liegen im System des Verbunds.
  */
 export interface Verbund {
   id: Id;
   name: string;
   /** Mitglieder in der Reihenfolge des Verbunds (unabhängig von der Tab-Reihenfolge). */
   pageIds: Id[];
+  /** Lage je Mitglied (#27, Formatversion 18); nur für Mitglieder, fehlt = Identität. */
+  placements: Record<Id, Placement>;
   sheet: Sheet;
   titleBlock: PaperAnchor;
   titleBlockText: string;

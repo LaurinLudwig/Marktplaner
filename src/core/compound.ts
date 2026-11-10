@@ -15,15 +15,17 @@ import { normalizeParts, partRect, partsInMeters } from './shape';
 const clampSize = (v: number) => Math.min(LIMITS.stand.max, Math.max(LIMITS.stand.min, v));
 
 /**
- * Neues Hüllrechteck (Weltkoordinaten, gerundet) und relative Teile aus Teilen in Metern, gemessen von der linken
- * oberen Ecke des bisherigen Hüllrechtecks von `stand` (wie im Editor). Die Drehung des Stands bleibt; die Teile
+ * Neues Hüllrechteck (Weltkoordinaten, Mitte und Maße gerundet) und relative Teile aus Teilen in Metern, gemessen von
+ * der linken oberen Ecke des bisherigen Hüllrechtecks von `stand` (wie im Editor). Die Drehung des Stands bleibt
+ * unverändert (nicht neu gerundet: In der Gesamtansicht eines Verbunds ist sie die Weltdrehung = gespeicherte Drehung +
+ * Drehung der Lage; auf 0,1° gerundet, landete der Stand nach dem Zurückrechnen bis zu 0,1° gedreht, #27); die Teile
  * bleiben auf dem Plan, wo sie sind. null ohne brauchbares Teil.
  */
 export function refitStand(stand: Rect, meters: readonly ShapePart[]): { rect: Rect; parts: ShapePart[] } | null {
   const n = normalizeParts(meters.map((p) => ({ ...p, rot: roundAngle(p.rot || 0) })));
   if (!n) return null;
   const c = fromLocal(stand, { x: n.x0 + n.w / 2 - stand.w / 2, y: n.y0 + n.d / 2 - stand.d / 2 });
-  return { rect: roundRect({ cx: c.x, cy: c.y, w: clampSize(n.w), d: clampSize(n.d), rot: stand.rot }), parts: n.parts };
+  return { rect: { ...roundRect({ cx: c.x, cy: c.y, w: clampSize(n.w), d: clampSize(n.d), rot: 0 }), rot: normAngle(stand.rot) }, parts: n.parts };
 }
 
 /**

@@ -261,12 +261,22 @@ describe('#26 Ausrichten nach Punktpaaren (fitRigid)', () => {
     ).toBeNull();
   });
 
-  it('Vorschau: Objekte, Beschriftungen und Hintergrund aus einer Transformation', () => {
+  it('Vorschau: Objekte, Beschriftungen und Hintergrund aus einer Transformation (als Vorschau-Lage, #27)', () => {
     const { a } = setup();
     const page: FestplatzPage = { ...a, stands: [{ ...a.stands[0]!, labelOffset: { x: 4, y: 0 } }] };
     const t = { dx: 1, dy: 2, rot: 90, pivot: { x: 5, y: 5 } };
-    const pv = alignPreview(page, t);
-    expect(pv.rects.sA).toMatchObject({ cx: 6, cy: 7, rot: 90 });
+    const pv = alignPreview({ placements: {} }, page, t);
+    // Vorschau-Lage: 90° um (5|5), dann (1|2) → welt = R(90°) · lokal + (11, 2)
+    expect(pv.placement.rot).toBe(90);
+    expect(pv.placement.x).toBeCloseTo(11, 9);
+    expect(pv.placement.y).toBeCloseTo(2, 9);
+    expect(pv.rects.sA!.cx).toBeCloseTo(6, 9);
+    expect(pv.rects.sA!.cy).toBeCloseTo(7, 9);
+    expect(pv.rects.sA!.rot).toBe(90);
+    // mit vorhandener Lage: t wirkt in der Welt auf die bisherige Lage
+    const moved = alignPreview({ placements: { [page.id]: { x: 100, y: 0, rot: 0 } } }, page, { dx: 1, dy: 0, rot: 0, pivot: { x: 0, y: 0 } });
+    expect(moved.placement).toEqual({ x: 101, y: 0, rot: 0 });
+    expect(moved.rects.sA).toMatchObject({ cx: 106, cy: 5 });
     expect(pv.labelOffsets.sA!.x).toBeCloseTo(0, 9);
     expect(pv.labelOffsets.sA!.y).toBeCloseTo(4, 9);
     expect(pv.rects.aA).toBeDefined();
@@ -274,7 +284,7 @@ describe('#26 Ausrichten nach Punktpaaren (fitRigid)', () => {
     // effectivePage setzt die Beschriftung der Vorschau ein
     const shown = effectivePage(page, { pageId: page.id, rects: pv.rects, labelOffsets: pv.labelOffsets });
     expect(shown.stands[0]!.labelOffset).toEqual(pv.labelOffsets.sA);
-    expect(shown.stands[0]!.cx).toBe(6);
+    expect(shown.stands[0]!.cx).toBeCloseTo(6, 9);
   });
 
   it('weit entfernte Koordinaten (Stadtgrundkarte mit großem Ursprung): exakt, ohne Auslöschung', () => {

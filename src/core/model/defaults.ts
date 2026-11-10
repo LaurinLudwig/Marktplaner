@@ -112,6 +112,7 @@ export function createVerbund(name: string, pageIds: Id[] = []): Verbund {
     id: newId(),
     name,
     pageIds: [...pageIds],
+    placements: Object.fromEntries(pageIds.map((id) => [id, { x: 0, y: 0, rot: 0 }])),
     sheet: structuredClone(DEFAULT_SHEET),
     titleBlock: { ...DEFAULT_TITLE_BLOCK_ANCHOR },
     titleBlockText: '',

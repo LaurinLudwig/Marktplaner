@@ -2,20 +2,34 @@ import { roundRect } from '../core/geometry/rect';
 import { dissolveStand, mergeStands, refitStand, shapeParts } from '../core/compound';
 import { clampFrontOverride } from '../core/model/schema';
 import { newId } from '../core/id';
-import type { Id, Project, Rect, ShapePart, ShapeTemplate, StandShape } from '../core/model/types';
+import type { Id, Project, Rect, ShapePart, ShapeTemplate, Stand, StandShape } from '../core/model/types';
 import { LIMITS } from '../core/objects';
 import { normalizeParts } from '../core/shape';
-import { ownerPages, pageView } from '../core/verbundView';
+import { isIdentity, placeObject } from '../core/placement';
+import { ownerPages, pageView, viewToOwner } from '../core/verbundView';
 import { select } from './objects';
 import { useStore } from './store';
 
 /**
  * Geschäftsformen (M12, #9, spec.md §3 „Form“): Form der Stände, Formvorlagen in den Projekteinstellungen und die
  * eigene Form je Stand (#16). Jede Änderung ist ein Undo-Schritt. `pageId` darf die Gesamtansicht eines Verbunds sein
- * (#15): Die Stände werden dann in den Listen ihrer Besitzer-Pages geändert.
+ * (#15): Die Stände werden dann in den Listen ihrer Besitzer-Pages geändert; Rechtecke aus der Gesamtansicht liegen im
+ * System des Verbunds und werden in das der Besitzer-Page umgerechnet (#27). Teile einer eigenen Form sind relativ zum
+ * Stand und bleiben dabei unverändert.
  */
 
 const st = () => useStore.getState();
+
+/**
+ * Rechteck bzw. Stand aus dem System der Ansicht `pageId` in das der Besitzer-Page `ownerId` (#27); `round` rundet
+ * umgerechnete Werte wie beim Übernehmen (in der Einzelansicht bleibt alles unverändert).
+ */
+function toOwner<T extends Rect>(pageId: Id, ownerId: Id, r: T, round = false): T {
+  const p = viewToOwner(st().project, pageId, ownerId);
+  if (isIdentity(p)) return r;
+  const out = placeObject(p, r);
+  return round ? roundRect(out) : out;
+}
 
 /** Stände der Pages von `pageId` (in der Gesamtansicht aller Mitglieder, #15); auch im Entwurf. */
 const standsOf = (p: Pick<Project, 'pages' | 'groups'>, pageId: Id) => ownerPages(p, pageId).flatMap((pg) => pg.stands);
@@ -67,20 +81,34 @@ export function setStandShape(pageId: Id, ids: readonly Id[], choice: ShapeChoic
  * Hüllrechteck B × T wird neu bestimmt, die Teile bleiben auf dem Plan an ihrem Platz. false ohne brauchbares Teil.
  */
 export function setStandParts(pageId: Id, id: Id, meters: readonly ShapePart[], label = 'Form ändern'): boolean {
-  const stand = pageView(st().project, pageId)?.stands.find((x) => x.id === id);
-  if (!stand) return false;
-  const fit = refitStand(stand, meters);
+  // Im System der Besitzer-Page einpassen (#27): in der Gesamtansicht dasselbe Ergebnis wie in der Einzelansicht
+  const own = ownStand(pageId, id);
+  if (!own) return false;
+  const fit = refitStand(own.stand, meters);
   if (!fit) return false;
-  commitStandParts(pageId, id, fit.rect, fit.parts, label);
+  commitStandParts(own.pageId, id, fit.rect, fit.parts, label);
   return true;
 }
 
-/** Hüllrechteck und relative Teile einer eigenen Form übernehmen (Gesten auf der Zeichenfläche, ein Undo-Schritt). */
+/** Stand `id` der Ansicht `pageId` in der Liste und im System seiner Besitzer-Page (#27), sonst null. */
+function ownStand(pageId: Id, id: Id): { pageId: Id; stand: Stand } | null {
+  for (const pg of ownerPages(st().project, pageId)) {
+    const stand = pg.stands.find((x) => x.id === id);
+    if (stand) return { pageId: pg.id, stand };
+  }
+  return null;
+}
+
+/**
+ * Hüllrechteck (im System der Ansicht) und relative Teile einer eigenen Form übernehmen (Gesten auf der Zeichenfläche,
+ * ein Undo-Schritt).
+ */
 export function commitStandParts(pageId: Id, id: Id, rect: Rect, parts: ShapePart[], label: string) {
   st().change(label, (p) => {
-    const s = standsOf(p, pageId).find((x) => x.id === id);
-    if (!s) return;
-    const r = roundRect(rect);
+    const pg = ownerPages(p, pageId).find((x) => x.stands.some((y) => y.id === id));
+    const s = pg?.stands.find((x) => x.id === id);
+    if (!pg || !s) return;
+    const r = roundRect(toOwner(pageId, pg.id, rect));
     Object.assign(s, { cx: r.cx, cy: r.cy, w: r.w, d: r.d, rot: r.rot, parts, shapeTemplateId: null });
   });
 }
@@ -107,10 +135,10 @@ export function mergeStandsOnPage(pageId: Id, ids: readonly Id[]): Id | null {
   if (!merged) return null;
   const removed = new Set(merged.removed);
   st().change('Zu einem Stand zusammenfassen', (p) => {
-    // Gesamtansicht (#15): Der zusammengefasste Stand bleibt auf dem Platz seines Ausgangsstands
+    // Gesamtansicht (#15): Der zusammengefasste Stand bleibt auf dem Platz seines Ausgangsstands, in dessen System (#27)
     for (const pg of ownerPages(p, pageId)) {
       if (!pg.stands.some((s) => removed.has(s.id) || s.id === merged.stand.id)) continue;
-      pg.stands = pg.stands.filter((s) => !removed.has(s.id)).map((s) => (s.id === merged.stand.id ? merged.stand : s));
+      pg.stands = pg.stands.filter((s) => !removed.has(s.id)).map((s) => (s.id === merged.stand.id ? toOwner(pageId, pg.id, merged.stand, true) : s));
     }
   });
   select([merged.stand.id]);
@@ -119,14 +147,14 @@ export function mergeStandsOnPage(pageId: Id, ids: readonly Id[]): Id | null {
 
 /** „Form auflösen“ (#16): jeder Teil der eigenen Form wird ein eigener Stand (ein Undo-Schritt, alle ausgewählt). */
 export function dissolveStandOnPage(pageId: Id, id: Id): Id[] {
-  const stand = pageView(st().project, pageId)?.stands.find((s) => s.id === id);
-  if (!stand?.parts?.length) return [];
-  const pieces = dissolveStand(stand);
+  // Im System der Besitzer-Page auflösen (#27): in der Gesamtansicht dasselbe Ergebnis wie in der Einzelansicht
+  const own = ownStand(pageId, id);
+  if (!own?.stand.parts?.length) return [];
+  const pieces = dissolveStand(own.stand);
   st().change('Form auflösen', (p) => {
-    for (const pg of ownerPages(p, pageId)) {
-      const i = pg.stands.findIndex((s) => s.id === id);
-      if (i >= 0) pg.stands.splice(i, 1, ...pieces);
-    }
+    const pg = p.pages.find((x) => x.id === own.pageId);
+    const i = pg ? pg.stands.findIndex((s) => s.id === id) : -1;
+    if (pg && i >= 0) pg.stands.splice(i, 1, ...pieces);
   });
   const newIds = pieces.map((s) => s.id);
   select(newIds);

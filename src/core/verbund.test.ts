@@ -26,6 +26,9 @@ import {
   neighbourCaption,
   neighbourObjects,
   NO_NEIGHBOURS,
+  rotatePageInPlace,
+  straightenAngle,
+  worldPage,
   ownerOf,
   pageEnv,
   pageExtent,
@@ -36,6 +39,8 @@ import {
   type PageTransform,
 } from './verbund';
 import { cachedWarningData, countWarnings } from './warnings';
+import { toLocal, toWorld } from './placement';
+import { viewBackgrounds } from './verbundView';
 
 /**
  * Festplatz-Verbund (#15). Szene: Zwei Plätze, deren Grundflächen sich bei x 45–50 überschneiden.
@@ -440,5 +445,150 @@ describe('#15 transformPageContent', () => {
   it('pagePivot: Mitte der Objekte, ohne Objekte der Ursprung', () => {
     expect(pagePivot(zPage())).toEqual({ x: 25, y: -5 });
     expect(pagePivot(createPage('leer'))).toEqual({ x: 0, y: 0 });
+  });
+});
+
+/**
+ * #27: Jede Page behält ihr eigenes Koordinatensystem, der Verbund speichert die Lage. Referenz: die Szene oben mit
+ * gemeinsamem System (alle Lagen Identität). Dieselbe Szene „gedreht“: beide Plätze liegen in eigenen, gedrehten
+ * Koordinaten (Inhalt = Lage⁻¹ · Referenz), der Verbund speichert die Lagen. Alles über Platzgrenzen muss gleich sein.
+ */
+describe('#27 Lage im Verbund: gleiche Ergebnisse wie mit gemeinsamem System', () => {
+  const PZ = { x: -5, y: 3, rot: 320 };
+  const PS = { x: 37.5, y: -12.25, rot: 23.4 };
+  const Z2 = st('z2', 48.5, { nr: 'Z-02' });
+  const OUT = st('out', 60);
+  const local = <T extends Stand | Area>(p: typeof PZ, list: T[]) => list.map((o) => toLocal(p, o));
+  const ref = () => proj([zPage([Z1, Z2, OUT]), sPage()]);
+  const rotated = () =>
+    proj([zPage(local(PZ, [Z1, Z2, OUT]), { areas: local(PZ, [GZ]) }), sPage(local(PS, [SE2, SE3]), { areas: local(PS, [GS]) })], [{ ...verbund, placements: { Z: PZ, S: PS } }]);
+  const near = (a: { cx: number; cy: number; rot: number }, b: { cx: number; cy: number; rot: number }) => {
+    expect(a.cx).toBeCloseTo(b.cx, 8);
+    expect(a.cy).toBeCloseTo(b.cy, 8);
+    expect((((a.rot - b.rot) % 360) + 540) % 360 - 180).toBeCloseTo(0, 8);
+  };
+
+  it('Gesamtansicht: Objekte in der Welt wie in der Referenz, gleiche IDs; Einzelansicht in eigenen Koordinaten', () => {
+    const r = mergedPage(ref(), verbund);
+    const p = rotated();
+    const m = mergedPage(p, p.groups[0]!);
+    expect(m.stands.map((x) => x.id)).toEqual(r.stands.map((x) => x.id));
+    m.stands.forEach((x, i) => near(x, r.stands[i]!));
+    m.areas.forEach((x, i) => near(x, r.areas[i]!));
+    expect(ownerOf(p, 'se2')).toBe('S');
+    // zwischengespeichert: gleiche Kopien beim zweiten Mal
+    expect(mergedPage(p, p.groups[0]!)).toBe(m);
+    expect(mergedPage({ pages: [...p.pages] }, p.groups[0]!).stands[3]).toBe(m.stands[3]);
+    // Zuordnung in der Welt
+    expect(assignPage(p, p.groups[0]!, { cx: 80, cy: -3, w: 2, d: 2, rot: 0 }).pageId).toBe('S');
+    expect(assignPage(p, p.groups[0]!, { cx: 10, cy: -3, w: 2, d: 2, rot: 0 }).pageId).toBe('Z');
+  });
+
+  it('Nachbarn, Freiflächen, Überlappung und „außerhalb“ der Einzelansichten wie in der Referenz', () => {
+    const r = ref();
+    const p = rotated();
+    for (const id of ['Z', 'S']) {
+      const P = id === 'Z' ? PZ : PS;
+      const rp = r.pages.find((x) => x.id === id)!;
+      const pp = p.pages.find((x) => x.id === id)!;
+      // Nachbarn im System der Page; in die Welt gerechnet wie in der Referenz
+      const rn = neighbourObjects(r, rp);
+      const pn = neighbourObjects(p, pp);
+      expect(pn.stands.map((x) => x.id)).toEqual(rn.stands.map((x) => x.id));
+      pn.stands.forEach((x, i) => near(toWorld(P, x), rn.stands[i]!));
+      expect(neighbourObjects(p, pp)).toBe(pn);
+      // Freiflächen (Achse der Grundfläche, unabhängig vom System)
+      const ctxR = { minFreeWidth: 0.5, infraTypes: r.infraTypes, verbund: r };
+      const ctxP = { minFreeWidth: 0.5, infraTypes: p.infraTypes, verbund: p };
+      const spans = (all: ReturnType<typeof pageFree>) => all.flatMap((a) => a.free.map((f) => [f.key, +f.start.toFixed(6) || 0, +f.end.toFixed(6) || 0]));
+      expect(spans(pageFree(pp, ctxP))).toEqual(spans(pageFree(rp, ctxR)));
+      // Warnungen
+      const wr = cachedWarningData(rp.stands, rp.infra, pageEnv(r, rp), r);
+      const wp = cachedWarningData(pp.stands, pp.infra, pageEnv(p, pp), p);
+      expect(countWarnings(wp.page, pp.stands, p.settings)).toEqual(countWarnings(wr.page, rp.stands, r.settings));
+      for (const x of pp.stands) expect(wp.page.byStand.get(x.id)).toEqual(wr.page.byStand.get(x.id));
+    }
+    // konkret: Z-02 überlappt SE-02, „out“ (x 60) steht auf der Grundfläche der Seestraße und ist innerhalb
+    const z = p.pages[0]!;
+    const w = cachedWarningData(z.stands, z.infra, pageEnv(p, z), p);
+    expect(w.page.byStand.get('z2')!.overlaps).toEqual(['se2']);
+    expect(w.page.byStand.get('out')!.outside).toBe(false);
+  });
+
+  it('Einzelansicht und Einzel-PDF hängen nicht von der eigenen Lage ab: Szene wie ohne Verbund bzw. bei gleicher relativer Lage identisch', () => {
+    const prof = BUILTIN_PROFILES[0]!;
+    // Seestraße weit weg (keine Nachbarn): Szene des Ziegelturms wie ohne Verbund
+    const far = { x: 5000, y: 0, rot: 77 };
+    const z = zPage([Z1, Z2]);
+    const solo = proj([z, sPage()], []);
+    const inV = proj([z, sPage()], [{ ...verbund, placements: { Z: PS, S: far } }]);
+    expect(neighbourObjects(inV, z)).toBe(NO_NEIGHBOURS);
+    expect(pageScene(z, inV, prof)).toEqual(pageScene(z, solo, prof));
+    // Mit Nachbarn: beide Lagen um dieselbe Bewegung geändert → relative Lage gleich → Szene exakt gleich
+    const a = proj([z, sPage()], [{ ...verbund, placements: { Z: { x: 0, y: 0, rot: 0 }, S: { x: 0, y: 0, rot: 0 } } }]);
+    const b = proj([z, sPage()], [{ ...verbund, placements: { Z: PS, S: { ...PS } } }]);
+    expect(pageScene(z, b, prof)).toEqual(pageScene(z, a, prof));
+  });
+
+  it('Einzelansicht ohne Nachbarn: Freiflächen, Warnungen, Nummerierung, Strom und Standgeld wie ohne Verbund, unabhängig von der eigenen Lage', () => {
+    // Eigene Überlappung (Z-01/Z-01b), ein Stand außerhalb, Nummerierung im Uhrzeigersinn um einen eigenen Mittelpunkt
+    const z = zPage([Z1, st('z1b', 11.5, { nr: 'Z-01' }), st('zo', 70), Z2], { numberingMode: 'clockwise', clockwise: { center: { x: 20, y: -5 }, startAngle: 30 } });
+    const solo = proj([z, sPage()], []);
+    const far = { x: 5000, y: 0, rot: 77 };
+    const free = (p: Project) => pageFree(z, { minFreeWidth: 0.5, infraTypes: p.infraTypes, verbund: p }).flatMap((a) => a.free.map((f) => [f.key, f.start, f.end]));
+    const warn = (p: Project) => {
+      const w = cachedWarningData(z.stands, z.infra, pageEnv(p, z), p);
+      return [countWarnings(w.page, z.stands, p.settings), z.stands.map((x) => w.page.byStand.get(x.id))];
+    };
+    const plan = (p: Project) => planRenumber(p, 'Z');
+    for (const own of [PS, PZ, { x: 0, y: 0, rot: 0 }, { x: -123.456, y: 7.89, rot: 3.7234 }]) {
+      const inV = proj([z, sPage()], [{ ...verbund, placements: { Z: own, S: far } }]);
+      expect(neighbourObjects(inV, z)).toBe(NO_NEIGHBOURS);
+      expect(free(inV)).toEqual(free(solo));
+      expect(warn(inV)).toEqual(warn(solo));
+      expect(plan(inV)).toEqual(plan(solo));
+      // Standliste (CSV) mit Warnungen je Stand
+      expect(standRows(inV)).toEqual(standRows(solo));
+    }
+    // Plausibilität: es gibt wirklich etwas zu vergleichen
+    const [counts] = warn(solo) as [ReturnType<typeof countWarnings>];
+    expect(counts).toMatchObject({ outside: 1, overlap: 2 });
+  });
+
+  it('Hintergründe der Gesamtansicht in der Welt; worldPage für „Ausrichten“', () => {
+    const bg: Background = { assetId: 'x', kind: 'image', fileName: 'x', pxSize: { w: 100, h: 50 }, transform: { x: 5, y: 6, metersPerPx: 1, rot: 0 }, opacity: 1, locked: false };
+    const p = rotated();
+    p.pages[1] = { ...p.pages[1]!, background: bg, northAngle: 10 };
+    const bgs = viewBackgrounds(p, mergedPage(p, p.groups[0]!));
+    expect(bgs.map((b) => b.pageId)).toEqual(['S']);
+    expect(bgs[0]!.background.transform.rot).toBeCloseTo(23.4, 9);
+    // Einzelansicht: der eigene, ungedrehte Hintergrund
+    expect(viewBackgrounds(p, p.pages[1]!)[0]!.background).toBe(bg);
+    const w = worldPage(p.groups[0]!, p.pages[1]!);
+    expect(w.northAngle).toBeCloseTo(33.4, 9);
+    near(w.stands[0]!, SE2);
+    expect(worldPage(p.groups[0]!, p.pages[1]!)).toBe(w);
+    // Nordrichtung der Gesamtansicht: erstes Mitglied samt Drehung seiner Lage
+    expect(mergedPage(p, p.groups[0]!).northAngle).toBeCloseTo(320, 9);
+  });
+
+  it('rotatePageInPlace: Inhalt lokal gedreht, Lage ausgeglichen, Welt unverändert; straightenAngle stellt den Hintergrund gerade', () => {
+    const p = rotated();
+    const g = p.groups[0]!;
+    const s0 = p.pages[1]!;
+    const bg: Background = { assetId: 'x', kind: 'image', fileName: 'x', pxSize: { w: 100, h: 50 }, transform: { x: 5, y: 6, metersPerPx: 1, rot: 336.6 }, opacity: 1, locked: false };
+    const s = { ...s0, background: bg };
+    expect(straightenAngle(s)).toBeCloseTo(23.4, 9);
+    expect(straightenAngle({ background: null })).toBe(0);
+    const r = rotatePageInPlace(s, PS, straightenAngle(s));
+    expect(r.page.background!.transform.rot).toBe(0);
+    expect(r.placement.rot).toBeCloseTo(0, 6);
+    const g2 = { ...g, placements: { ...g.placements, S: r.placement } };
+    const before = worldPage(g, s);
+    const after = worldPage(g2, r.page);
+    after.stands.forEach((x, i) => near(x, before.stands[i]!));
+    after.areas.forEach((x, i) => near(x, before.areas[i]!));
+    // die Seestraße liegt jetzt in ihrer Einzelansicht wie in der Welt (Lage ohne Drehung)
+    near(r.page.areas[0]!, { ...GS, cx: GS.cx - r.placement.x, cy: GS.cy - r.placement.y });
   });
 });

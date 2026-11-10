@@ -40,7 +40,7 @@ test.describe('M1 Datei: Speichern, Laden, Autosave', () => {
     const json = JSON.parse(strFromU8(files['project.json']!));
     expect(json.format).toBe('schelmeplaner');
     // Seit M12 Formatversion 8 (Migrationen 1 → … → 8), angepasst vom Entwickler (vorher 7), siehe qa/M1.md
-    expect(json.schemaVersion).toBe(17); // seit #15 Teil c Version 17, angepasst vom Entwickler (vorher 16, 15, 14, 13, 12, 11, 10, 9, 8)
+    expect(json.schemaVersion).toBe(18); // seit #27 Version 18, angepasst vom Entwickler (vorher 17, 16, 15, 14, 13, 12, 11, 10, 9, 8)
     expect(json.project.pages.map((p: { name: string }) => p.name)).toEqual(['Obermarkt', 'Festplatz 2']);
     // Nach dem Speichern ist der Änderungspunkt weg, Dateiname wird angezeigt
     await expect(page.locator('.file-state .dot')).toHaveCount(0);

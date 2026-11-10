@@ -3,9 +3,11 @@
  * die Sicht der Zeichenfläche, die Pages, in deren Listen eine Änderung landet, die Zuordnung neuer Objekte und die
  * Rechnungen des Werkzeugs „Ausrichten“. Reine Logik ohne Oberfläche; die Grundlagen stehen in core/verbund.ts.
  */
-import type { Background, FestplatzPage, Id, Project, Rect, Vec, Verbund } from './model/types';
+import type { Background, FestplatzPage, Id, Placement, Project, Rect, Vec, Verbund } from './model/types';
+import { normAngle } from './geometry/rect';
 import { usesAreas } from './pageAreas';
-import { applyTransform, assignPage, mergedPage, memberPages, ownerOf, transformPageContent, VERBUND_PREFIX, verbundRef, type PageTransform } from './verbund';
+import { composePlacement, IDENTITY, invertPlacement, placementOfTransform, relativePlacement } from './placement';
+import { applyTransform, assignPage, groupOf, mergedPage, memberPages, ownerOf, placementOf, VERBUND_PREFIX, verbundRef, worldBackground, worldPage, type PageTransform } from './verbund';
 import type { PartsRect } from './footprint';
 
 type GroupsOf = { groups?: readonly Verbund[] };
@@ -48,12 +50,13 @@ export interface ViewBackground {
 
 /**
  * Hintergründe einer Page bzw. der Gesamtansicht eines Verbunds (Teil c, Entscheidung 2026-11-06): in der Gesamtansicht
- * (`page.id` = `verbund:<id>`, `mergedPage` oder `pageView`) je Mitglied sein Hintergrund in der Reihenfolge des
- * Verbunds (spätere oben, keine Masken), sonst der Hintergrund der Page. Ohne `project.pages` nur der eigene.
+ * (`page.id` = `verbund:<id>`, `mergedPage` oder `pageView`) je Mitglied sein Hintergrund im System des Verbunds (mit
+ * seiner Lage abgebildet, #27; zwischengespeichert) in der Reihenfolge des Verbunds (spätere oben, keine Masken), sonst
+ * der Hintergrund der Page. Ohne `project.pages` nur der eigene.
  */
 export function viewBackgrounds(project: Partial<Pick<Project, 'pages'>> & GroupsOf, page: Pick<FestplatzPage, 'id' | 'background'>): ViewBackground[] {
   const verbund = project.pages ? verbundOfRef(project, page.id) : null;
-  if (verbund && project.pages) return memberPages({ pages: project.pages }, verbund).flatMap((m) => (m.background ? [{ pageId: m.id, background: m.background }] : []));
+  if (verbund && project.pages) return memberPages({ pages: project.pages }, verbund).flatMap((m) => (m.background ? [{ pageId: m.id, background: worldBackground(verbund, m)! }] : []));
   return page.background ? [{ pageId: page.id, background: page.background }] : [];
 }
 
@@ -78,6 +81,39 @@ export function ownerPages<P extends Pick<FestplatzPage, 'id'>>(project: { pages
   if (!verbund) return project.pages.filter((p) => p.id === ref);
   const byId = new Map(project.pages.map((p) => [p.id, p]));
   return verbund.pageIds.flatMap((id) => byId.get(id) ?? []);
+}
+
+// ---------- Koordinatensysteme der Ansichten (#27) ----------
+
+/**
+ * Abbildung aus dem System der Ansicht `ref` in das eigene System der Page `ownerId` (Besitzer eines Objekts): in der
+ * Gesamtansicht eines Verbunds die Umkehrung der Lage des Besitzers, sonst die Identität. Damit landen Änderungen aus
+ * der Gesamtansicht (Weltkoordinaten) in den Koordinaten der Besitzer-Page.
+ */
+export function viewToOwner(project: GroupsOf, ref: string, ownerId: Id): Placement {
+  const verbund = verbundOfRef(project, ref);
+  return verbund ? invertPlacement(placementOf(verbund, ownerId)) : IDENTITY;
+}
+
+/** System einer Ansicht: Verbund und Lage im System des Verbunds (Gesamtansicht: Identität); null ohne Verbund. */
+function frameOf(project: GroupsOf, ref: string): { verbund: Verbund; placement: Placement } | null {
+  const overview = verbundOfRef(project, ref);
+  if (overview) return { verbund: overview, placement: IDENTITY };
+  const group = groupOf(project, ref);
+  return group ? { verbund: group, placement: placementOf(group, ref) } : null;
+}
+
+/**
+ * Abbildung zwischen den Systemen zweier Ansichten (Einfügen aus der Zwischenablage, #27): Gehören beide zum selben
+ * Verbund (Gesamtansicht oder Mitglied), so, dass Objekte an derselben Stelle der Gesamtansicht landen; sonst die
+ * Identität (dieselben Koordinaten wie bisher).
+ */
+export function viewToView(project: GroupsOf, from: string, to: string): Placement {
+  if (from === to) return IDENTITY;
+  const a = frameOf(project, from);
+  const b = frameOf(project, to);
+  if (!a || !b || a.verbund.id !== b.verbund.id) return IDENTITY;
+  return relativePlacement(b.placement, a.placement);
 }
 
 // ---------- Tabs ----------
@@ -114,7 +150,8 @@ export function fallbackPage(project: Pick<Project, 'pages'>, verbund: Verbund, 
 }
 
 /**
- * Besitzer-Pages für neue Objekte in der Gesamtansicht (Entscheidung 2026-11-03, `assignPage`): der Platz, auf dessen
+ * Besitzer-Pages für neue Objekte in der Gesamtansicht (Entscheidung 2026-11-03, `assignPage`; Objekte im System des
+ * Verbunds): der Platz, auf dessen
  * wirkender Grundfläche ein Objekt steht; steht es auf mehreren oder keiner, `fallbackOf(obj)` (die Auswahl „Neue
  * Objekte auf: …“, bei Kopien der Platz des Originals). Grundflächen kommen nur auf Plätze, die Grundflächen verwenden
  * (#17): sonst auf das erste solche Mitglied, ohne eins entfallen sie (nicht in der Zuordnung).
@@ -155,28 +192,33 @@ export const translation = (dx: number, dy: number): PageTransform => ({ dx, dy,
 
 /** Vorschau eines bewegten Platzes (`alignPreview`): für die Vorschau im Store und den Hintergrund der Zeichenfläche. */
 export interface AlignPreview {
+  /** Vorschau-Lage des Platzes im Verbund (t ∘ Lage, #27); `movePageContent(…, t)` speichert genau diese. */
+  placement: Placement;
   /** Grundflächen, Stände und Infrastruktur an ihrer bewegten Stelle (`Preview.rects`). */
   rects: Record<Id, Rect>;
   /** Mitgedrehte, von Hand verschobene Beschriftungen (`Preview.labelOffsets`). */
   labelOffsets: Record<Id, Vec>;
   /** Bewegter Hintergrund (null = keiner). */
   background: Background | null;
-  /** Bewegte Page (ungerundet), z. B. für den Fang an ihren Objekten. */
+  /** Bewegte Page im System des Verbunds (ungerundet), z. B. für den Fang an ihren Objekten. */
   page: FestplatzPage;
 }
 
 /**
- * Vorschau des Werkzeugs „Ausrichten“ (#26): die eine Stelle, an der eine Vorschau-Transformation je Platz auf
- * Objekte, Beschriftungen und Hintergrund angewendet wird (`transformPageContent` ohne Rundung). Übernommen wird
- * dieselbe Transformation mit `movePageContent`.
+ * Vorschau des Werkzeugs „Ausrichten“ (#26, #27): die eine Stelle, an der eine Vorschau-Transformation `t` (im System
+ * des Verbunds) je Platz wirkt. Seit #27 ändert Ausrichten nur die Lage: Die Vorschau komponiert `t` in die Lage des
+ * Mitglieds (`member` in seinen eigenen Koordinaten) und bildet Objekte, Beschriftungen und Hintergrund mit dieser
+ * Vorschau-Lage ab (`worldPage`) – genau so, wie sie nach `movePageContent(member.id, t)` in der Gesamtansicht liegen.
  */
-export function alignPreview(member: FestplatzPage, t: PageTransform): AlignPreview {
-  const page = transformPageContent(member, t, { round: false });
+export function alignPreview(verbund: Pick<Verbund, 'placements'>, member: FestplatzPage, t: PageTransform): AlignPreview {
+  const raw = composePlacement(placementOfTransform(t), placementOf(verbund, member.id));
+  const placement = { ...raw, rot: normAngle(raw.rot) };
+  const page = worldPage({ placements: { [member.id]: placement } }, member);
   const rects: Record<Id, Rect> = {};
   for (const o of [...page.areas, ...page.stands, ...page.infra]) rects[o.id] = { cx: o.cx, cy: o.cy, w: o.w, d: o.d, rot: o.rot };
   const labelOffsets: Record<Id, Vec> = {};
   for (const s of page.stands) if (s.labelOffset) labelOffsets[s.id] = s.labelOffset;
-  return { rects, labelOffsets, background: page.background, page };
+  return { placement, rects, labelOffsets, background: page.background, page };
 }
 
 /** Winkel in Grad auf (−180, 180] (Anzeige der Drehung im Werkzeug „Ausrichten“). */

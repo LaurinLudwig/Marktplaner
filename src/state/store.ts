@@ -176,8 +176,8 @@ function validSelection(project: Project, active: PageRef, sel: Selection): Sele
 
 /**
  * Ansichten nach Undo/Redo: Hat der Schritt die gespeicherte Ansicht einer Page (`page.view`) geändert, gilt sie wieder
- * als aktuelle Ansicht. Nur „Lage im Verbund“ (#15) ändert `page.view` in der Historie: Dort wandert die Ansicht mit dem
- * Inhalt, und Undo/Redo führen sie mit zurück bzw. wieder vor (state/verbund.ts `movePageContent`).
+ * als aktuelle Ansicht. Nur „Platz in der Einzelansicht drehen“ (#27) ändert `page.view` in der Historie: Dort wandert
+ * die Ansicht mit dem Inhalt, und Undo/Redo führen sie mit zurück bzw. wieder vor (state/verbund.ts `rotatePageView`).
  */
 function syncViews(before: Project, after: Project, views: Record<Id, View>): Record<Id, View> {
   if (before.pages === after.pages) return views;

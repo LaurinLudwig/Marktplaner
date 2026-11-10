@@ -31,6 +31,8 @@ async function seed(page: Page, { shift = 0, verbund = false } = {}) {
             id: 'u',
             name: 'Unterstadt',
             pageIds: [z.id, 'S'],
+            // Formatversion 18 (#27): Lage je Mitglied (Testdaten kommen am Laden vorbei in den Store)
+            placements: { [z.id]: { x: 0, y: 0, rot: 0 }, S: { x: 0, y: 0, rot: 0 } },
             sheet: JSON.parse(JSON.stringify(z.sheet)),
             titleBlock: { ...z.titleBlock },
             titleBlockText: '',
@@ -58,6 +60,8 @@ async function w2s(page: Page, p: { x: number; y: number }) {
 const badge = (page: Page, name: string) => tabbar(page).getByRole('tab', { name }).getByTestId('warn-badge');
 
 test.describe('#15 Festplatz-Verbund (Teil a)', () => {
+  // #27 (Entscheidung 2026-11-10): „Lage“ ändert nur die Lage im Verbund, nicht mehr den Inhalt der Page; die Felder
+  // zeigen und setzen die Lage direkt (statt „Verschieben“/„Drehen“ + „Anwenden“). Angepasst vom Entwickler.
   test('Verbund aus zwei Pages anlegen und die Lage der Seestraße per Zahlenfeld verschieben, mit Undo', async ({ page }) => {
     const errors = collectErrors(page);
     await openApp(page);
@@ -73,35 +77,41 @@ test.describe('#15 Festplatz-Verbund (Teil a)', () => {
     await row.getByTestId('verbund-member-add').selectOption({ label: 'Ziegelturm' });
     await row.getByTestId('verbund-member-add').selectOption({ label: 'Seestraße' });
     await expect(row.getByTestId('verbund-member')).toHaveText(['Ziegelturm', 'Seestraße']);
-    expect((await st(page)).project.groups).toMatchObject([{ name: 'Unterstadt', pageIds: [expect.any(String), 'S'] }]);
+    expect((await st(page)).project.groups).toMatchObject([{ name: 'Unterstadt', pageIds: [expect.any(String), 'S'], placements: { S: { x: 0, y: 0, rot: 0 } } }]);
 
-    // Lage der Seestraße: 100 m nach links, ein Undo-Schritt
+    // Lage der Seestraße: 100 m nach links, ein Undo-Schritt; der Inhalt der Seestraße bleibt in ihren Koordinaten
     await row.getByTestId('verbund-member').nth(1).getByTestId('verbund-lage').click();
     const editor = row.getByTestId('verbund-lage-editor');
-    await expect(editor).toContainText('ganze Page samt');
-    const dx = editor.getByLabel('Verschieben X');
+    await expect(editor).toContainText('Einzelansicht');
+    const dx = editor.getByLabel('Verschiebung X');
+    await expect(dx).toHaveValue('0');
+    const n0 = (await st(page)).history.past.length;
     await dx.fill('-100');
     await dx.press('Enter');
-    const n0 = (await st(page)).history.past.length;
-    await editor.getByTestId('verbund-lage-apply').click();
     let s = await st(page);
     expect(s.history.past.length).toBe(n0 + 1);
     const sp = () => s.project.pages.find((p: any) => p.id === 'S');
-    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5 });
-    expect(sp().stands[0]).toMatchObject({ cx: 47.5, cy: -1.5 });
+    expect(s.project.groups[0].placements.S).toEqual({ x: -100, y: 0, rot: 0 });
+    expect(sp().areas[0]).toMatchObject({ cx: 170, cy: -5 });
+    expect(sp().stands[0]).toMatchObject({ cx: 147.5, cy: -1.5 });
 
     await panel.locator('.panel-head').click();
     await page.keyboard.press(`${MOD}+z`);
     s = await st(page);
-    expect(sp().stands[0].cx).toBe(147.5);
+    expect(s.project.groups[0].placements.S.x).toBe(0);
+    await expect(dx).toHaveValue('0');
     await page.keyboard.press(`${MOD}+Shift+z`);
     s = await st(page);
-    expect(sp().stands[0].cx).toBe(47.5);
+    expect(s.project.groups[0].placements.S.x).toBe(-100);
+    expect(sp().stands[0].cx).toBe(147.5);
+    // Jetzt überschneiden sich die Plätze: SE-02 erscheint beim Ziegelturm als Nachbar
+    await tabbar(page).getByRole('tab', { name: 'Ziegelturm' }).click();
+    await expect(page.locator('.layer-neighbours [data-neighbour="se2"]')).toHaveCount(1);
     await page.screenshot({ path: artifact('verbund-einstellungen.png') });
     expect(errors).toEqual([]);
   });
 
-  test('Lage: Drehen per Zahlenfeld ohne Enter, „Anwenden“ dreht die ganze Page um ihre Mitte, ein Undo-Schritt', async ({ page }) => {
+  test('Lage: Drehung per Zahlenfeld dreht den Platz im Verbund um seine Mitte, der Inhalt bleibt; ein Undo-Schritt', async ({ page }) => {
     const errors = collectErrors(page);
     await openApp(page);
     await seed(page, { verbund: true });
@@ -111,26 +121,31 @@ test.describe('#15 Festplatz-Verbund (Teil a)', () => {
     const editor = row.getByTestId('verbund-lage-editor');
     // Drehpunkt: Mitte von Grundfläche (x 45–95, y −10–0) und SE-02
     await expect(editor).toContainText('70 / -5 m');
-    await editor.getByLabel('Drehen').fill('90');
     const n0 = (await st(page)).history.past.length;
-    // direkt klicken: Das Feld übernimmt beim Verlassen, „Anwenden“ sieht schon den neuen Wert
-    await editor.getByTestId('verbund-lage-apply').click();
+    await editor.getByLabel('Drehung').fill('90');
+    await editor.getByLabel('Drehung').press('Enter');
     let s = await st(page);
     expect(s.history.past.length).toBe(n0 + 1);
     const sp = () => s.project.pages.find((p: any) => p.id === 'S');
-    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5, rot: 90 });
-    expect(sp().stands[0]).toMatchObject({ rot: 90 });
-    expect(Math.hypot(sp().stands[0].cx - 70, sp().stands[0].cy + 5)).toBeCloseTo(Math.hypot(22.5, 3.5), 6);
-    expect(sp().northAngle).toBe(90);
-    // Felder zurückgesetzt; der Ziegelturm bleibt, wie er war
-    await expect(editor.getByLabel('Drehen')).toHaveValue('0');
+    // Lage: 90° um (70|−5) → welt = R(90°) · lokal + (65, −75)
+    const pl = s.project.groups[0].placements.S;
+    expect(pl.rot).toBe(90);
+    expect(pl.x).toBeCloseTo(65, 6);
+    expect(pl.y).toBeCloseTo(-75, 6);
+    // Inhalt und Nordrichtung der Seestraße unverändert (Einzelansicht ungedreht)
+    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5, rot: 0 });
+    expect(sp().stands[0]).toMatchObject({ cx: 47.5, cy: -1.5, rot: 0 });
+    expect(sp().northAngle).toBe(0);
     expect(s.project.pages[0].areas[0]).toMatchObject({ cx: 25, cy: -5, rot: 0 });
     await page.getByTestId('verbund-panel').locator('.panel-head').click();
     await page.keyboard.press(`${MOD}+z`);
     s = await st(page);
-    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5, rot: 0 });
-    expect(sp().stands[0]).toMatchObject({ cx: 47.5, cy: -1.5, rot: 0 });
-    expect(sp().northAngle).toBe(0);
+    expect(s.project.groups[0].placements.S).toEqual({ x: 0, y: 0, rot: 0 });
+    // Zurücksetzen
+    await page.keyboard.press(`${MOD}+Shift+z`);
+    await editor.getByTestId('verbund-lage-reset').click();
+    s = await st(page);
+    expect(s.project.groups[0].placements.S).toEqual({ x: 0, y: 0, rot: 0 });
     expect(errors).toEqual([]);
   });
 
