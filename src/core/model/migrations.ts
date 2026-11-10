@@ -33,10 +33,12 @@
  *      Formvorlage `occupies` („belegt wie gezeichnet“), Teil einer Form `rot` (Drehung je Teil).
  *  16  Festplatz-Verbund (#15): Projekt `groups` (Verbünde mit Mitgliedern, Blatt, Papier-Elementen, Ebenen, Ansicht).
  *  17  Nachbarn im PDF (#15 Teil c): Ebene `neighbours` („Nachbarn“) je Page und je Verbund.
+ *  18  Lage im Verbund (#27): Verbund `placements` (Lage je Mitglied: Verschiebung und Drehung); jede Page behält ihr
+ *      eigenes Koordinatensystem (vorher wurde der Inhalt beim Einrichten real verschoben bzw. gedreht).
  */
 import { UserError } from '../errors';
 
-export const CURRENT_SCHEMA_VERSION = 17;
+export const CURRENT_SCHEMA_VERSION = 18;
 
 type Obj = Record<string, unknown>;
 type Migration = (project: Obj) => Obj;
@@ -199,6 +201,22 @@ export const MIGRATIONS: Record<number, Migration> = {
     ...p,
     pages: mapList(p.pages, withNeighbourLayer),
     ...('groups' in p ? { groups: mapList(p.groups, withNeighbourLayer) } : {}),
+  }),
+  /**
+   * 17 → 18 (#27): Jedes Mitglied eines Verbunds bekommt die Lage „keine Verschiebung, keine Drehung“; der Inhalt bleibt
+   * unverändert. Bisher lag der Inhalt ausgerichteter Plätze schon im gemeinsamen System – so bleibt die Gesamtansicht
+   * gleich; ein beim Ausrichten gedrehter Platz bleibt allerdings auch in seiner Einzelansicht gedreht (gerade stellen
+   * mit „Platz in der Einzelansicht drehen“, spec.md §12).
+   */
+  17: (p) => ({
+    ...p,
+    ...('groups' in p
+      ? {
+          groups: mapList(p.groups, (g) =>
+            isObj(g) ? { ...g, placements: Object.fromEntries((Array.isArray(g.pageIds) ? g.pageIds : []).filter((id) => typeof id === 'string').map((id) => [id, { x: 0, y: 0, rot: 0 }])) } : g,
+          ),
+        }
+      : {}),
   }),
 };
 

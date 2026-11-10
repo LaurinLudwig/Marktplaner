@@ -3,6 +3,7 @@ import { clonePage, copyName, nextPageName } from '../core/model/pages';
 import type { Id } from '../core/model/types';
 import { tabOrder } from '../core/verbundView';
 import { START_PAGE, useStore } from './store';
+import { placementsOf } from './verbund';
 
 /** Page-Befehle. Alle Änderungen am Projekt laufen über `change` und sind damit rückgängig machbar. */
 
@@ -57,7 +58,11 @@ export function deletePage(id: Id) {
   s.change('Festplatz löschen', (p) => {
     p.pages.splice(index, 1);
     // Auch aus ihrem Festplatz-Verbund (#15)
-    for (const g of p.groups) if (g.pageIds.includes(id)) g.pageIds = g.pageIds.filter((x) => x !== id);
+    for (const g of p.groups)
+      if (g.pageIds.includes(id)) {
+        g.pageIds = g.pageIds.filter((x) => x !== id);
+        delete placementsOf(g)[id];
+      }
   });
   if (s.ui.activePage === id) useStore.getState().setUi({ activePage: neighbor });
 }

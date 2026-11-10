@@ -12,6 +12,7 @@ import { createInfra } from '../infra';
 import { FADED_OPACITY, pageScene } from '../scene/page';
 import type { TextPrim } from '../scene/prims';
 import { mergedPage, verbundRef } from '../verbund';
+import { invertPlacement, placeBackground, toLocal } from '../placement';
 import { pageView } from '../verbundView';
 import { buildExport, entryPages, exportEntries, selectedEntries } from './exportDoc';
 import { pdfjs, rawContains, readPdf, testFonts, testIconPath } from './pdf.testutil';
@@ -339,5 +340,58 @@ describe('#15 c: Nachbarn im PDF der Einzelansicht', () => {
     const off = await write({ ...profile('internal'), layers: { ...profile('internal').layers, neighbours: false } });
     expect(off.pages[0]!.text).not.toContain('SE-02');
     expect(off.pages[0]!.text).toContain('M-01');
+  });
+});
+
+/**
+ * #27: Ziegelturm in eigenen, gedrehten Koordinaten mit gespeicherter Lage. Gesamtansicht (Objekte und Hintergründe in
+ * der Welt) und Einzel-PDF (Nachbarn im System der Page) wie mit gemeinsamem System; das Einzel-PDF des Ziegelturms
+ * selbst bleibt ungedreht.
+ */
+describe('#27: PDF mit Lage im Verbund', () => {
+  const PB = { x: 40, y: -10, rot: 30 };
+  /** Zahlen auf 6 Stellen, damit Gleitkomma-Reste der Abbildung nicht zählen. */
+  const norm = (v: unknown): unknown =>
+    typeof v === 'number' ? Math.round(v * 1e6) / 1e6 || 0 : Array.isArray(v) ? v.map(norm) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, norm(x)])) : v;
+  const rotated = () => {
+    const p = setup();
+    p.pages[0]!.background = pdfBg('a.pdf', -50, -50);
+    p.pages[2]!.background = pdfBg('b.pdf', 0, -50);
+    const ref = structuredClone(p);
+    const b = p.pages[2]!;
+    p.pages[2] = {
+      ...b,
+      areas: b.areas.map((o) => toLocal(PB, o)),
+      stands: b.stands.map((o) => toLocal(PB, o)),
+      background: placeBackground(invertPlacement(PB), b.background!),
+    };
+    p.groups[0] = { ...p.groups[0]!, placements: { A: { x: 0, y: 0, rot: 0 }, B: PB } };
+    return { ref, p };
+  };
+
+  it('Gesamtansicht: Ebenen und Hintergründe wie mit gemeinsamem System', () => {
+    const { ref, p } = rotated();
+    const sr = pageScene(mergedPage(ref, ref.groups[0]!), ref, profile('internal'), 'Unterstadt (gesamt)');
+    const sp = pageScene(mergedPage(p, p.groups[0]!), p, profile('internal'), 'Unterstadt (gesamt)');
+    expect(norm(sp.layers)).toEqual(norm(sr.layers));
+    expect(norm(sp.backgrounds)).toEqual(norm(sr.backgrounds));
+    expect(norm(sp.frame)).toEqual(norm(sr.frame));
+  });
+
+  it('Einzel-PDF der Müllerwiese: Nachbar SE-02 an derselben Stelle; Einzel-PDF des Ziegelturms ungedreht', () => {
+    const { ref, p } = rotated();
+    const sr = pageScene(ref.pages[0]!, ref, profile('internal'));
+    const sp = pageScene(p.pages[0]!, p, profile('internal'));
+    expect(norm(sp.layers)).toEqual(norm(sr.layers));
+    const label = sp.layers.find((l) => l.id === 'labels')!.prims.find((x): x is TextPrim => x.t === 'text' && x.s === 'neighbour-label')!;
+    expect(label.lines[0]).toBe('SE-02 · Ziegelturm');
+    expect(label.x).toBeCloseTo(18.5, 9);
+    // Ziegelturm: seine Szene ist die seiner eigenen Koordinaten (Stände ungedreht), Hintergrund ohne Lage
+    const z = p.pages[2]!;
+    const sz = pageScene(z, p, profile('internal'));
+    expect(sz.backgrounds[0]!.background).toBe(z.background);
+    const solo = { ...p, groups: [] };
+    const own = (sc: typeof sz) => sc.layers.filter((l) => l.id === 'stands' || l.id === 'areas' || l.id === 'grid');
+    expect(own(sz)).toEqual(own(pageScene(z, solo, profile('internal'))));
   });
 });

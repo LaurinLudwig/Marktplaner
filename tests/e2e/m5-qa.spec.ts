@@ -623,7 +623,7 @@ test.describe('QA M5: Dateiformat Version 3 (§10)', () => {
       const { unzipSync, strFromU8 } = await import('fflate');
       const json = JSON.parse(strFromU8(unzipSync(new Uint8Array(readFileSync(path)))['project.json']!));
       // Seit M12 Formatversion 8 (Speichern schreibt die aktuelle Version), angepasst vom Entwickler (vorher 7)
-      expect(json.schemaVersion).toBe(17); // seit #15 Teil c Version 17, angepasst vom Entwickler (vorher 16, 15, 14, 13, 12, 11, 10, 9, 8)
+      expect(json.schemaVersion).toBe(18); // seit #27 Version 18, angepasst vom Entwickler (vorher 17, 16, 15, 14, 13, 12, 11, 10, 9, 8)
       expect(json.project.settings.numbering.digits).toBe(1);
       expect(errors).toEqual([]);
     });

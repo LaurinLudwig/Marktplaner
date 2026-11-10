@@ -238,7 +238,7 @@ export function PaperElementPanel({ page, element }: { page: FestplatzPage; elem
         {element === 'northArrow' && (
           <p className="hint">
             {verbund
-              ? `Der Pfeil folgt der Nordrichtung des ersten Platzes im Verbund${first ? ` („${first.name}“)` : ''}; einstellen in dessen Einzelansicht.`
+              ? `Der Pfeil folgt der Nordrichtung des ersten Platzes im Verbund${first ? ` („${first.name}“)` : ''}, gedreht mit seiner Lage im Verbund; einstellen in dessen Einzelansicht.`
               : 'Der Pfeil folgt der Nordrichtung der Page (Bereich „Festplatz“).'}
           </p>
         )}

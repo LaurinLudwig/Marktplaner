@@ -153,6 +153,20 @@ function withoutNeighbourLayer(project: Project): Project {
   return { ...project, pages: project.pages.map(strip), groups: project.groups.map(strip) } as unknown as Project;
 }
 
+/**
+ * Feld aus Formatversion 18 (#27) prüfen und entfernen, damit die Tests älterer Migrationen ihre Version vergleichen:
+ * Nach der Migration hat jedes Mitglied eines Verbunds die Lage „keine Verschiebung, keine Drehung“ (und nur Mitglieder).
+ */
+function withoutPlacements(project: Project): Project {
+  return {
+    ...project,
+    groups: project.groups.map(({ placements, ...g }) => {
+      expect(placements).toEqual(Object.fromEntries(g.pageIds.map((id) => [id, { x: 0, y: 0, rot: 0 }])));
+      return g;
+    }),
+  } as unknown as Project;
+}
+
 describe('Formatversionen', () => {
   it('es gibt für jeden Versionssprung bis zur aktuellen Version eine Migration', () => {
     for (let v = 1; v < CURRENT_SCHEMA_VERSION; v++) expect(MIGRATIONS[v], `Migration ${v} → ${v + 1}`).toBeTypeOf('function');
@@ -993,8 +1007,8 @@ describe('Migration 16 → 17 (#15 Teil c: Ebene „Nachbarn“)', () => {
 
     const project = decodeProjectFile(bytes).project;
     for (const x of [...project.pages, ...project.groups]) expect(x.layers.neighbours).toEqual({ visible: true, locked: false });
-    // alles andere unverändert
-    expect(withoutNeighbourLayer(project)).toEqual(raw.project);
+    // alles andere unverändert (bis auf die Lagen aus Formatversion 18)
+    expect(withoutPlacements(withoutNeighbourLayer(project))).toEqual(raw.project);
     // Werte, die in der Datei gezielt gesetzt waren
     expect(project.name).toBe('Formatversion 16 (#15 a)');
     expect(project.pages[0]!.layers.stands).toEqual({ visible: true, locked: true });
@@ -1004,6 +1018,69 @@ describe('Migration 16 → 17 (#15 Teil c: Ebene „Nachbarn“)', () => {
     expect(g.titleBlockText).toBe('Übersichtsplan Unterstadt');
     expect(g.legend.visible).toBe(false);
     expect(g.layers.labels).toEqual({ visible: false, locked: false });
+    expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
+  });
+});
+
+describe('Migration 17 → 18 (#27: Lage im Verbund)', () => {
+  it('17 → 18: jedes Mitglied bekommt die Lage „keine Verschiebung, keine Drehung“; die Eingabe bleibt unverändert', () => {
+    const v17 = {
+      id: 'x',
+      pages: [{ id: 'a', stands: [{ id: 's', cx: 1, cy: 2 }] }, { id: 'b' }],
+      groups: [{ id: 'g', pageIds: ['a', 'b', 7] }, { id: 'h' }, 'kaputt'],
+    };
+    const before = structuredClone(v17);
+    const v18 = MIGRATIONS[17]!(v17) as any;
+    expect(v18.groups[0].placements).toEqual({ a: { x: 0, y: 0, rot: 0 }, b: { x: 0, y: 0, rot: 0 } });
+    expect(v18.groups[1].placements).toEqual({});
+    expect(v18.groups[2]).toBe('kaputt');
+    // Inhalt unverändert
+    expect(v18.pages).toEqual(v17.pages);
+    expect(v17).toEqual(before);
+    expect(MIGRATIONS[17]!({ id: 'x', pages: [] })).toEqual({ id: 'x', pages: [] });
+  });
+
+  it('Lagen beim Laden: nur für Mitglieder, fehlende und unbrauchbare = Identität, Drehung auf 0 … 360°', () => {
+    const project = parseProjectFile({
+      format: 'schelmeplaner',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      project: {
+        id: 'x',
+        pages: ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id })),
+        groups: [
+          { id: 'g', pageIds: ['a', 'b', 'c'], placements: { a: { x: 12.345678901, y: -3, rot: -10 }, b: 'kaputt', d: { x: 1, y: 1, rot: 1 }, c: { x: 'x', y: 2, rot: 370 } } },
+          { id: 'h', pageIds: ['d'] },
+        ],
+      },
+    });
+    expect(project.groups[0]!.placements).toEqual({ a: { x: 12.345678901, y: -3, rot: 350 }, b: { x: 0, y: 0, rot: 0 }, c: { x: 0, y: 2, rot: 10 } });
+    expect(project.groups[1]!.placements).toEqual({ d: { x: 0, y: 0, rot: 0 } });
+    // Speichern und Laden behält die Lagen ungerundet
+    expect(decodeProjectFile(encodeProjectFile({ project, assets: {} })).project.groups).toEqual(project.groups);
+  });
+
+  it('echte Datei aus #15 Teil c (Version 17, tests/fixtures/format-v17-verbund-lage.mplan) wird vollständig migriert', () => {
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'format-v17-verbund-lage.mplan')));
+    const raw = JSON.parse(strFromU8(unzipSync(bytes)['project.json']!));
+    expect(raw.schemaVersion).toBe(17);
+    expect(raw.project.groups[0]).not.toHaveProperty('placements');
+
+    const project = decodeProjectFile(bytes).project;
+    const g = project.groups[0]!;
+    expect([g.id, g.name, g.pageIds]).toEqual(['verbund-unterstadt', 'Unterstadt', ['ziegelturm', 'schifftor']]);
+    expect(g.placements).toEqual({ ziegelturm: { x: 0, y: 0, rot: 0 }, schifftor: { x: 0, y: 0, rot: 0 } });
+    // Der Beschriftungsversatz wird beim Laden wie schon in Version 17 auf 0,01 m gerundet (schema.ts)
+    const rawStand = raw.project.pages.find((p: { id: string }) => p.id === 'schifftor').stands[0];
+    expect(rawStand.labelOffset).toEqual({ x: 2.42145996, y: -2.67142877 });
+    rawStand.labelOffset = { x: 2.42, y: -2.67 };
+    // alles andere unverändert: auch der Inhalt des Schifftors, der im alten gemeinsamen System liegt (um 8,5° gedreht)
+    expect(withoutPlacements(project)).toEqual(raw.project);
+    expect(project.name).toBe('Formatversion 17 (#15 c)');
+    const s = project.pages.find((p) => p.id === 'schifftor')!;
+    expect(s.stands[0]!.id).toBe('schifftor-s1-r1');
+    expect(s.stands[0]!.rot).toBe(8.5);
+    expect(s.background).toBeNull();
+    expect(s.northAngle).toBe(8.5);
     expect(project.pages.flatMap((p) => p.stands)).toHaveLength(500);
   });
 });

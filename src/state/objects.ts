@@ -6,6 +6,7 @@ import { MIN_FREE_WIDTH } from '../core/freeSpace';
 import { applyCategoryList, type ApplyMode, type CategoryList } from '../core/categoryLists';
 import { checkPowerChange } from '../core/power';
 import { normAngle, roundRect, setFront } from '../core/geometry/rect';
+import { rotate } from '../core/geometry/vec';
 import { allSelectable } from '../core/hit';
 import { newId } from '../core/id';
 import { clampToLimits, createInfra, fitRect, INFRA_LIMITS } from '../core/infra';
@@ -15,7 +16,9 @@ import { cloneObjects, createArea, createStand, findObjects, LIMITS, MIN_DRAW_SI
 import { groupCenter, moveRects, type RectMap } from '../core/transform';
 import { stretchStand } from '../core/compound';
 import type { Bounds } from '../core/viewport';
-import { assignObjects, copyFallback, fallbackPage, ownerPages, pageView, verbundOfRef } from '../core/verbundView';
+import { isIdentity, placeObject, relativePlacement } from '../core/placement';
+import { groupOf, placementOf } from '../core/verbund';
+import { assignObjects, copyFallback, fallbackPage, ownerPages, pageView, verbundOfRef, viewToOwner, viewToView } from '../core/verbundView';
 import { START_PAGE, useStore } from './store';
 
 /**
@@ -25,6 +28,11 @@ import { START_PAGE, useStore } from './store';
  * `pageId` darf die Gesamtansicht eines Verbunds sein (`verbund:<id>`, #15): Dann wirkt eine Änderung auf die Objekte
  * mit diesen IDs in den Listen ihrer Besitzer-Pages (`ownerPages`), auch über mehrere Pages – weiterhin ein
  * Undo-Schritt. Neue Objekte bekommen ihre Page über `assignObjects` (Grundfläche, sonst „Neue Objekte auf: …“).
+ *
+ * Koordinaten (#27): Rechtecke, Drehungen und Versätze, die die Befehle bekommen, liegen im System der Ansicht `pageId`
+ * – in der Gesamtansicht also im System des Verbunds (Welt). Gespeichert wird je Objekt im System seiner
+ * Besitzer-Page (`viewToOwner`: Umkehrung ihrer Lage); erst danach wird gerundet (0,01 m bzw. 0,1° in den Koordinaten
+ * der Page). In einer Einzelansicht ist die Abbildung die Identität.
  */
 
 const st = () => useStore.getState();
@@ -50,14 +58,24 @@ const pageOf = (p: Project, pageId: Id | null) => (pageId ? p.pages.find((x) => 
 /** Pages, in deren Listen Änderungen an `pageId` landen: die Page selbst bzw. alle Mitglieder des Verbunds (#15). */
 const pagesOf = (p: Project, pageId: Id) => ownerPages(p, pageId);
 
-/** Objekte mit diesen IDs in den Listen der Pages (in der Gesamtansicht in allen Mitgliedern, #15). */
-function eachObject(pages: readonly FestplatzPage[], ids: readonly Id[], fn: (o: Area | Stand | InfraObject, kind: ObjectKind) => void) {
+/** Objekte mit diesen IDs in den Listen der Pages (in der Gesamtansicht in allen Mitgliedern, #15); `page` = Besitzer. */
+function eachObject(pages: readonly FestplatzPage[], ids: readonly Id[], fn: (o: Area | Stand | InfraObject, kind: ObjectKind, page: FestplatzPage) => void) {
   const set = new Set(ids);
   for (const page of pages) {
-    for (const a of page.areas) if (set.has(a.id)) fn(a, 'area');
-    for (const s of page.stands) if (set.has(s.id)) fn(s, 'stand');
-    for (const o of page.infra) if (set.has(o.id)) fn(o, 'infra');
+    for (const a of page.areas) if (set.has(a.id)) fn(a, 'area', page);
+    for (const s of page.stands) if (set.has(s.id)) fn(s, 'stand', page);
+    for (const o of page.infra) if (set.has(o.id)) fn(o, 'infra', page);
   }
+}
+
+/**
+ * Rechteck aus dem System der Ansicht `pageId` in das der Besitzer-Page `ownerId` (#27; in der Einzelansicht
+ * unverändert). Liest die Lagen aus dem gespeicherten Projekt, nicht aus dem Entwurf.
+ */
+function toOwner<T extends Rect>(pageId: Id, ownerId: Id | null | undefined, r: T): T {
+  if (!ownerId) return r;
+  const p = viewToOwner(st().project, pageId, ownerId);
+  return isIdentity(p) ? r : placeObject(p, r);
 }
 
 /**
@@ -136,7 +154,9 @@ export const standDefaultSize = () => lastStandSize;
 export function addArea(pageId: Id, rect: Rect): Id {
   const area = createArea(roundRect({ ...rect, w: clamp(rect.w, 'area'), d: clamp(rect.d, 'area') }));
   const target = targetPage(pageId, area, 'area');
-  st().change('Grundfläche anlegen', (p) => void pageOf(p, target)?.areas.push(area));
+  // Zugeordnet im System der Ansicht, gespeichert in dem der Page (#27)
+  const local = roundRect(toOwner(pageId, target, area));
+  st().change('Grundfläche anlegen', (p) => void pageOf(p, target)?.areas.push(local));
   select([area.id]);
   return area.id;
 }
@@ -145,7 +165,8 @@ export function addStand(pageId: Id, rect: Rect): Id {
   const stand = createStand(roundRect({ ...rect, w: clamp(rect.w, 'stand'), d: clamp(rect.d, 'stand') }));
   if (stand.w >= MIN_DRAW_SIZE && stand.d >= MIN_DRAW_SIZE) lastStandSize = { w: stand.w, d: stand.d };
   const target = targetPage(pageId, stand, 'stand');
-  st().change('Geschäft anlegen', (p) => void pageOf(p, target)?.stands.push(stand));
+  const local = roundRect(toOwner(pageId, target, stand));
+  st().change('Geschäft anlegen', (p) => void pageOf(p, target)?.stands.push(local));
   select([stand.id]);
   return stand.id;
 }
@@ -156,7 +177,8 @@ export function addInfra(pageId: Id, typeId: Id, rect: Rect): Id | null {
   if (!type) return null;
   const obj = createInfra(type, rect);
   const target = targetPage(pageId, obj, 'infra');
-  st().change(`${type.label} anlegen`, (p) => void pageOf(p, target)?.infra.push(obj));
+  const local = { ...obj, ...fitRect(type.geometry, toOwner(pageId, target, obj)) };
+  st().change(`${type.label} anlegen`, (p) => void pageOf(p, target)?.infra.push(local));
   select([obj.id]);
   return obj.id;
 }
@@ -185,19 +207,29 @@ export function setInfraType(pageId: Id, ids: Id[], typeId: Id) {
 
 // ---------- Geometrie ----------
 
-/** Übernimmt die Rechtecke einer Geste (Ziehen, Drehen, Größe ändern) als einen Undo-Schritt. */
+/** Übernimmt die Rechtecke einer Geste (Ziehen, Drehen, Größe ändern; im System der Ansicht) als einen Undo-Schritt. */
 export function commitRects(pageId: Id, rects: RectMap, label: string) {
   st().change(label, (p) => {
-    eachObject(pagesOf(p, pageId), Object.keys(rects), (o, kind) => assignObj(p, o, kind, rects[o.id]!));
+    eachObject(pagesOf(p, pageId), Object.keys(rects), (o, kind, page) => assignObj(p, o, kind, toOwner(pageId, page.id, rects[o.id]!)));
   });
 }
 
-/** Breite, Tiefe oder Drehung für alle angegebenen Objekte setzen (Drehung um den eigenen Mittelpunkt). */
+/**
+ * Breite, Tiefe oder Drehung für alle angegebenen Objekte setzen (Drehung um den eigenen Mittelpunkt). Die Drehung gilt
+ * im System der Ansicht (#27: in der Gesamtansicht die Drehung in der Welt; gespeichert wird sie abzüglich der Drehung
+ * der Lage des Besitzers).
+ */
 export function setRectField(pageId: Id, ids: Id[], field: 'w' | 'd' | 'rot', value: number) {
   const label = field === 'rot' ? 'Drehen' : field === 'w' ? 'Breite ändern' : 'Tiefe ändern';
+  const project = st().project;
   st().change(label, (p) => {
-    eachObject(pagesOf(p, pageId), ids, (o, kind) => {
-      const v = field === 'rot' ? normAngle(value) : kind === 'infra' ? clampToLimits(value, INFRA_LIMITS[geometryOf(p, o as InfraObject)][field]) : clamp(value, kind);
+    eachObject(pagesOf(p, pageId), ids, (o, kind, page) => {
+      const v =
+        field === 'rot'
+          ? normAngle(value + viewToOwner(project, pageId, page.id).rot)
+          : kind === 'infra'
+            ? clampToLimits(value, INFRA_LIMITS[geometryOf(p, o as InfraObject)][field])
+            : clamp(value, kind);
       // Eigene Form mit gedrehten Teilen (#16): Teile strecken, dann das Hüllrechteck neu einpassen
       const fit = kind === 'stand' && field !== 'rot' ? stretchStand(o as Stand, field === 'w' ? v : o.w, field === 'd' ? v : o.d) : null;
       if (fit) {
@@ -228,7 +260,7 @@ export function moveBy(pageId: Id, ids: Id[], dx: number, dy: number, label: str
   st().change(
     label,
     (p) => {
-      eachObject(pagesOf(p, pageId), ids, (o, kind) => assignObj(p, o, kind, moved[o.id]!));
+      eachObject(pagesOf(p, pageId), ids, (o, kind, owner) => assignObj(p, o, kind, toOwner(pageId, owner.id, moved[o.id]!)));
     },
     merge ?? {},
   );
@@ -256,12 +288,23 @@ export function setAreaFront(pageId: Id, id: Id, edge: EdgeIndex) {
 
 // ---------- Attribute ----------
 
-/** Attribute der Stände ändern; false, wenn das Stromlimit die Änderung blockiert. */
+/**
+ * Attribute der Stände ändern; false, wenn das Stromlimit die Änderung blockiert. Ein Beschriftungsversatz
+ * (`labelOffset`) gilt im System der Ansicht und wird je Besitzer zurückgedreht (#27).
+ */
 export function updateStands(pageId: Id, ids: Id[], patch: Partial<Omit<Stand, 'id' | keyof Rect>>, label: string): boolean {
+  const project = st().project;
+  const offset = patch.labelOffset;
   return changeWithPowerCheck(label, (p) => {
-    eachObject(pagesOf(p, pageId), ids, (o, kind) => kind === 'stand' && Object.assign(o, patch));
+    eachObject(pagesOf(p, pageId), ids, (o, kind, page) => {
+      if (kind !== 'stand') return;
+      const rot = offset ? viewToOwner(project, pageId, page.id).rot : 0;
+      Object.assign(o, offset && rot ? { ...patch, labelOffset: roundVec(rotate(offset, rot)) } : patch);
+    });
   });
 }
+
+const roundVec = (v: Vec): Vec => ({ x: Math.round(v.x * 100) / 100 || 0, y: Math.round(v.y * 100) / 100 || 0 });
 
 export function updateArea(pageId: Id, id: Id, patch: Partial<Pick<Area, 'name'>>, label: string) {
   st().change(label, (p) => {
@@ -292,6 +335,12 @@ export function deleteObjects(pageId: Id, ids: Id[]) {
  * `targetId` (Besitz = Liste, kein eigenes Feld), ein Undo-Schritt, auch für eine Mehrfachauswahl über mehrere Pages.
  * Lage und Attribute bleiben; eine Grundfläche nimmt ihre ausgeblendeten Freiflächen mit. Grundflächen kommen nicht auf
  * eine Page ohne Grundflächen (#17); dann erscheint ein Hinweis. Liefert die Zahl der umgehängten Objekte.
+ *
+ * Koordinaten (#27): Jede Page hat ihr eigenes System; die Objekte werden von ihrer Page über das System des Verbunds
+ * in das der Ziel-Page umgerechnet (lokal B = Lage B⁻¹ · Lage A · lokal A), sodass sie in der Gesamtansicht an
+ * derselben Stelle bleiben. Gespeichert ungerundet bis auf Gleitkomma-Reste (10⁻⁸): Eine Rundung auf 0,01 m im System
+ * der Ziel-Page verschöbe sie sonst gegen ihre Nachbarn. Ausblendungen beziehen sich auf die Achse der Grundfläche und
+ * bleiben gültig.
  */
 export function reassignObjects(ids: readonly Id[], targetId: Id): number {
   const set = new Set(ids);
@@ -312,13 +361,18 @@ export function reassignObjects(ids: readonly Id[], targetId: Id): number {
       6000,
     );
   if (!count) return 0;
+  const group = groupOf(project, targetId);
+  /** Abbildung aus dem System der Page `fromId` in das der Ziel-Page (Identität ohne gemeinsamen Verbund). */
+  const moveFrom = (fromId: Id) => (group && group.pageIds.includes(fromId) ? relativePlacement(placementOf(group, targetId), placementOf(group, fromId)) : null);
   const ok = changeWithPowerCheck(count === 1 ? 'Festplatz ändern' : `${count} Objekte umhängen`, (p) => {
     const to = p.pages.find((x) => x.id === targetId)!;
     for (const pg of p.pages) {
       if (pg.id === targetId) continue;
-      const areas = to.useAreas !== false ? pg.areas.filter((a) => set.has(a.id)) : [];
-      const stands = pg.stands.filter((s) => set.has(s.id));
-      const infra = pg.infra.filter((o) => set.has(o.id));
+      const rel = moveFrom(pg.id);
+      const conv = <T extends Rect>(o: T): T => (rel && !isIdentity(rel) ? placeObject(rel, o, { round: true }) : o);
+      const areas = to.useAreas !== false ? pg.areas.filter((a) => set.has(a.id)).map(conv) : [];
+      const stands = pg.stands.filter((s) => set.has(s.id)).map(conv);
+      const infra = pg.infra.filter((o) => set.has(o.id)).map(conv);
       if (areas.length) {
         const gone = new Set(areas.map((a) => a.id));
         pg.areas = pg.areas.filter((a) => !gone.has(a.id));
@@ -384,9 +438,9 @@ interface ObjectLists {
 }
 
 /**
- * Objekte einfügen (Einfügen, Duplizieren, Alt+Ziehen), ein Undo-Schritt. In der Gesamtansicht eines Verbunds (#15)
- * bekommt jedes Objekt seine Page über `assignObjects`; `from` (Kopie → Original) macht bei Kopien den Platz des
- * Originals zum Ersatz-Platz, sonst gilt „Neue Objekte auf: …“.
+ * Objekte einfügen (Einfügen, Duplizieren, Alt+Ziehen; im System der Ansicht), ein Undo-Schritt. In der Gesamtansicht
+ * eines Verbunds (#15) bekommt jedes Objekt seine Page über `assignObjects`; `from` (Kopie → Original) macht bei Kopien
+ * den Platz des Originals zum Ersatz-Platz, sonst gilt „Neue Objekte auf: …“. Gespeichert im System der Page (#27).
  */
 function insertObjects(pageId: Id, objs: ObjectLists, label: string, from: Readonly<Record<Id, Id>> = {}) {
   const project = st().project;
@@ -396,18 +450,18 @@ function insertObjects(pageId: Id, objs: ObjectLists, label: string, from: Reado
   const inserted: Id[] = [];
   const ok = changeWithPowerCheck(label, (p) => {
     inserted.length = 0;
-    const put = <T extends { id: Id }>(o: T, list: (pg: FestplatzPage) => T[] | null) => {
+    const put = <T extends Rect & { id: Id }>(o: T, list: (pg: FestplatzPage) => T[] | null, fit: (local: T) => T) => {
       const pg = pageOf(p, pageFor(o.id));
       const target = pg ? list(pg) : null;
-      if (!target) return;
-      target.push(o);
+      if (!pg || !target) return;
+      target.push(fit(toOwner(pageId, pg.id, o)));
       inserted.push(o.id);
     };
     // Auf einer Page ohne Grundflächen (#17) werden mitkopierte Grundflächen nicht eingefügt
-    for (const a of objs.areas) put(roundRect(a), (pg) => (pg.useAreas ? pg.areas : null));
-    for (const s of objs.stands) put(roundRect(s), (pg) => pg.stands);
+    for (const a of objs.areas) put(a, (pg) => (pg.useAreas ? pg.areas : null), roundRect);
+    for (const s of objs.stands) put(s, (pg) => pg.stands, roundRect);
     // Objekte unbekannter Typen (z. B. aus einem anderen Projektstand) nicht einfügen
-    for (const o of objs.infra) if (p.infraTypes.some((t) => t.id === o.typeId)) put({ ...o, ...fitRect(geometryOf(p, o), o) }, (pg) => pg.infra);
+    for (const o of objs.infra) if (p.infraTypes.some((t) => t.id === o.typeId)) put(o, (pg) => pg.infra, (l) => ({ ...l, ...fitRect(geometryOf(p, l), l) }));
   });
   if (ok) select([...inserted]);
 }
@@ -415,12 +469,16 @@ function insertObjects(pageId: Id, objs: ObjectLists, label: string, from: Reado
 /**
  * Einfügen: auf derselben Page 1 m nach rechts unten versetzt, jedes weitere Einfügen 1 m weiter; auf
  * einer anderen Page an derselben Position (weitere Male ebenfalls je 1 m weiter). Liegt die Position
- * außerhalb des sichtbaren Bereichs `view`, mittig darin.
+ * außerhalb des sichtbaren Bereichs `view`, mittig darin. Innerhalb eines Verbunds (Gesamtansicht und Mitglieder, #27)
+ * heißt „dieselbe Position“ dieselbe Stelle in der Gesamtansicht (`viewToView`).
  */
 export function paste(view: Bounds | null) {
   const page = activePage();
   if (!page || !clipboard) return;
-  const all = [...clipboard.areas, ...clipboard.stands, ...clipboard.infra];
+  const rel = viewToView(st().project, clipboard.sourcePageId, page.id);
+  const conv = <T extends Rect>(list: T[]): T[] => (isIdentity(rel) ? list : list.map((o) => placeObject(rel, o)));
+  const src = { areas: conv(clipboard.areas), stands: conv(clipboard.stands), infra: conv(clipboard.infra) };
+  const all = [...src.areas, ...src.stands, ...src.infra];
   const c = groupCenter(all);
   if (!c) return;
   const n = pasteCounts[page.id] ?? 0;
@@ -434,7 +492,7 @@ export function paste(view: Bounds | null) {
     dx = (view.minX + view.maxX) / 2 - c.x + off;
     dy = (view.minY + view.maxY) / 2 - c.y + off;
   }
-  insertObjects(page.id, cloneObjects(clipboard.areas, clipboard.stands, dx, dy, clipboard.infra), 'Einfügen');
+  insertObjects(page.id, cloneObjects(src.areas, src.stands, dx, dy, src.infra), 'Einfügen');
 }
 
 /** Kopien der Objekte für Alt+Ziehen (an derselben Stelle, leere Platznummer); `from` = Kopie → Original. */

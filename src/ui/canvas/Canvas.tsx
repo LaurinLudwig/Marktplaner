@@ -15,7 +15,7 @@ import { findSnap, rectSnapSource } from '../../core/snap';
 import { defaultView, fitBounds, focusBounds, screenToWorld, worldToScreen, zoomAt, type Bounds } from '../../core/viewport';
 import { cachedDuplicates } from '../../core/numbering';
 import { activeAreas, usesAreas } from '../../core/pageAreas';
-import { memberPages, neighbourCaption, NO_NEIGHBOURS, ownerOf, pageEnv, withNeighbours, type Neighbours } from '../../core/verbund';
+import { memberPages, neighbourCaption, NO_NEIGHBOURS, ownerOf, pageEnv, withNeighbours, worldBackground, type Neighbours } from '../../core/verbund';
 import { verbundOfRef } from '../../core/verbundView';
 import { useAlignTool } from './tools/useAlignTool';
 import { activeNarrow, cachedWarningData } from '../../core/warnings';
@@ -608,7 +608,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const memberBgs = useMemo(() => {
     if (!verbund) return [];
     const list = memberPages({ pages }, verbund).flatMap((m) => {
-      const b = bgOverride && m.id in bgOverride ? bgOverride[m.id] : m.background;
+      // Im System des Verbunds (#27: mit der Lage des Mitglieds abgebildet)
+      const b = bgOverride && m.id in bgOverride ? bgOverride[m.id] : worldBackground(verbund, m);
       return b ? [{ id: m.id, bg: b, fade: dim?.pageId === m.id ? dim.opacity : 1 }] : [];
     });
     const i = dim ? list.findIndex((x) => x.id === dim.pageId) : -1;

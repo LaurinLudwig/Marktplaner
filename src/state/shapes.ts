@@ -5,17 +5,31 @@ import { newId } from '../core/id';
 import type { Id, Project, Rect, ShapePart, ShapeTemplate, StandShape } from '../core/model/types';
 import { LIMITS } from '../core/objects';
 import { normalizeParts } from '../core/shape';
-import { ownerPages, pageView } from '../core/verbundView';
+import { isIdentity, placeObject } from '../core/placement';
+import { ownerPages, pageView, viewToOwner } from '../core/verbundView';
 import { select } from './objects';
 import { useStore } from './store';
 
 /**
  * Geschäftsformen (M12, #9, spec.md §3 „Form“): Form der Stände, Formvorlagen in den Projekteinstellungen und die
  * eigene Form je Stand (#16). Jede Änderung ist ein Undo-Schritt. `pageId` darf die Gesamtansicht eines Verbunds sein
- * (#15): Die Stände werden dann in den Listen ihrer Besitzer-Pages geändert.
+ * (#15): Die Stände werden dann in den Listen ihrer Besitzer-Pages geändert; Rechtecke aus der Gesamtansicht liegen im
+ * System des Verbunds und werden in das der Besitzer-Page umgerechnet (#27). Teile einer eigenen Form sind relativ zum
+ * Stand und bleiben dabei unverändert.
  */
 
 const st = () => useStore.getState();
+
+/**
+ * Rechteck bzw. Stand aus dem System der Ansicht `pageId` in das der Besitzer-Page `ownerId` (#27); `round` rundet
+ * umgerechnete Werte wie beim Übernehmen (in der Einzelansicht bleibt alles unverändert).
+ */
+function toOwner<T extends Rect>(pageId: Id, ownerId: Id, r: T, round = false): T {
+  const p = viewToOwner(st().project, pageId, ownerId);
+  if (isIdentity(p)) return r;
+  const out = placeObject(p, r);
+  return round ? roundRect(out) : out;
+}
 
 /** Stände der Pages von `pageId` (in der Gesamtansicht aller Mitglieder, #15); auch im Entwurf. */
 const standsOf = (p: Pick<Project, 'pages' | 'groups'>, pageId: Id) => ownerPages(p, pageId).flatMap((pg) => pg.stands);
@@ -75,12 +89,16 @@ export function setStandParts(pageId: Id, id: Id, meters: readonly ShapePart[], 
   return true;
 }
 
-/** Hüllrechteck und relative Teile einer eigenen Form übernehmen (Gesten auf der Zeichenfläche, ein Undo-Schritt). */
+/**
+ * Hüllrechteck (im System der Ansicht) und relative Teile einer eigenen Form übernehmen (Gesten auf der Zeichenfläche,
+ * ein Undo-Schritt).
+ */
 export function commitStandParts(pageId: Id, id: Id, rect: Rect, parts: ShapePart[], label: string) {
   st().change(label, (p) => {
-    const s = standsOf(p, pageId).find((x) => x.id === id);
-    if (!s) return;
-    const r = roundRect(rect);
+    const pg = ownerPages(p, pageId).find((x) => x.stands.some((y) => y.id === id));
+    const s = pg?.stands.find((x) => x.id === id);
+    if (!pg || !s) return;
+    const r = roundRect(toOwner(pageId, pg.id, rect));
     Object.assign(s, { cx: r.cx, cy: r.cy, w: r.w, d: r.d, rot: r.rot, parts, shapeTemplateId: null });
   });
 }
@@ -107,10 +125,10 @@ export function mergeStandsOnPage(pageId: Id, ids: readonly Id[]): Id | null {
   if (!merged) return null;
   const removed = new Set(merged.removed);
   st().change('Zu einem Stand zusammenfassen', (p) => {
-    // Gesamtansicht (#15): Der zusammengefasste Stand bleibt auf dem Platz seines Ausgangsstands
+    // Gesamtansicht (#15): Der zusammengefasste Stand bleibt auf dem Platz seines Ausgangsstands, in dessen System (#27)
     for (const pg of ownerPages(p, pageId)) {
       if (!pg.stands.some((s) => removed.has(s.id) || s.id === merged.stand.id)) continue;
-      pg.stands = pg.stands.filter((s) => !removed.has(s.id)).map((s) => (s.id === merged.stand.id ? merged.stand : s));
+      pg.stands = pg.stands.filter((s) => !removed.has(s.id)).map((s) => (s.id === merged.stand.id ? toOwner(pageId, pg.id, merged.stand) : s));
     }
   });
   select([merged.stand.id]);
@@ -125,7 +143,7 @@ export function dissolveStandOnPage(pageId: Id, id: Id): Id[] {
   st().change('Form auflösen', (p) => {
     for (const pg of ownerPages(p, pageId)) {
       const i = pg.stands.findIndex((s) => s.id === id);
-      if (i >= 0) pg.stands.splice(i, 1, ...pieces);
+      if (i >= 0) pg.stands.splice(i, 1, ...pieces.map((x) => toOwner(pageId, pg.id, x, true)));
     }
   });
   const newIds = pieces.map((s) => s.id);

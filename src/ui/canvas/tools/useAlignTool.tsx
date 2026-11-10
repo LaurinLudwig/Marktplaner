@@ -7,7 +7,7 @@ import { pickObject } from '../../../core/hit';
 import type { Background, FestplatzPage, Id, Vec } from '../../../core/model/types';
 import { activeAreas } from '../../../core/pageAreas';
 import { findSnap, pointSnapSource, type SnapResult } from '../../../core/snap';
-import { applyTransform, inverseTransform, memberPages, ownerOf, pageExtent, pagePivot, type PageTransform } from '../../../core/verbund';
+import { applyTransform, inverseTransform, ownerOf, pageExtent, pagePivot, worldMembers, worldPage, type PageTransform } from '../../../core/verbund';
 import {
   ALIGN_OUTLIER_MIN_PAIRS,
   alignPreview,
@@ -64,12 +64,14 @@ export interface AlignView {
  *   nur Vorschau; „Fertig“ übernimmt Verschiebung und Drehung als einen Undo-Schritt, „Abbrechen“/Esc verwirft.
  * - **Punkte**: beliebig viele Paare A_i (gewählter Plan) → B_i (Referenz); ab 2 Paaren Vorschau mit der
  *   bestpassenden starren Bewegung (`fitRigid`), „Anwenden“ = ein Undo-Schritt.
- * Die Vorschau ist eine Transformation je Platz (`alignPreview`); übernommen wird sie mit `movePageContent`.
+ * Die Vorschau ist eine Transformation je Platz (`alignPreview`: Vorschau-Lage des Platzes, #27); übernommen wird sie
+ * mit `movePageContent`, das nur die Lage im Verbund ändert (der Inhalt der Page bleibt).
  */
 export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & AlignView {
   const verbund = useStore((s) => verbundOfRef(s.project, ctx.page.id));
   const pages = useStore((s) => s.project.pages);
-  const members = verbund ? memberPages({ pages }, verbund) : [];
+  // Mitglieder im System des Verbunds (#27: mit ihrer Lage abgebildet); Ausrichten ändert nur die Lage (`movePageContent`)
+  const members = verbund ? worldMembers({ pages }, verbund) : [];
   const [memberId, setMemberId] = useState<Id | null>(null);
   const [mode, setMode] = useState<Mode>('manual');
   const [session, setSession] = useState<Session | null>(null);
@@ -91,7 +93,9 @@ export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & 
     setOverHandle(false);
   }
   // Aus dem Store gelesen (unveränderlich für den React Compiler), nur solange der Platz Mitglied ist
-  const member = useStore((s) => (memberId && verbundOfRef(s.project, ctx.page.id)?.pageIds.includes(memberId) ? (s.project.pages.find((p) => p.id === memberId) ?? null) : null));
+  const stored = useStore((s) => (memberId && verbundOfRef(s.project, ctx.page.id)?.pageIds.includes(memberId) ? (s.project.pages.find((p) => p.id === memberId) ?? null) : null));
+  // Im System des Verbunds (#27, zwischengespeichert): Mitte, Hülle, Fang und Punktpaare rechnen in der Welt
+  const member = useMemo(() => (stored && verbund ? worldPage(verbund, stored) : null), [stored, verbund]);
   const others = members.filter((p) => p.id !== memberId);
   const pivot = member ? pagePivot(member) : null;
   const fit = useMemo(() => fitRigid(points.pairs), [points.pairs]);
@@ -102,7 +106,8 @@ export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & 
     if (mode === 'manual') return member ? sessionTransform(session, pagePivot(member)) : null;
     return fit?.t ?? null;
   }, [mode, session, fit, member]);
-  const preview = useMemo(() => (active && member && t ? alignPreview(member, t) : null), [active, member, t]);
+  // Vorschau über die Lage (#27): Vorschau-Lage = t ∘ Lage, daraus Weltkopien und Hintergrund
+  const preview = useMemo(() => (active && verbund && stored && t ? alignPreview(verbund, stored, t) : null), [active, verbund, stored, t]);
   const mid = member?.id ?? null;
   const backgrounds = useMemo(() => (preview && mid ? { [mid]: preview.background } : null), [preview, mid]);
   const dim = useMemo(() => (mid ? { pageId: mid, opacity } : null), [mid, opacity]);
