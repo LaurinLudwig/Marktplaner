@@ -530,6 +530,31 @@ describe('#27 Lage im Verbund: gleiche Ergebnisse wie mit gemeinsamem System', (
     expect(pageScene(z, b, prof)).toEqual(pageScene(z, a, prof));
   });
 
+  it('Einzelansicht ohne Nachbarn: Freiflächen, Warnungen, Nummerierung, Strom und Standgeld wie ohne Verbund, unabhängig von der eigenen Lage', () => {
+    // Eigene Überlappung (Z-01/Z-01b), ein Stand außerhalb, Nummerierung im Uhrzeigersinn um einen eigenen Mittelpunkt
+    const z = zPage([Z1, st('z1b', 11.5, { nr: 'Z-01' }), st('zo', 70), Z2], { numberingMode: 'clockwise', clockwise: { center: { x: 20, y: -5 }, startAngle: 30 } });
+    const solo = proj([z, sPage()], []);
+    const far = { x: 5000, y: 0, rot: 77 };
+    const free = (p: Project) => pageFree(z, { minFreeWidth: 0.5, infraTypes: p.infraTypes, verbund: p }).flatMap((a) => a.free.map((f) => [f.key, f.start, f.end]));
+    const warn = (p: Project) => {
+      const w = cachedWarningData(z.stands, z.infra, pageEnv(p, z), p);
+      return [countWarnings(w.page, z.stands, p.settings), z.stands.map((x) => w.page.byStand.get(x.id))];
+    };
+    const plan = (p: Project) => planRenumber(p, 'Z');
+    for (const own of [PS, PZ, { x: 0, y: 0, rot: 0 }, { x: -123.456, y: 7.89, rot: 3.7234 }]) {
+      const inV = proj([z, sPage()], [{ ...verbund, placements: { Z: own, S: far } }]);
+      expect(neighbourObjects(inV, z)).toBe(NO_NEIGHBOURS);
+      expect(free(inV)).toEqual(free(solo));
+      expect(warn(inV)).toEqual(warn(solo));
+      expect(plan(inV)).toEqual(plan(solo));
+      // Standliste (CSV) mit Warnungen je Stand
+      expect(standRows(inV)).toEqual(standRows(solo));
+    }
+    // Plausibilität: es gibt wirklich etwas zu vergleichen
+    const [counts] = warn(solo) as [ReturnType<typeof countWarnings>];
+    expect(counts).toMatchObject({ outside: 1, overlap: 2 });
+  });
+
   it('Hintergründe der Gesamtansicht in der Welt; worldPage für „Ausrichten“', () => {
     const bg: Background = { assetId: 'x', kind: 'image', fileName: 'x', pxSize: { w: 100, h: 50 }, transform: { x: 5, y: 6, metersPerPx: 1, rot: 0 }, opacity: 1, locked: false };
     const p = rotated();
