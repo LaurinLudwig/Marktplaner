@@ -1150,6 +1150,10 @@ Test):
   Plätze bleiben deckend und in der Reihenfolge des Verbunds. Regler **„Deckkraft“** im Panel (10–100 %, Vorgabe 50 %);
   nur Anzeige: nicht in der Projektdatei, kein Undo-Schritt, kein Einfluss auf PDF oder Hintergrund-Einstellungen. Der
   Wert gilt für die Sitzung (bleibt bei Werkzeugwechsel erhalten). Mit einem anderen Werkzeug ist alles wieder deckend.
+  Im Modus **„Punkte“** hebt die Deckkraft den Plan hervor, auf dem der nächste Punkt gefragt ist, damit man A und B
+  nicht verwechselt: Wird A gesucht, ist der gewählte Plan deckend und die Referenzpläne sind blass; wird B gesucht, ist
+  es umgekehrt (der gewählte Plan bleibt oben, aber blass). Der Regler stellt hier die Deckkraft des gerade nicht
+  gefragten Plans ein (eigener Wert, Vorgabe 25 %, ebenfalls nur für die Sitzung).
 - **Panel:** Platzwahl, Segment-Umschalter **„Manuell“ / „Punkte“**, „Deckkraft“, dann die Felder und Knöpfe des
   Modus; Erklärungen als Tooltip. Knöpfe und Beschriftungen brechen nicht um; bei schmalem Fenster bricht das Panel
   zwischen den Gruppen in weitere Zeilen um (es darf so breit werden wie die Zeichenfläche).

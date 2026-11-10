@@ -423,6 +423,48 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     expect(errors).toEqual([]);
   });
 
+  test('Ausrichten per Punkten: der Plan, auf dem der nächste Punkt gefragt ist, ist deckend, der andere blass', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page, { backgrounds: true });
+    await overviewTab(page).click();
+    const bgImage = (id: string) => page.locator(`.layer-plan .background-layer[data-page="${id}"] > g.background-image`);
+    const z = await firstId(page);
+    await page.keyboard.press('a');
+    await page.getByTestId('align-member').selectOption({ label: 'Ziegelturm' });
+    await expect(bgImage(z)).toHaveAttribute('opacity', '0.5');
+    await page.getByTestId('align-mode-points').click();
+    await blur(page);
+    // A gesucht: der gewählte Plan deckend (und oben), die Referenz blass; der Regler zeigt die Referenz
+    await expect(page.getByTestId('align-step')).toContainText('A1 auf „Ziegelturm“');
+    await expect(bgImage(z)).toHaveAttribute('opacity', '1');
+    await expect(bgImage('S')).toHaveAttribute('opacity', '0.25');
+    await expect(page.locator('.layer-plan .background-layer').last()).toHaveAttribute('data-page', z);
+    await expect(page.getByTestId('align-opacity')).toHaveValue('25');
+    // B gesucht: umgekehrt, der gewählte Plan bleibt oben
+    await page.keyboard.down(MOD);
+    await clickWorld(page, { x: 10, y: 10 });
+    await page.keyboard.up(MOD);
+    await expect(page.getByTestId('align-step')).toContainText('B1 auf Referenzplan');
+    await expect(bgImage(z)).toHaveAttribute('opacity', '0.25');
+    await expect(bgImage('S')).toHaveAttribute('opacity', '1');
+    await expect(page.locator('.layer-plan .background-layer').last()).toHaveAttribute('data-page', z);
+    // Der Regler stellt den gerade nicht gefragten Plan ein
+    await page.getByTestId('align-opacity').fill('40');
+    await expect(bgImage(z)).toHaveAttribute('opacity', '0.4');
+    await page.keyboard.down(MOD);
+    await clickWorld(page, { x: 20, y: 10 });
+    await page.keyboard.up(MOD);
+    await expect(page.getByTestId('align-step')).toContainText('A2 auf „Ziegelturm“');
+    await expect(bgImage(z)).toHaveAttribute('opacity', '1');
+    await expect(bgImage('S')).toHaveAttribute('opacity', '0.4');
+    // Zurück zu „Manuell“: wieder der eigene Wert für den gewählten Plan, die anderen deckend
+    await page.getByTestId('align-mode-manual').click();
+    await expect(bgImage(z)).toHaveAttribute('opacity', '0.5');
+    await expect(bgImage('S')).toHaveAttribute('opacity', '1');
+    expect(errors).toEqual([]);
+  });
+
   test('Ausrichten per Punkten: 3 Paare mit Restabweichungen, Paar entfernen, Esc verwirft, „Anwenden“ ist ein Undo-Schritt', async ({ page }) => {
     const errors = collectErrors(page);
     await openApp(page);

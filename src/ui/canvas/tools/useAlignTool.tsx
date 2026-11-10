@@ -35,6 +35,8 @@ const HANDLE_HIT_PX = 9;
 /** Deckkraft des gewählten Hintergrunds beim Ausrichten (Anzeige, nicht gespeichert). */
 const OPACITY_DEFAULT = 0.5;
 const OPACITY_MIN = 0.1;
+/** „Punkte“: Deckkraft des Plans, auf dem gerade kein Punkt gefragt ist (der gefragte ist deckend). */
+const OTHER_OPACITY_DEFAULT = 0.25;
 
 type Mode = 'manual' | 'points';
 type Session = AlignSession;
@@ -52,8 +54,11 @@ const isOpen = sessionOpen;
 export interface AlignView {
   /** Bewegter Hintergrund je Platz (Vorschau), sonst null. */
   backgrounds: Record<Id, Background | null> | null;
-  /** Gewählter Platz: sein Hintergrund liegt oben und mit dieser Deckkraft (0,1 … 1). */
-  dim: { pageId: Id; opacity: number } | null;
+  /**
+   * Gewählter Platz: sein Hintergrund liegt oben und mit der Deckkraft `opacity` (0,1 … 1), die Hintergründe der
+   * anderen Plätze mit `others` (Manuell 1; „Punkte“: der Plan, auf dem der nächste Punkt gefragt ist, ist deckend).
+   */
+  dim: { pageId: Id; opacity: number; others: number } | null;
 }
 
 /**
@@ -80,6 +85,7 @@ export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & 
   const [hover, setHover] = useState<SnapResult | null>(null);
   const [overHandle, setOverHandle] = useState(false);
   const [opacity, setOpacity] = useState(OPACITY_DEFAULT);
+  const [otherOpacity, setOtherOpacity] = useState(OTHER_OPACITY_DEFAULT);
 
   // Werkzeug- oder Seitenwechsel verwirft offene Änderungen (Zurücksetzen beim Rendern)
   const key = active ? ctx.page.id : '';
@@ -110,7 +116,14 @@ export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & 
   const preview = useMemo(() => (active && verbund && stored && t ? alignPreview(verbund, stored, t) : null), [active, verbund, stored, t]);
   const mid = member?.id ?? null;
   const backgrounds = useMemo(() => (preview && mid ? { [mid]: preview.background } : null), [preview, mid]);
-  const dim = useMemo(() => (mid ? { pageId: mid, opacity } : null), [mid, opacity]);
+  // „Punkte“: der gefragte Plan (A = gewählter Platz, B = Referenz) ist deckend, der andere blass (Regler)
+  const asking: 'own' | 'ref' | null = mode === 'points' && member && others.length > 0 ? (points.pendingA === null ? 'own' : 'ref') : null;
+  const dim = useMemo(() => {
+    if (!mid) return null;
+    if (asking === 'own') return { pageId: mid, opacity: 1, others: otherOpacity };
+    if (asking === 'ref') return { pageId: mid, opacity: otherOpacity, others: 1 };
+    return { pageId: mid, opacity, others: 1 };
+  }, [mid, opacity, otherOpacity, asking]);
   const ownPreview = useRef<Preview | null>(null);
   useLayoutEffect(() => {
     const st = useStore.getState();
@@ -342,8 +355,18 @@ export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & 
       </button>
     </div>
   );
+  // Manuell: Deckkraft des gewählten Plans; „Punkte“: Deckkraft des Plans, auf dem gerade kein Punkt gefragt ist
+  const sliderValue = asking ? otherOpacity : opacity;
+  const setSlider = asking ? setOtherOpacity : setOpacity;
   const opacityControl = member && (
-    <label className="align-group align-opacity" {...tip({ label: 'Deckkraft', desc: `Hintergrund von „${member.name}“ beim Ausrichten (nur Anzeige)`, ariaLabel: false })}>
+    <label
+      className="align-group align-opacity"
+      {...tip({
+        label: 'Deckkraft',
+        desc: asking ? 'Plan, auf dem gerade kein Punkt gefragt ist; der gefragte Plan ist deckend (nur Anzeige)' : `Hintergrund von „${member.name}“ beim Ausrichten (nur Anzeige)`,
+        ariaLabel: false,
+      })}
+    >
       Deckkraft
       <input
         type="range"
@@ -352,10 +375,10 @@ export function useAlignTool(ctx: ToolContext, active: boolean): ToolHandlers & 
         min={OPACITY_MIN * 100}
         max={100}
         step={5}
-        value={Math.round(opacity * 100)}
-        onChange={(e) => setOpacity(Math.min(1, Math.max(OPACITY_MIN, Number(e.target.value) / 100)))}
+        value={Math.round(sliderValue * 100)}
+        onChange={(e) => setSlider(Math.min(1, Math.max(OPACITY_MIN, Number(e.target.value) / 100)))}
       />
-      <span className="align-opacity-value">{Math.round(opacity * 100)} %</span>
+      <span className="align-opacity-value">{Math.round(sliderValue * 100)} %</span>
     </label>
   );
   const cancel = (

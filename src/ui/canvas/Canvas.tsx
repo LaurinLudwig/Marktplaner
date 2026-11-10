@@ -603,14 +603,15 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   );
   const bg = page.background;
   const bgOverride = tool === 'align' ? alignTool.backgrounds : null;
-  // „Ausrichten“ (#26): Der Hintergrund des gewählten Platzes liegt oben und halbtransparent (nur Anzeige)
+  // „Ausrichten“ (#26): Der Hintergrund des gewählten Platzes liegt oben und halbtransparent (nur Anzeige); bei
+  // „Punkte“ ist der Plan deckend, auf dem der nächste Punkt gefragt ist, der andere blass
   const dim = tool === 'align' ? alignTool.dim : null;
   const memberBgs = useMemo(() => {
     if (!verbund) return [];
     const list = memberPages({ pages }, verbund).flatMap((m) => {
       // Im System des Verbunds (#27: mit der Lage des Mitglieds abgebildet)
       const b = bgOverride && m.id in bgOverride ? bgOverride[m.id] : worldBackground(verbund, m);
-      return b ? [{ id: m.id, bg: b, fade: dim?.pageId === m.id ? dim.opacity : 1 }] : [];
+      return b ? [{ id: m.id, bg: b, fade: !dim ? 1 : dim.pageId === m.id ? dim.opacity : dim.others }] : [];
     });
     const i = dim ? list.findIndex((x) => x.id === dim.pageId) : -1;
     if (i >= 0) list.push(...list.splice(i, 1));
