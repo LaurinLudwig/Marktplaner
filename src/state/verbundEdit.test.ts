@@ -8,6 +8,7 @@ import { cachedWarningData, countWarnings } from '../core/warnings';
 import { alignPreview, fitRigid, NO_SESSION, sessionMove, sessionRotate, sessionTransform } from '../core/verbundView';
 import {
   activePage,
+  addInfra,
   addArea,
   addStand,
   commitRects,
@@ -558,6 +559,26 @@ describe('#27 Gesamtansicht bei gedrehter Lage', () => {
     expect(pageById('B').hiddenFree.map((h) => h.key)).toEqual([fsW.key]);
     const after = pageFree(pageById('B'), { ...ctx, verbund: s().project }).find((x) => x.areaId === 'aB')!;
     expect(after.hidden.map((h) => h.key)).toEqual([fsW.key]);
+  });
+
+  it('Infrastruktur (Linie und Punkt): Zeichnen und Ziehen an der Weltposition, lokal gespeichert; je ein Undo-Schritt', () => {
+    setNewObjectsPage('g', 'B');
+    // Linie „Mobile Sperre“ in der Welt waagerecht bei (95|25) = lokal (25|5), senkrecht (270°)
+    const before = past();
+    const line = addInfra(REF, 'barrierMobile', { cx: 95, cy: 25, w: 4, d: 0.3, rot: 0 })!;
+    expect(past()).toBe(before + 1);
+    expect(pageById('B').infra.find((o) => o.id === line)).toMatchObject({ cx: 25, cy: 5, w: 4, rot: 270 });
+    near(worldOf(line), { cx: 95, cy: 25, rot: 0 });
+    // Marker behält die Drehung 0
+    const marker = addInfra(REF, 'marker', { cx: 92, cy: 20, w: 0, d: 0, rot: 0 })!;
+    expect(pageById('B').infra.find((o) => o.id === marker)).toMatchObject({ cx: 20, cy: 8, rot: 0 });
+    near(worldOf(marker), { cx: 92, cy: 20, rot: 0 });
+    // Ziehen der Linie in der Welt um (+1|+2) = lokal (+2|−1)
+    const w = worldOf(line);
+    commitRects(REF, { [line]: { ...w, cx: w.cx + 1, cy: w.cy + 2 } }, 'Verschieben');
+    expect(pageById('B').infra.find((o) => o.id === line)).toMatchObject({ cx: 27, cy: 4, rot: 270 });
+    s().undo();
+    expect(pageById('B').infra.find((o) => o.id === line)).toMatchObject({ cx: 25, cy: 5 });
   });
 
   it('Zusammenfassen über die Platzgrenze: Ergebnis im System des Besitzers', () => {
