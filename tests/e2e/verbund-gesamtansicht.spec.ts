@@ -472,4 +472,62 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     expect(sp().areas[0].cx).toBeCloseTo(70, 6);
     expect(errors).toEqual([]);
   });
+
+  test('Ausrichten: Leertaste (Hand) behält offene Änderungen, Esc beim Ziehen bricht nur das Ziehen ab, Werkzeugwechsel verwirft', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page, { shift: 100 });
+    await overviewTab(page).click();
+    await page.keyboard.press('a');
+    await page.getByTestId('align-member').selectOption({ label: 'Seestraße' });
+    await blur(page);
+    const n0 = await past(page);
+    await dragWorld(page, { x: 147.5, y: -1.5 }, { x: 140, y: -1.5 });
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    // Esc während eines zweiten Ziehens: nur dieses Ziehen fällt weg, die Sitzung bleibt
+    const a = await w2s(page, { x: 140, y: -1.5 });
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(a.x - 40, a.y, { steps: 6 });
+    await expect(page.getByTestId('align-dx')).toHaveValue('-17,5');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    await page.mouse.move(a.x - 60, a.y, { steps: 3 });
+    await page.mouse.up();
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    // Leertaste gedrückt halten und die Ansicht verschieben: die Sitzung bleibt offen, Panel und Vorschau bleiben
+    await page.keyboard.down('Space');
+    await page.mouse.move(a.x, a.y + 80);
+    await page.mouse.down();
+    await page.mouse.move(a.x - 50, a.y + 80, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up('Space');
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    expect((await st(page)).preview.rects.se2.cx).toBeCloseTo(140, 6);
+    // Modus „Punkte“: ein gesetzter A-Punkt bleibt über die Leertaste erhalten
+    await page.getByTestId('align-mode-points').click();
+    await blur(page);
+    const c = (await page.locator('svg.canvas').boundingBox())!;
+    await page.mouse.click(c.x + 300, c.y + 200);
+    await expect(page.getByTestId('align-step')).toContainText('B1 auf Referenzplan');
+    await page.keyboard.down('Space');
+    await page.keyboard.up('Space');
+    await expect(page.getByTestId('align-step')).toContainText('B1 auf Referenzplan');
+    await expect(page.getByTestId('align-mark')).toHaveCount(1);
+    // Werkzeugwechsel verwirft: keine Vorschau im Store, zurück im Werkzeug ist nichts offen
+    await page.getByTestId('align-mode-manual').click();
+    await blur(page);
+    await page.getByTestId('align-dx').fill('3');
+    await blur(page);
+    expect((await st(page)).preview).not.toBeNull();
+    await page.keyboard.press('v');
+    expect((await st(page)).preview).toBeNull();
+    await page.keyboard.press('a');
+    await expect(page.getByTestId('align-dx')).toHaveValue('0');
+    const s = await st(page);
+    expect(s.preview).toBeNull();
+    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0].cx).toBe(170);
+    expect(s.history.past.length).toBe(n0);
+    expect(errors).toEqual([]);
+  });
 });

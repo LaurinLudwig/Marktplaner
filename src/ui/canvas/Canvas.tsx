@@ -338,7 +338,9 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const centerTool = useCenterTool(ctx, tool === 'numberCenter' && !overview && !spaceDown);
   const directionTool = useDirectionTool(ctx, tool === 'numberDirection' && !overview && !spaceDown);
   const regionTool = useRegionTool(ctx, tool === 'sheetRegion' && !spaceDown);
-  const alignTool = useAlignTool(ctx, tool === 'align' && overview && !spaceDown);
+  // Wie Messen und Kalibrieren ohne `!spaceDown`: „Aktiv“ ist hier zugleich der Schlüssel der Sitzung; die Hand
+  // (Leertaste) darf offene Änderungen und Punktpaare nicht verwerfen (#26). Während der Hand erreicht kein Klick das Werkzeug.
+  const alignTool = useAlignTool(ctx, tool === 'align' && overview);
   const activeTool = lockedHere
     ? null
     : tool === 'align'
