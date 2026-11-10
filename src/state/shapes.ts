@@ -2,7 +2,7 @@ import { roundRect } from '../core/geometry/rect';
 import { dissolveStand, mergeStands, refitStand, shapeParts } from '../core/compound';
 import { clampFrontOverride } from '../core/model/schema';
 import { newId } from '../core/id';
-import type { Id, Project, Rect, ShapePart, ShapeTemplate, StandShape } from '../core/model/types';
+import type { Id, Project, Rect, ShapePart, ShapeTemplate, Stand, StandShape } from '../core/model/types';
 import { LIMITS } from '../core/objects';
 import { normalizeParts } from '../core/shape';
 import { isIdentity, placeObject } from '../core/placement';
@@ -81,12 +81,22 @@ export function setStandShape(pageId: Id, ids: readonly Id[], choice: ShapeChoic
  * Hüllrechteck B × T wird neu bestimmt, die Teile bleiben auf dem Plan an ihrem Platz. false ohne brauchbares Teil.
  */
 export function setStandParts(pageId: Id, id: Id, meters: readonly ShapePart[], label = 'Form ändern'): boolean {
-  const stand = pageView(st().project, pageId)?.stands.find((x) => x.id === id);
-  if (!stand) return false;
-  const fit = refitStand(stand, meters);
+  // Im System der Besitzer-Page einpassen (#27): in der Gesamtansicht dasselbe Ergebnis wie in der Einzelansicht
+  const own = ownStand(pageId, id);
+  if (!own) return false;
+  const fit = refitStand(own.stand, meters);
   if (!fit) return false;
-  commitStandParts(pageId, id, fit.rect, fit.parts, label);
+  commitStandParts(own.pageId, id, fit.rect, fit.parts, label);
   return true;
+}
+
+/** Stand `id` der Ansicht `pageId` in der Liste und im System seiner Besitzer-Page (#27), sonst null. */
+function ownStand(pageId: Id, id: Id): { pageId: Id; stand: Stand } | null {
+  for (const pg of ownerPages(st().project, pageId)) {
+    const stand = pg.stands.find((x) => x.id === id);
+    if (stand) return { pageId: pg.id, stand };
+  }
+  return null;
 }
 
 /**
@@ -128,7 +138,7 @@ export function mergeStandsOnPage(pageId: Id, ids: readonly Id[]): Id | null {
     // Gesamtansicht (#15): Der zusammengefasste Stand bleibt auf dem Platz seines Ausgangsstands, in dessen System (#27)
     for (const pg of ownerPages(p, pageId)) {
       if (!pg.stands.some((s) => removed.has(s.id) || s.id === merged.stand.id)) continue;
-      pg.stands = pg.stands.filter((s) => !removed.has(s.id)).map((s) => (s.id === merged.stand.id ? toOwner(pageId, pg.id, merged.stand) : s));
+      pg.stands = pg.stands.filter((s) => !removed.has(s.id)).map((s) => (s.id === merged.stand.id ? toOwner(pageId, pg.id, merged.stand, true) : s));
     }
   });
   select([merged.stand.id]);
@@ -137,14 +147,14 @@ export function mergeStandsOnPage(pageId: Id, ids: readonly Id[]): Id | null {
 
 /** „Form auflösen“ (#16): jeder Teil der eigenen Form wird ein eigener Stand (ein Undo-Schritt, alle ausgewählt). */
 export function dissolveStandOnPage(pageId: Id, id: Id): Id[] {
-  const stand = pageView(st().project, pageId)?.stands.find((s) => s.id === id);
-  if (!stand?.parts?.length) return [];
-  const pieces = dissolveStand(stand);
+  // Im System der Besitzer-Page auflösen (#27): in der Gesamtansicht dasselbe Ergebnis wie in der Einzelansicht
+  const own = ownStand(pageId, id);
+  if (!own?.stand.parts?.length) return [];
+  const pieces = dissolveStand(own.stand);
   st().change('Form auflösen', (p) => {
-    for (const pg of ownerPages(p, pageId)) {
-      const i = pg.stands.findIndex((s) => s.id === id);
-      if (i >= 0) pg.stands.splice(i, 1, ...pieces.map((x) => toOwner(pageId, pg.id, x, true)));
-    }
+    const pg = p.pages.find((x) => x.id === own.pageId);
+    const i = pg ? pg.stands.findIndex((s) => s.id === id) : -1;
+    if (pg && i >= 0) pg.stands.splice(i, 1, ...pieces);
   });
   const newIds = pieces.map((s) => s.id);
   select(newIds);

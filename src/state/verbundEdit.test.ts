@@ -28,7 +28,8 @@ import { hideFreeSpace } from './freeSpaces';
 import { pageFree } from '../core/hiddenFree';
 import { setNrLocked } from './numbering';
 import { setLayer } from './pageSettings';
-import { dissolveStandOnPage, mergeStandsOnPage, setStandParts } from './shapes';
+import { commitStandParts, dissolveStandOnPage, mergeStandsOnPage, setStandParts } from './shapes';
+import { refitStand } from '../core/compound';
 import { cyclePage } from './pages';
 import { projectForSave, useStore } from './store';
 import { movePageContent } from './verbund';
@@ -571,6 +572,84 @@ describe('#27 Gesamtansicht bei gedrehter Lage', () => {
     // Die Teile liegen in der Welt dort, wo die Ausgangsstände lagen: einer bei (5|5), einer bei der Weltlage von sB
     expect(w.parts).toHaveLength(2);
     expect(pageById('A').stands[0]!.rot).toBeCloseTo(w.rot, 9);
+  });
+});
+
+/**
+ * #27: Eigene Form in der Gesamtansicht bei einer feinen Lage-Drehung (wie nach „Ausrichten“, nicht auf 0,1°). Die
+ * Weltdrehung eines Stands ist dann keine Zehntelzahl; wird sie in der Welt gerundet, landet der Stand nach dem
+ * Zurückrechnen bis zu 0,1° gedreht. Ergebnis wie in der Einzelansicht.
+ */
+describe('#27 Eigene Form bei feiner Lage-Drehung', () => {
+  const PARTS = [
+    { kind: 'rect' as const, x: 0.37, y: 0.11, w: 3.13, h: 2.77, rot: 0 },
+    { kind: 'rect' as const, x: 3.5, y: 0.11, w: 2.05, h: 1.9, rot: 0 },
+  ];
+  /** Lage des Ziegelturms und ein gedrehter Stand mit eigener Form; liefert eine Momentaufnahme zum Vergleich. */
+  function setup(rot: number) {
+    s().change('Lage', (p) => {
+      p.groups[0]!.placements.B = { x: 12.345, y: -6.789, rot };
+      p.pages[1]!.stands.push({ ...createStand({ cx: 30.37, cy: 4.21, w: 6, d: 3, rot: 12.3 }), id: 'c', parts: [{ kind: 'rect', x: 0, y: 0, w: 1, h: 1, rot: 0 }] });
+    });
+    return structuredClone(s().project);
+  }
+  const reload = (project: Project) => s().loadBundle({ project, assets: {} }, { path: null, name: null });
+  const standC = () => pageById('B').stands.find((x) => x.id === 'c')!;
+  const ROTS = [3.7234, 123.456, 271.25, 359.987];
+
+  it('Teile ändern (Seitenleiste): in der Gesamtansicht wie in der Einzelansicht, die Drehung bleibt', () => {
+    for (const rot of ROTS) {
+      const snap = setup(rot);
+      const before = past();
+      expect(setStandParts(REF, 'c', PARTS)).toBe(true);
+      expect(past()).toBe(before + 1);
+      const overview = standC();
+      expect(overview.rot, `${rot}°`).toBe(12.3);
+      reload(snap);
+      setStandParts('B', 'c', PARTS);
+      expect(overview, `${rot}°`).toEqual(standC());
+      load();
+    }
+  });
+
+  it('Teile ändern per Geste (Hüllrechteck in der Welt eingepasst): die Drehung bleibt', () => {
+    for (const rot of ROTS) {
+      setup(rot);
+      const fit = refitStand(worldOf('c'), PARTS)!;
+      commitStandParts(REF, 'c', fit.rect, fit.parts, 'Teil verschieben');
+      expect(standC().rot, `${rot}°`).toBe(12.3);
+      // Die Teile bleiben in der Welt an ihrem Platz (bis auf die Rundung auf 0,01 m)
+      const w = worldOf('c');
+      expect(Math.hypot(w.cx - fit.rect.cx, w.cy - fit.rect.cy)).toBeLessThanOrEqual(0.0075);
+      load();
+    }
+  });
+
+  it('Form auflösen: in der Gesamtansicht wie in der Einzelansicht', () => {
+    for (const rot of ROTS) {
+      setup(rot);
+      setStandParts('B', 'c', PARTS);
+      const snap = structuredClone(s().project);
+      const pieces = dissolveStandOnPage(REF, 'c');
+      expect(pieces).toHaveLength(2);
+      const overview = pageById('B').stands.map((x) => [x.cx, x.cy, x.w, x.d, x.rot, x.shape]);
+      reload(snap);
+      dissolveStandOnPage('B', 'c');
+      expect(overview, `${rot}°`).toEqual(pageById('B').stands.map((x) => [x.cx, x.cy, x.w, x.d, x.rot, x.shape]));
+      load();
+    }
+  });
+
+  it('Zusammenfassen: gespeichert wie jedes Übernehmen (0,01 m / 0,1° in den Koordinaten des Besitzers), Drehung des Ausgangsstands', () => {
+    for (const rot of ROTS) {
+      setup(rot);
+      const id = mergeStandsOnPage(REF, ['c', 'sB'])!;
+      const m = pageById('B').stands.find((x) => x.id === id)!;
+      expect(m.rot, `${rot}°`).toBe(12.3);
+      expect(Math.round(m.cx * 100) / 100).toBe(m.cx);
+      expect(Math.round(m.cy * 100) / 100).toBe(m.cy);
+      load();
+    }
   });
 });
 
