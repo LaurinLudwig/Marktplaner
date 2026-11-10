@@ -27,7 +27,7 @@ export function OverviewPanel({ verbund }: { verbund: Verbund }) {
         </div>
         <div className="panel-body form">
           <VerbundCard verbund={verbund} />
-          <button type="button" className="btn" onClick={() => runCommand('tool.align')} {...tip({ shortcut: 'tool.align', label: 'Ausrichten', desc: 'Platz ziehen, drehen oder über zwei Punktpaare ausrichten', ariaLabel: false })}>
+          <button type="button" className="btn" onClick={() => runCommand('tool.align')} {...tip({ shortcut: 'tool.align', label: 'Ausrichten', desc: 'Platz verschieben und drehen oder über Punktpaare ausrichten', ariaLabel: false })}>
             Plätze ausrichten …
           </button>
         </div>

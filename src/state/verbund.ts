@@ -84,7 +84,7 @@ const fine = (n: number) => Math.round(n * 1e8) / 1e8;
 /**
  * Lage einer Page im Verbund ändern (#15): die ganze Page samt Hintergrund und allen Objekten verschieben bzw. drehen
  * (`transformPageContent`). Verschiebung auf 0,01 m, Drehung auf 0,1° gerundet; ein Undo-Schritt. Mit `precise`
- * (Werkzeug „Ausrichten“: 2-Punkt-Ausrichtung und Drehfeld, Teil b) entfallen nur Gleitkomma-Reste: Bei 0,1° läge ein
+ * (Werkzeug „Ausrichten“: Punktpaare und manuelle Sitzung, #26) entfallen nur Gleitkomma-Reste: Bei 0,1° läge ein
  * Punkt 200 m vom Drehpunkt bis etwa 0,17 m daneben. Die Lage der Objekte zueinander bleibt so oder so starr
  * (keine Rundung je Objekt, also keine Fehlwarnungen).
  *

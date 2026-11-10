@@ -3,7 +3,7 @@
  * werden eingesetzt, ohne das Projekt zu ändern. Zeichenfläche, Steuerungsleiste und ab M4 die
  * Freiflächen und Warnungen lesen nur diese Sicht und rechnen so live mit.
  */
-import type { Area, FestplatzPage, Id, InfraObject, Rect, ShapePart, Stand } from './model/types';
+import type { Area, FestplatzPage, Id, InfraObject, Rect, ShapePart, Stand, Vec } from './model/types';
 
 export interface Preview {
   pageId: Id;
@@ -12,6 +12,8 @@ export interface Preview {
   parts?: Record<Id, ShapePart[]>;
   /** Zusätzliche Objekte, z. B. die Kopien bei Alt+Ziehen (M4-12). */
   added?: { areas: Area[]; stands: Stand[]; infra: InfraObject[] };
+  /** Von Hand verschobene Beschriftungen während einer Geste (Werkzeug „Ausrichten“ dreht sie mit, #26). */
+  labelOffsets?: Record<Id, Vec>;
 }
 
 const apply = <T extends Rect & { id: Id }>(list: T[], rects: Record<Id, Rect>): T[] => {
@@ -27,7 +29,9 @@ export function effectivePage(page: FestplatzPage, preview: Preview | null): Fes
   if (!preview || preview.pageId !== page.id) return page;
   const areas = apply(page.areas, preview.rects);
   const partsOf = preview.parts;
-  const stands = partsOf ? apply(page.stands, preview.rects).map((s) => (partsOf[s.id] ? { ...s, parts: partsOf[s.id]! } : s)) : apply(page.stands, preview.rects);
+  const offsets = preview.labelOffsets;
+  let stands = partsOf ? apply(page.stands, preview.rects).map((s) => (partsOf[s.id] ? { ...s, parts: partsOf[s.id]! } : s)) : apply(page.stands, preview.rects);
+  if (offsets) stands = stands.map((s) => (offsets[s.id] ? { ...s, labelOffset: offsets[s.id]! } : s));
   const infra = apply(page.infra, preview.rects);
   const add = preview.added;
   return {

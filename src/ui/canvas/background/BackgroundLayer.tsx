@@ -17,21 +17,25 @@ interface Props {
   selected: boolean;
   /** Ziehen/Auswählen erlaubt (nicht gesperrt, Auswahlwerkzeug aktiv). */
   interactive: boolean;
+  /** Zusätzlicher Faktor auf die Deckkraft (nur Anzeige, z. B. Werkzeug „Ausrichten“, #26); Standard 1. */
+  fade?: number;
+  /** Besitzer-Page des Hintergrunds in der Gesamtansicht (`data-page`, für Tests). */
+  pageId?: string;
 }
 
 /**
  * Hintergrundplan in Weltkoordinaten. Die Gruppe bildet Quell-Einheiten auf Meter ab
  * (siehe core/background.ts); alle Bilder liegen deshalb in Quell-Einheiten.
  */
-export const BackgroundLayer = memo(function BackgroundLayer({ background: bg, bytes, view, viewport, selected, interactive }: Props) {
+export const BackgroundLayer = memo(function BackgroundLayer({ background: bg, bytes, view, viewport, selected, interactive, fade = 1, pageId }: Props) {
   const { transform: t, pxSize } = bg;
   const groupTransform = `translate(${t.x} ${t.y}) rotate(${t.rot}) scale(${t.metersPerPx})`;
   // Linienbreite in Quell-Einheiten für 1,5 Bildschirmpixel
   const hairline = 1.5 / (view.scale * t.metersPerPx);
 
   return (
-    <g className="background-layer" transform={groupTransform}>
-      <g opacity={bg.opacity}>
+    <g className="background-layer" transform={groupTransform} data-page={pageId}>
+      <g className="background-image" opacity={bg.opacity * fade}>
         {!bytes ? (
           <MissingAsset w={pxSize.w} h={pxSize.h} stroke={hairline} />
         ) : bg.kind === 'pdf' ? (

@@ -509,7 +509,9 @@ kbd {
 .snap-marker { fill: none; stroke: var(--snap); stroke-width: 2; pointer-events: none; }
 .stage.tool-measure, .stage.tool-calibrate { cursor: crosshair; }
 
-.tool-panel-host { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; pointer-events: none; }
+/* Über die ganze Breite (mit Rand), Inhalt mittig: Ein Panel darf so breit werden wie die Zeichenfläche, statt bei
+   „left: 50 %“ auf die halbe Breite gequetscht zu werden (#26) */
+.tool-panel-host { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: center; z-index: 5; pointer-events: none; }
 .tool-panel-host > * { pointer-events: auto; }
 .tool-hint {
   padding: 5px 12px;
@@ -1032,9 +1034,31 @@ kbd {
 .align-own { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
 .align-ref { fill: var(--calibrate); stroke: var(--panel); stroke-width: 1.5; }
 .align-label { fill: var(--text-strong); font: 600 11px var(--f-num); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.align-panel { flex-direction: column; align-items: stretch; gap: 6px; max-width: 100%; }
+.align-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.align-group { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.align-panel .btn, .align-panel label { white-space: nowrap; }
 .align-panel select { height: 24px; max-width: 180px; }
-.align-panel .inp { width: 80px; }
+.align-panel .inp { width: 84px; }
+.align-mode { flex: none; grid-template-columns: auto auto; }
+.align-mode button { padding: 0 10px; white-space: nowrap; }
+.align-mode button:disabled { opacity: 0.5; }
+.align-field { display: flex; align-items: center; gap: 4px; }
+.align-opacity input { width: 90px; }
+.align-opacity-value { min-width: 36px; font: 11px var(--f-num); color: var(--text); text-align: right; }
+.align-step { min-width: 0; white-space: nowrap; }
+.align-pairs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-top: 6px; border-top: 1px solid var(--border-soft); font-size: 11px; }
+.align-pairs ol { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.align-pairs li { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 2px 0 6px; border: 1px solid var(--border-soft); border-radius: 10px; font-family: var(--f-num); white-space: nowrap; }
+.align-pairs li.outlier { border-color: var(--calibrate); color: var(--calibrate); }
+.align-pair-nr { color: var(--muted); }
+.align-pairs .icon-x { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--muted); line-height: 1; }
+.align-pairs .icon-x:hover { background: var(--panel-sunken); color: var(--text-strong); }
+.align-summary { color: var(--muted); font-family: var(--f-num); white-space: nowrap; }
 .align-deviation { color: var(--calibrate); }
+.align-mark.outlier .align-pair { stroke-dasharray: none; stroke-width: 2.5; }
+.align-rotate-stem { stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.align-rotate-handle { fill: var(--panel-raised); stroke: var(--accent); stroke-width: 2; }
 
 /* ---------- Formvorlagen (M12) ---------- */
 .shape-row { align-items: center; }

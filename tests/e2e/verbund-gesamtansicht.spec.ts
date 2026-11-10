@@ -18,10 +18,13 @@ const VIEW_FAR = { scale: 4, tx: 100, ty: 300 };
 let view = VIEW;
 const REF = 'verbund:u';
 
-async function seed(page: Page, { shift = 0 } = {}) {
+/** 1×1-PNG als Hintergrund (für die Deckkraft beim Ausrichten, #26). */
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+async function seed(page: Page, { shift = 0, backgrounds = false } = {}) {
   view = shift ? VIEW_FAR : VIEW;
   await page.evaluate(
-    ({ dx, v, ref }) => {
+    ({ dx, v, ref, png }) => {
       const s = (window as any).__marktplanerStore.getState();
       const base = { nrLocked: false, owner: '', ware: '', powerKw: 0, connection: null, note: '', categoryId: null, color: null, suppressOutsideWarning: false, suppressOverlapWarning: false, suppressDuplicateWarning: false, suppressInfraWarning: false, suppressDistanceWarning: false, shape: 'rect', shapeTemplateId: null, labelOffset: null, parts: null, frontOverride: null, rot: 0, w: 3, d: 3, cy: -1.5 };
       s.change('Testdaten', (p: any) => {
@@ -35,6 +38,11 @@ async function seed(page: Page, { shift = 0 } = {}) {
         sp.areas = [{ id: 'GS', name: 'Seestraße', cx: 70 + dx, cy: -5, w: 50, d: 10, rot: 0 }];
         sp.stands = [{ ...base, id: 'se2', nr: 'SE-02', name: 'Crêpes', cx: 47.5 + dx }];
         p.pages.push(sp);
+        if (png) {
+          const bg = (x: number) => ({ assetId: 'bg-1px.png', fileName: 'plan.png', kind: 'image', pxSize: { w: 1, h: 1 }, transform: { x, y: -30, rot: 0, metersPerPx: 50 }, opacity: 1, locked: true });
+          z.background = bg(0);
+          sp.background = bg(45 + dx);
+        }
         p.groups.push({
           id: 'u',
           name: 'Unterstadt',
@@ -49,9 +57,10 @@ async function seed(page: Page, { shift = 0 } = {}) {
           view: null,
         });
       });
+      if (png) s.addAsset('bg-1px.png', Uint8Array.from(atob(png), (c) => c.charCodeAt(0)));
       for (const id of [s.project.pages[0].id, 'S', ref]) s.setView(id, v);
     },
-    { dx: shift, v: view, ref: REF },
+    { dx: shift, v: view, ref: REF, png: backgrounds ? PNG_1PX : '' },
   );
 }
 
@@ -261,86 +270,264 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     expect(errors).toEqual([]);
   });
 
-  test('Ausrichten per Ziehen: ganze Page samt Hintergrund, ein Undo-Schritt', async ({ page }) => {
+  // #26: Die beiden früheren Tests („Ausrichten per Ziehen“ mit je einem Undo-Schritt pro Ziehen und pro Drehung,
+  // „Ausrichten per 2 Punkten“ mit dem Knopf „2 Punkte …“) sind durch die gewünschte Bedienung überholt: Ziehen und
+  // Drehen sammeln sich in einer Sitzung bis „Fertig“, der Modus „Punkte“ mit beliebig vielen Paaren ersetzt „2 Punkte“.
+  // Ihre Prüfungen (ganze Page samt Objekten, Lage nach dem Übernehmen, Undo/Redo, Esc verwirft) stecken in den Tests unten.
+
+  test('Ausrichten manuell: Ziehen und Drehen sammeln sich, „Fertig“ ist ein Undo-Schritt, Undo/Redo', async ({ page }) => {
     const errors = collectErrors(page);
     await openApp(page);
     await seed(page, { shift: 100 });
     await overviewTab(page).click();
     await page.keyboard.press('a');
     await expect(page.getByTestId('align-panel')).toBeVisible();
+    await expect(page.getByTestId('align-mode-manual')).toHaveAttribute('aria-pressed', 'true');
     const n0 = await past(page);
-    // Klick auf SE-02 wählt die Seestraße, Ziehen um 100 m nach links
+    // Klick auf SE-02 wählt die Seestraße, Ziehen um 100 m nach links: nur Vorschau
     await dragWorld(page, { x: 147.5, y: -1.5 }, { x: 47.5, y: -1.5 });
-    expect(await past(page)).toBe(n0 + 1);
     await expect(page.getByTestId('align-member')).toHaveValue('S');
+    expect(await past(page)).toBe(n0);
+    await expect(page.getByTestId('align-dx')).toHaveValue('-100');
+    await expect(page.getByTestId('align-dy')).toHaveValue('0');
     let s = await st(page);
     const sp = () => s.project.pages.find((p: any) => p.id === 'S');
-    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5 });
-    expect(sp().stands[0]).toMatchObject({ cx: 47.5, cy: -1.5 });
-    expect(s.project.pages[0].areas[0]).toMatchObject({ cx: 25 });
-    // Drehung als Zahl: 90° um die Mitte des Platzes, ein Schritt
+    expect(sp().areas[0]).toMatchObject({ cx: 170, cy: -5 });
+    // Vorschau der Objekte: SE-02 steht schon an der neuen Stelle
+    expect(s.preview.rects.se2.cx).toBeCloseTo(47.5, 6);
+    // Weiteres Ziehen (von überall, der Platz bleibt fest) sammelt sich
+    await dragWorld(page, { x: 20, y: -30 }, { x: 25, y: -30 });
+    await expect(page.getByTestId('align-dx')).toHaveValue('-95');
+    await dragWorld(page, { x: 25, y: -30 }, { x: 20, y: -30 });
+    await expect(page.getByTestId('align-dx')).toHaveValue('-100');
+    // Drehung im Gradfeld (Vorschau), Enter = „Fertig“: ein Undo-Schritt für Verschiebung und Drehung
     await page.getByTestId('align-rot').fill('90');
+    expect(await past(page)).toBe(n0);
     await page.getByTestId('align-rot').press('Enter');
+    expect(await past(page)).toBe(n0 + 1);
     s = await st(page);
-    expect(sp().areas[0].rot).toBe(90);
-    expect(s.history.past.length).toBe(n0 + 2);
+    // Drehung um die Mitte des Platzes (170|−5), danach verschoben: Grundfläche bei (70|−5), SE-02 bei (66,5|−27,5)
+    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5, rot: 90 });
+    expect(sp().stands[0].cx).toBeCloseTo(66.5, 6);
+    expect(sp().stands[0].cy).toBeCloseTo(-27.5, 6);
+    expect(s.project.pages[0].areas[0]).toMatchObject({ cx: 25 });
+    await expect(page.getByTestId('align-done')).toBeDisabled();
     await blur(page);
-    await page.keyboard.press(`${MOD}+z`);
+    await expect(page.getByTestId('align-rot')).toHaveValue('0');
     await page.keyboard.press(`${MOD}+z`);
     s = await st(page);
     expect(sp().areas[0]).toMatchObject({ cx: 170, rot: 0 });
+    expect(s.history.past.length).toBe(n0);
     await page.keyboard.press(`${MOD}+Shift+z`);
     s = await st(page);
-    expect(sp().areas[0]).toMatchObject({ cx: 70, rot: 0 });
+    expect(sp().areas[0]).toMatchObject({ cx: 70, rot: 90 });
     expect(errors).toEqual([]);
   });
 
-  test('Ausrichten per 2 Punkten: Abweichungshinweis, Esc bricht ab, „Anwenden“ ist ein Undo-Schritt', async ({ page }) => {
+  test('Ausrichten manuell: Drehgriff mit Shift, „Abbrechen“ und Esc verwerfen, Platzwechsel verwirft mit Hinweis', async ({ page }) => {
     const errors = collectErrors(page);
     await openApp(page);
     await seed(page, { shift: 100 });
     await overviewTab(page).click();
     await page.keyboard.press('a');
     await page.getByTestId('align-member').selectOption({ label: 'Seestraße' });
-    await page.getByTestId('align-two-point').click();
-    // Abstände 50 m und 50,5 m: Hinweis mit Abweichung (Punkte ohne Fang mit Cmd/Strg)
-    await clickWorld(page, { x: 145, y: -10 });
-    await page.keyboard.down(MOD);
-    await clickWorld(page, { x: 45, y: -10 });
-    await page.keyboard.up(MOD);
-    await clickWorld(page, { x: 195, y: -10 });
-    await page.keyboard.down(MOD);
-    await clickWorld(page, { x: 95.5, y: -10 });
-    await page.keyboard.up(MOD);
-    await expect(page.getByTestId('align-deviation')).toContainText('Abweichung 0,5 m');
+    await blur(page);
     const n0 = await past(page);
-    await page.keyboard.press('Escape');
-    await expect(page.getByTestId('align-result')).toHaveCount(0);
+    // Drehgriff über der Mitte des oberen Rands; Ziehen nach rechts neben die Mitte (170|−5) = 90° im Uhrzeigersinn
+    const handle = page.getByTestId('align-rotate-handle');
+    await expect(handle).toHaveCount(1);
+    const hb = (await handle.boundingBox())!;
+    const center = await w2s(page, { x: 170, y: -5 });
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+    await page.keyboard.down('Shift');
+    await page.mouse.down();
+    await page.mouse.move(center.x + 40, center.y + 3, { steps: 10 });
+    await page.mouse.move(center.x + 60, center.y + 2, { steps: 4 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    await expect(page.getByTestId('align-rot')).toHaveValue('90');
     expect(await past(page)).toBe(n0);
-    expect((await st(page)).project.pages.find((p: any) => p.id === 'S').areas[0].cx).toBe(170);
+    let s = await st(page);
+    expect(s.preview.rects.GS.rot).toBe(90);
+    // „Abbrechen“: nichts geändert, keine Vorschau
+    await page.getByTestId('align-cancel').click();
+    await expect(page.getByTestId('align-rot')).toHaveValue('0');
+    s = await st(page);
+    expect(s.preview).toBeNull();
+    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0]).toMatchObject({ cx: 170, rot: 0 });
+    expect(s.history.past.length).toBe(n0);
+    // Esc verwirft ebenso
+    await dragWorld(page, { x: 147.5, y: -1.5 }, { x: 140, y: -1.5 });
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('align-dx')).toHaveValue('0');
+    expect((await st(page)).preview).toBeNull();
+    // Platzwechsel in der Auswahl bei offenen Änderungen: verworfen, mit Hinweis
+    await dragWorld(page, { x: 147.5, y: -1.5 }, { x: 140, y: -1.5 });
+    await page.getByTestId('align-member').selectOption({ label: 'Ziegelturm' });
+    await expect(page.locator('.toast').last()).toContainText('Änderungen an „Seestraße“ verworfen');
+    await expect(page.getByTestId('align-dx')).toHaveValue('0');
+    s = await st(page);
+    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0].cx).toBe(170);
+    expect(s.history.past.length).toBe(n0);
+    expect(errors).toEqual([]);
+  });
 
-    // Passende Punkte: Ecken der Seestraße auf ihre echte Lage
-    await page.getByTestId('align-two-point').click();
-    await clickWorld(page, { x: 145, y: -10 });
-    await page.keyboard.down(MOD);
-    await clickWorld(page, { x: 45, y: -10 });
-    await page.keyboard.up(MOD);
-    await clickWorld(page, { x: 195, y: -10 });
-    await page.keyboard.down(MOD);
-    await clickWorld(page, { x: 95, y: -10 });
-    await page.keyboard.up(MOD);
+  test('Ausrichten: Deckkraft-Regler wirkt nur auf den Hintergrund des gewählten Platzes, der dabei oben liegt', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page, { backgrounds: true });
+    await overviewTab(page).click();
+    const bgImage = (id: string) => page.locator(`.layer-plan .background-layer[data-page="${id}"] > g.background-image`);
+    const z = await firstId(page);
+    await expect(bgImage('S')).toHaveAttribute('opacity', '1');
+    await page.keyboard.press('a');
+    await page.getByTestId('align-member').selectOption({ label: 'Ziegelturm' });
+    // Vorgabe 50 %; die Seestraße bleibt deckend; der Ziegelturm liegt jetzt oben (sonst läge er unter der Seestraße)
+    await expect(page.getByTestId('align-opacity')).toHaveValue('50');
+    await expect(bgImage(z)).toHaveAttribute('opacity', '0.5');
+    await expect(bgImage('S')).toHaveAttribute('opacity', '1');
+    await expect(page.locator('.layer-plan .background-layer').last()).toHaveAttribute('data-page', z);
+    await page.getByTestId('align-opacity').fill('20');
+    await expect(page.getByTestId('align-panel')).toContainText('20 %');
+    await expect(bgImage(z)).toHaveAttribute('opacity', '0.2');
+    // Nur Anzeige: nicht in der Page
+    const s = await st(page);
+    expect(s.project.pages[0].background.opacity).toBe(1);
+    // Anderes Werkzeug: wieder deckend und in der Reihenfolge des Verbunds
+    await blur(page);
+    await page.keyboard.press('v');
+    await expect(bgImage(z)).toHaveAttribute('opacity', '1');
+    await expect(page.locator('.layer-plan .background-layer').last()).toHaveAttribute('data-page', 'S');
+    // Die gewählte Deckkraft bleibt für die Sitzung
+    await page.keyboard.press('a');
+    await expect(page.getByTestId('align-opacity')).toHaveValue('20');
+    expect(errors).toEqual([]);
+  });
+
+  test('Ausrichten per Punkten: 3 Paare mit Restabweichungen, Paar entfernen, Esc verwirft, „Anwenden“ ist ein Undo-Schritt', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page, { shift: 100 });
+    await overviewTab(page).click();
+    await page.keyboard.press('a');
+    await page.getByTestId('align-member').selectOption({ label: 'Seestraße' });
+    await page.getByTestId('align-mode-points').click();
+    await blur(page);
+    await expect(page.getByTestId('align-step')).toContainText('A1 auf „Seestraße“');
+    /** A mit Fang (Ecke der Grundfläche, wie angezeigt), B ohne Fang (Cmd/Strg). */
+    const pair = async (a: { x: number; y: number }, b: { x: number; y: number }) => {
+      await clickWorld(page, a);
+      await page.keyboard.down(MOD);
+      await clickWorld(page, b);
+      await page.keyboard.up(MOD);
+    };
+    await pair({ x: 145, y: -10 }, { x: 45, y: -10 });
+    await expect(page.getByTestId('align-pair')).toHaveCount(1);
+    await expect(page.getByTestId('align-apply')).toBeDisabled();
+    await pair({ x: 195, y: -10 }, { x: 95, y: -10 });
+    await expect(page.getByTestId('align-residual')).toHaveText(['0 m', '0 m']);
+    // Ab 2 Paaren Vorschau: Die Seestraße liegt schon an ihrer echten Stelle, A3 wird auf ihr gesetzt (95|0 statt 195|0)
+    expect((await st(page)).preview.rects.GS.cx).toBeCloseTo(70, 6);
+    await pair({ x: 95, y: 0 }, { x: 95.5, y: 0 });
+    await expect(page.getByTestId('align-pair')).toHaveCount(3);
+    await expect(page.getByTestId('align-residual')).toHaveText(['0,173 m', '0,163 m', '0,322 m']);
+    await expect(page.getByTestId('align-result')).toContainText('Mittel 0,231 m · max 0,322 m');
+    await expect(page.getByTestId('align-mark')).toHaveCount(3);
+    await page.screenshot({ path: artifact('verbund-ausrichten-punkte.png') });
+    const n0 = await past(page);
+    // Paar 3 entfernen: wieder exakt
+    await page.getByTestId('align-pair-remove').nth(2).click();
+    await expect(page.getByTestId('align-residual')).toHaveText(['0 m', '0 m']);
+    // Esc verwirft alle Paare
+    await blur(page);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('align-pairs')).toHaveCount(0);
+    let s = await st(page);
+    expect(s.preview).toBeNull();
+    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0].cx).toBe(170);
+    expect(s.history.past.length).toBe(n0);
+
+    // Drei exakte Paare (das dritte auf dem verschobenen Plan), „Anwenden“ = ein Undo-Schritt
+    await pair({ x: 145, y: -10 }, { x: 45, y: -10 });
+    await pair({ x: 195, y: -10 }, { x: 95, y: -10 });
+    await pair({ x: 95, y: 0 }, { x: 95, y: 0 });
     await expect(page.getByTestId('align-result')).toContainText('Drehung 0');
-    await expect(page.getByTestId('align-deviation')).toHaveCount(0);
+    await expect(page.getByTestId('align-outlier')).toHaveCount(0);
     await page.getByTestId('align-apply').click();
     expect(await past(page)).toBe(n0 + 1);
-    let s = await st(page);
+    await expect(page.getByTestId('align-pairs')).toHaveCount(0);
+    s = await st(page);
     const sp = () => s.project.pages.find((p: any) => p.id === 'S');
-    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5, rot: 0 });
-    expect(sp().stands[0]).toMatchObject({ cx: 47.5 });
-    await page.screenshot({ path: artifact('verbund-ausrichten.png') });
+    expect(sp().areas[0].cx).toBeCloseTo(70, 6);
+    expect(sp().areas[0].cy).toBeCloseTo(-5, 6);
+    expect(sp().areas[0].rot).toBe(0);
+    expect(sp().stands[0].cx).toBeCloseTo(47.5, 6);
+    await blur(page);
     await page.keyboard.press(`${MOD}+z`);
     s = await st(page);
     expect(sp().areas[0].cx).toBe(170);
+    await page.keyboard.press(`${MOD}+Shift+z`);
+    s = await st(page);
+    expect(sp().areas[0].cx).toBeCloseTo(70, 6);
+    expect(errors).toEqual([]);
+  });
+
+  test('Ausrichten: Leertaste (Hand) behält offene Änderungen, Esc beim Ziehen bricht nur das Ziehen ab, Werkzeugwechsel verwirft', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openApp(page);
+    await seed(page, { shift: 100 });
+    await overviewTab(page).click();
+    await page.keyboard.press('a');
+    await page.getByTestId('align-member').selectOption({ label: 'Seestraße' });
+    await blur(page);
+    const n0 = await past(page);
+    await dragWorld(page, { x: 147.5, y: -1.5 }, { x: 140, y: -1.5 });
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    // Esc während eines zweiten Ziehens: nur dieses Ziehen fällt weg, die Sitzung bleibt
+    const a = await w2s(page, { x: 140, y: -1.5 });
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(a.x - 40, a.y, { steps: 6 });
+    await expect(page.getByTestId('align-dx')).toHaveValue('-17,5');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    await page.mouse.move(a.x - 60, a.y, { steps: 3 });
+    await page.mouse.up();
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    // Leertaste gedrückt halten und die Ansicht verschieben: die Sitzung bleibt offen, Panel und Vorschau bleiben
+    await page.keyboard.down('Space');
+    await page.mouse.move(a.x, a.y + 80);
+    await page.mouse.down();
+    await page.mouse.move(a.x - 50, a.y + 80, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up('Space');
+    await expect(page.getByTestId('align-dx')).toHaveValue('-7,5');
+    expect((await st(page)).preview.rects.se2.cx).toBeCloseTo(140, 6);
+    // Modus „Punkte“: ein gesetzter A-Punkt bleibt über die Leertaste erhalten
+    await page.getByTestId('align-mode-points').click();
+    await blur(page);
+    const c = (await page.locator('svg.canvas').boundingBox())!;
+    await page.mouse.click(c.x + 300, c.y + 200);
+    await expect(page.getByTestId('align-step')).toContainText('B1 auf Referenzplan');
+    await page.keyboard.down('Space');
+    await page.keyboard.up('Space');
+    await expect(page.getByTestId('align-step')).toContainText('B1 auf Referenzplan');
+    await expect(page.getByTestId('align-mark')).toHaveCount(1);
+    // Werkzeugwechsel verwirft: keine Vorschau im Store, zurück im Werkzeug ist nichts offen
+    await page.getByTestId('align-mode-manual').click();
+    await blur(page);
+    await page.getByTestId('align-dx').fill('3');
+    await blur(page);
+    expect((await st(page)).preview).not.toBeNull();
+    await page.keyboard.press('v');
+    expect((await st(page)).preview).toBeNull();
+    await page.keyboard.press('a');
+    await expect(page.getByTestId('align-dx')).toHaveValue('0');
+    const s = await st(page);
+    expect(s.preview).toBeNull();
+    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0].cx).toBe(170);
+    expect(s.history.past.length).toBe(n0);
     expect(errors).toEqual([]);
   });
 });
