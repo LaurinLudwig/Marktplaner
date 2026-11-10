@@ -89,6 +89,22 @@ const blur = (page: Page) => page.evaluate(() => (document.activeElement as HTML
 
 const overviewTab = (page: Page) => tabbar(page).getByTestId('verbund-tab');
 const past = async (page: Page) => (await st(page)).history.past.length;
+/**
+ * Seestraße in der Gesamtansicht (#27, Entscheidung 2026-11-10): Ausrichten ändert nur die Lage im Verbund
+ * (`groups[0].placements.S`, welt = R(rot) · lokal + (x, y)), der Inhalt der Page bleibt in ihren eigenen Koordinaten.
+ * Die Prüfungen der Ausrichten-Tests rechnen deshalb mit der Lage. Angepasst vom Entwickler.
+ */
+function worldS(s: any) {
+  const pg = s.project.pages.find((p: any) => p.id === 'S');
+  const pl = s.project.groups[0].placements?.S ?? { x: 0, y: 0, rot: 0 };
+  const a = (pl.rot * Math.PI) / 180;
+  const [c, n] = [Math.cos(a), Math.sin(a)];
+  const map = (o: any) => ({ ...o, cx: c * o.cx - n * o.cy + pl.x, cy: n * o.cx + c * o.cy + pl.y, rot: (((o.rot + pl.rot) % 360) + 360) % 360 });
+  return { ...pg, areas: pg.areas.map(map), stands: pg.stands.map(map) };
+}
+const near = (o: any, e: { cx?: number; cy?: number; rot?: number }) => {
+  for (const [k, v] of Object.entries(e)) expect(o[k], k).toBeCloseTo(v, 6);
+};
 const standsOf = async (page: Page, id: string) => ((await st(page)).project.pages.find((p: any) => p.id === id)?.stands ?? []).map((s: any) => s.id);
 const firstId = async (page: Page) => (await st(page)).project.pages[0].id as string;
 
@@ -291,7 +307,7 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     await expect(page.getByTestId('align-dx')).toHaveValue('-100');
     await expect(page.getByTestId('align-dy')).toHaveValue('0');
     let s = await st(page);
-    const sp = () => s.project.pages.find((p: any) => p.id === 'S');
+    const sp = () => worldS(s);
     expect(sp().areas[0]).toMatchObject({ cx: 170, cy: -5 });
     // Vorschau der Objekte: SE-02 steht schon an der neuen Stelle
     expect(s.preview.rects.se2.cx).toBeCloseTo(47.5, 6);
@@ -307,10 +323,12 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     expect(await past(page)).toBe(n0 + 1);
     s = await st(page);
     // Drehung um die Mitte des Platzes (170|−5), danach verschoben: Grundfläche bei (70|−5), SE-02 bei (66,5|−27,5)
-    expect(sp().areas[0]).toMatchObject({ cx: 70, cy: -5, rot: 90 });
+    near(sp().areas[0], { cx: 70, cy: -5, rot: 90 });
     expect(sp().stands[0].cx).toBeCloseTo(66.5, 6);
     expect(sp().stands[0].cy).toBeCloseTo(-27.5, 6);
     expect(s.project.pages[0].areas[0]).toMatchObject({ cx: 25 });
+    // #27: die Seestraße selbst bleibt in ihren eigenen Koordinaten (Einzelansicht ungedreht)
+    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0]).toMatchObject({ cx: 170, cy: -5, rot: 0 });
     await expect(page.getByTestId('align-done')).toBeDisabled();
     await blur(page);
     await expect(page.getByTestId('align-rot')).toHaveValue('0');
@@ -320,7 +338,7 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     expect(s.history.past.length).toBe(n0);
     await page.keyboard.press(`${MOD}+Shift+z`);
     s = await st(page);
-    expect(sp().areas[0]).toMatchObject({ cx: 70, rot: 90 });
+    near(sp().areas[0], { cx: 70, rot: 90 });
     expect(errors).toEqual([]);
   });
 
@@ -354,7 +372,7 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     await expect(page.getByTestId('align-rot')).toHaveValue('0');
     s = await st(page);
     expect(s.preview).toBeNull();
-    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0]).toMatchObject({ cx: 170, rot: 0 });
+    expect(worldS(s).areas[0]).toMatchObject({ cx: 170, rot: 0 });
     expect(s.history.past.length).toBe(n0);
     // Esc verwirft ebenso
     await dragWorld(page, { x: 147.5, y: -1.5 }, { x: 140, y: -1.5 });
@@ -368,7 +386,7 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     await expect(page.locator('.toast').last()).toContainText('Änderungen an „Seestraße“ verworfen');
     await expect(page.getByTestId('align-dx')).toHaveValue('0');
     s = await st(page);
-    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0].cx).toBe(170);
+    expect(worldS(s).areas[0].cx).toBe(170);
     expect(s.history.past.length).toBe(n0);
     expect(errors).toEqual([]);
   });
@@ -445,7 +463,7 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     await expect(page.getByTestId('align-pairs')).toHaveCount(0);
     let s = await st(page);
     expect(s.preview).toBeNull();
-    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0].cx).toBe(170);
+    expect(worldS(s).areas[0].cx).toBe(170);
     expect(s.history.past.length).toBe(n0);
 
     // Drei exakte Paare (das dritte auf dem verschobenen Plan), „Anwenden“ = ein Undo-Schritt
@@ -458,7 +476,7 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     expect(await past(page)).toBe(n0 + 1);
     await expect(page.getByTestId('align-pairs')).toHaveCount(0);
     s = await st(page);
-    const sp = () => s.project.pages.find((p: any) => p.id === 'S');
+    const sp = () => worldS(s);
     expect(sp().areas[0].cx).toBeCloseTo(70, 6);
     expect(sp().areas[0].cy).toBeCloseTo(-5, 6);
     expect(sp().areas[0].rot).toBe(0);
@@ -526,7 +544,7 @@ test.describe('#15 Gesamtansicht (Teil b)', () => {
     await expect(page.getByTestId('align-dx')).toHaveValue('0');
     const s = await st(page);
     expect(s.preview).toBeNull();
-    expect(s.project.pages.find((p: any) => p.id === 'S').areas[0].cx).toBe(170);
+    expect(worldS(s).areas[0].cx).toBe(170);
     expect(s.history.past.length).toBe(n0);
     expect(errors).toEqual([]);
   });
