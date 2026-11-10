@@ -994,7 +994,8 @@ Entscheidungen 2026-11-03 und 2026-11-06 (#15). Mehrere Festplätze hängen räu
 Rand (Unterstadt: Müllerwiese, Ziegelturm, Bleiche, Schifftor, Seestraße und Escher; dazu „Oberstadt“ aus Obermarkt und
 Untermarkt). Im alten Illustrator-Plan erscheinen Nachbarstände deshalb doppelt. Umsetzung in Teilen: **a** (Kern,
 Dateiformat, Verbund verwalten, Lage, Nachbarn in der Einzelansicht) und **b** (Gesamtansicht mit Bearbeiten, Werkzeug
-„Ausrichten“) und **c** (Blatt und PDF der Gesamtansicht, Nachbarn im PDF einer Einzelansicht) sind umgesetzt.
+„Ausrichten“) und **c** (Blatt und PDF der Gesamtansicht, Nachbarn im PDF einer Einzelansicht) sind umgesetzt;
+„Ausrichten“ wurde mit #26 überarbeitet (Transparenz, beliebig viele Punktpaare, manuelle Sitzung).
 
 **Grundsätze.**
 - **Gemeinsames Koordinatensystem:** Beim Einrichten wird jede Page einmal samt Hintergrund und allen Objekten an ihre
@@ -1099,28 +1100,60 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   mit den gesperrten Funktionen und Links zu den Plätzen; darunter der Bereich „Blatt“ des Verbunds (Teil c) und die
   Ebenen. Den Bereich „Strom“ gibt es dort nicht.
 
-**Werkzeug „Ausrichten“** (A, nur in der Gesamtansicht; Entscheidung 2026-11-03):
+**Werkzeug „Ausrichten“** (A, nur in der Gesamtansicht; Entscheidung 2026-11-03, überarbeitet mit #26 nach Laurins
+Test):
 - **Platz wählen:** Klick auf eines seiner Objekte (auch auf gesperrten, sichtbaren Ebenen) oder Auswahl im Panel des
-  Werkzeugs; der gewählte Platz ist gestrichelt umrandet (Hüllrechteck seiner Objekte).
-- **Ziehen** verschiebt die ganze Page samt Hintergrund (wie „Lage“): Vorschau während des Ziehens (Objekte, Hintergrund,
-  Freiflächen und Warnungen live), beim Loslassen ein Undo-Schritt (Verschiebung auf 0,01 m). Ziehen auf einem Objekt
-  eines anderen Platzes wählt diesen und verschiebt ihn; Bewegungen bis 3 px zählen als Klick. Esc bricht ab.
-- **Drehen um … °** (Zahlenfeld im Panel, im Uhrzeigersinn um die Mitte des Platzes wie „Lage“, Drehung wie eingegeben,
-  ohne Rundung auf 0,1°): Enter oder „Drehen“ = ein Undo-Schritt; das Feld leert sich danach.
-- **2-Punkt-Ausrichtung** („2 Punkte …“, Vorlage: Kalibrieren): A1 auf diesem Plan, passender Punkt B1 auf dem
-  Referenzplan, dann A2 und B2. Fang an Grundflächen-Ecken und Standmitten sichtbarer Ebenen (A an diesem Platz, B an den
-  anderen; Cmd/Strg = ohne Fang, z. B. für Gebäudeecken im Hintergrund). Ergebnis: Drehung um den Winkel zwischen A1→A2
-  und B1→B2, Verschiebung der Mitte von A1/A2 auf die Mitte von B1/B2; der **Maßstab bleibt 1** (gleiche
-  Stadtgrundkarte). Weichen die Abstände A1–A2 und B1–B2 um mehr als 0,01 m ab, nennt das Panel beide Abstände und die
-  Abweichung in m (der Fehler verteilt sich zur Hälfte auf jedes Paar). Vorschau bis „Anwenden“ (ein Undo-Schritt); Esc
-  oder „Abbrechen“ verwirft die Punkte. Fallen die Punkte eines Plans zusammen, beginnt die Auswahl mit Hinweis neu.
-- **Genauigkeit:** Drehfeld und 2-Punkt-Ausrichtung runden Drehung und Verschiebung nicht (nur Gleitkomma-Reste unter
-  10⁻⁸ entfallen, wie bei den bewegten Positionen): Mit 0,1° läge ein Punkt 200 m vom Drehpunkt bis etwa 0,17 m daneben;
-  so treffen beide Punktpaare auf Bruchteile eines Millimeters. Die Objekte bleiben zueinander starr (keine Rundung je
-  Objekt, also keine Fehlwarnungen). Drehungen der Objekte, des Hintergrunds und der Nordrichtung bleiben beim
-  Speichern und Laden unverändert erhalten. Wird ein Objekt danach bearbeitet (Ziehen, Felder), rundet es wie immer
-  beim Übernehmen auf 0,01 m und 0,1° (§ Begriffe). „Lage“ (Zahlenfelder in den Projekteinstellungen) und Ziehen mit
-  „Ausrichten“ runden weiter auf 0,1° bzw. 0,01 m.
+  Werkzeugs; der gewählte Platz ist gestrichelt umrandet (Hüllrechteck seiner Objekte, folgt der Vorschau).
+- **Transparenz:** Solange „Ausrichten“ aktiv ist, liegt der Hintergrund des gewählten Platzes **oben** und
+  halbtransparent, damit Merkmale beider Pläne (Gebäudeecken, Bordsteine) übereinander sichtbar sind; die anderen
+  Plätze bleiben deckend und in der Reihenfolge des Verbunds. Regler **„Deckkraft“** im Panel (10–100 %, Vorgabe 50 %);
+  nur Anzeige: nicht in der Projektdatei, kein Undo-Schritt, kein Einfluss auf PDF oder Hintergrund-Einstellungen. Der
+  Wert gilt für die Sitzung (bleibt bei Werkzeugwechsel erhalten). Mit einem anderen Werkzeug ist alles wieder deckend.
+- **Panel:** Platzwahl, Segment-Umschalter **„Manuell“ / „Punkte“**, „Deckkraft“, dann die Felder und Knöpfe des
+  Modus; Erklärungen als Tooltip. Knöpfe und Beschriftungen brechen nicht um; bei schmalem Fenster bricht das Panel
+  zwischen den Gruppen in weitere Zeilen um (es darf so breit werden wie die Zeichenfläche).
+- **Vorschau und Übernehmen:** Beide Modi zeigen bis zum Übernehmen nur eine Vorschau (eine Transformation des Platzes:
+  Objekte, von Hand verschobene Beschriftungen – mitgedreht –, Hintergrund, Freiflächen und Warnungen live). Übernommen
+  wird als **ein** Undo-Schritt wie bei „Lage“ (ganze Page samt Hintergrund); Esc oder „Abbrechen“ verwirft. Werkzeug-
+  oder Seitenwechsel verwirft offene Änderungen ebenfalls. Enter (außerhalb von Feldern) übernimmt.
+- **Manuell (Sitzung):** **Ziehen** verschiebt den Platz (Verschiebung je Ziehen auf 0,01 m; Bewegungen bis 3 px zählen
+  als Klick). Der **Drehgriff** (Kreis über der Mitte des oberen Rands der Platz-Hülle, dreht mit) dreht um die Mitte des
+  Platzes (wie „Lage“; auf 0,1°, mit **Shift** in 15°-Schritten der gesamten Drehung). Die Felder **X / Y** (m) und
+  **Drehung** (° im Uhrzeigersinn) zeigen die gesammelte Verschiebung und Drehung und lassen sich eintippen (wirken
+  sofort in der Vorschau; Esc im Feld stellt den Wert vor dem Bearbeiten wieder her). Ziehen, Griff und Felder lassen
+  sich beliebig oft kombinieren; eine Drehung wirkt immer um die aktuelle (verschobene) Mitte. **„Fertig“** (oder Enter)
+  übernimmt Verschiebung und Drehung zusammen als einen Undo-Schritt; „Abbrechen“ bzw. Esc verwirft (Esc während eines
+  Ziehens bricht nur dieses Ziehen ab).
+- **Platzwechsel bei offenen Änderungen** (Entscheidung #26): Solange Änderungen offen sind, wählt ein Klick auf der
+  Zeichenfläche keinen anderen Platz – Ziehen bewegt von überall den gewählten (so geht keine Arbeit durch einen
+  Fehlklick verloren). Ein Wechsel über die Platzwahl im Panel (oder des Modus) ist eine bewusste Handlung: Die offenen
+  Änderungen werden ohne Rückfrage verworfen, ein Hinweis nennt das („Änderungen an „Seestraße“ verworfen“). Eine
+  Rückfrage hätte bei jedem Wechsel unterbrochen, obwohl die Vorschau ohnehin nicht gespeichert ist und schnell
+  wiederholt werden kann.
+- **Punkte** (ersetzt die frühere 2-Punkt-Ausrichtung): beliebig viele Paare nacheinander setzen – A_i auf dem
+  gewählten Plan (so, wie er gerade angezeigt wird, also auch auf der Vorschau), dann der passende Punkt B_i auf dem
+  Referenzplan (andere Plätze). Fang an Grundflächen-Ecken und Standmitten sichtbarer Ebenen (A am gewählten Platz, B an
+  den anderen; Cmd/Strg = ohne Fang, z. B. für Gebäudeecken im Hintergrund). Ab 2 Paaren Live-Vorschau mit der
+  **bestpassenden starren Bewegung** (Drehung und Verschiebung, **Maßstab 1**, kleinste Fehlerquadrate; Schwerpunkt der
+  A auf Schwerpunkt der B, Winkel θ = atan2(Σ p×q, Σ p·q) der zentrierten Punkte). Bei genau 2 Paaren ist das die frühere
+  2-Punkt-Ausrichtung (Mitte auf Mitte, Winkel zwischen A1→A2 und B1→B2; abweichende Abstände verteilen sich zur Hälfte
+  auf jedes Paar). Auf der Zeichenfläche: nummerierte Marken A_i (an ihrer Vorschau-Position) und B_i mit
+  Verbindungslinie (deren Länge die Restabweichung zeigt). Im Panel je Paar Nummer, **Restabweichung** in m und ×
+  (Paar entfernen), dazu Drehung, **Mittel** (quadratisches Mittel) und **max** der Abweichungen sowie „Alle Paare
+  löschen“. **Auffälliges Paar** (ab 4 Paaren): das Paar, ohne das die übrigen am besten zusammenpassen, wenn es von
+  deren Lösung mehr als achtmal so weit abweicht, wie nach ihrer Streuung zu erwarten wäre (mindestens 0,01 m); das
+  Panel nennt es mit der mittleren Abweichung ohne es („prüfen oder entfernen“), Marke und Eintrag sind hervorgehoben.
+  Ein fester Faktor auf die gemeinsame mittlere Abweichung (etwa „> 3 × Mittel“) taugt nicht: Die größte Abweichung ist
+  höchstens √n-mal die mittlere, unter 10 Paaren also nie dreimal so groß; mit 3 Paaren lässt sich ein falsches Paar
+  nicht verlässlich erkennen. Fallen alle A (bzw. alle B) zusammen, gibt es keine Richtung (Hinweis, kein „Anwenden“).
+  **„Anwenden“** (oder Enter) = ein Undo-Schritt, danach sind die Paare gelöscht.
+- **Genauigkeit:** Punkte und manuelle Sitzung runden Drehung und Verschiebung beim Übernehmen nicht (nur
+  Gleitkomma-Reste unter 10⁻⁸ entfallen, wie bei den bewegten Positionen): Mit 0,1° läge ein Punkt 200 m vom Drehpunkt bis
+  etwa 0,17 m daneben; so treffen exakte Punktpaare auf Bruchteile eines Millimeters (≤ 5 mm). Die Objekte bleiben
+  zueinander starr (keine Rundung je Objekt, also keine Fehlwarnungen). Drehungen der Objekte, des Hintergrunds und der
+  Nordrichtung bleiben beim Speichern und Laden unverändert erhalten. Wird ein Objekt danach bearbeitet (Ziehen, Felder),
+  rundet es wie immer beim Übernehmen auf 0,01 m und 0,1° (§ Begriffe). „Lage“ (Zahlenfelder in den
+  Projekteinstellungen) rundet weiter auf 0,01 m bzw. 0,1°.
 
 **PDF der Gesamtansicht** (Teil c): Der Verbund hat ein eigenes Blatt (z. B. Übersichtsplan „Unterstadt“), gespeichert in
 seinen Feldern `sheet`, `titleBlock`, `titleBlockText`, `legend`, `scaleBar`, `northArrow` und `layers`.
@@ -1181,7 +1214,8 @@ ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
   Infrastruktur-Objekte (als aufklappbare Werkzeuggruppe: der Knopf zeigt den zuletzt genutzten Typ, Klick auf das
   Dreieck, Rechtsklick oder langes Drücken öffnet die Liste aller Typen), Messwerkzeug, Kalibrierung,
   Schriftfeld, sowie Umschalter für Fang (Vorderkante, Raster, Nachbarstände; einzeln
-  schaltbar), Raster ein/aus. Nur in der Gesamtansicht eines Verbunds: „Ausrichten“ (§12); dort gesperrte Werkzeuge
+  schaltbar), Raster ein/aus. Nur in der Gesamtansicht eines Verbunds: „Ausrichten“ (§12, Modi „Manuell“ und
+  „Punkte“); dort gesperrte Werkzeuge
   (Kalibrieren, Schriftfeld, Raster ein/aus) sind ausgegraut und nennen im Tooltip den Grund.
 - **Mitte: Zeichenfläche** mit Zoom (Mausrad, Strg/Cmd + / −, „an Fenster anpassen“) und Pan
   („An Fenster anpassen“, Strg/Cmd+0, Nacharbeit M8 2026-10-14: Objekte, Hintergrund und, solange die Ebene „Blatt“
@@ -1212,7 +1246,9 @@ ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
   der Gruppe (zyklisch, wie in Illustrator), T = Schriftfeld, Shift+L = Legende ein/aus. Der zuletzt genutzte Typ ist
   eine Ansichtseinstellung (kein Undo-Schritt, nur für die Sitzung).
 - PDF-Export (M8): Cmd/Strg+P öffnet den Export-Dialog (wie „Drucken“ in Illustrator), auf allen Pages.
-- Verbund (#15): A = Werkzeug „Ausrichten“ (nur in der Gesamtansicht); F2 benennt dort den Verbund um.
+- Verbund (#15): A = Werkzeug „Ausrichten“ (nur in der Gesamtansicht); F2 benennt dort den Verbund um. In
+  „Ausrichten“ (#26): Shift am Drehgriff = 15°-Schritte, Cmd/Strg beim Setzen eines Punktes = ohne Fang, Enter =
+  „Fertig“ bzw. „Anwenden“, Esc verwirft die offenen Änderungen bzw. Punktpaare.
 - Start-Page (M6): Tab und Shift+Tab springen dort zwischen Bedienelementen (Panels ausblenden gibt es nur auf
   Festplatz-Pages). Tasten der Geschäftstabelle siehe §7.
 - Textfelder (korrigiert 2026-10-12, Laurin): Solange ein Textfeld den Fokus hat, greifen nur Speichern, Speichern
@@ -1257,8 +1293,9 @@ ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
     Seiten- oder Steuerungsleiste. Jeder einzelne Pfeiltasten-Druck ist ein eigener Undo-Schritt; nur
     eine gedrückt gehaltene Taste (Tastenwiederholung) ergibt zusammen einen Schritt (QA-M3-05). Das gilt auch in der
     Gesamtansicht eines Verbunds, wenn eine Geste Objekte mehrerer Pages ändert (§12); ebenso ist Umhängen und jede
-    Ausrichtung („Ausrichten“, „Lage“) ein Schritt.
-  - Esc bricht eine laufende Interaktion (Ziehen, Aufziehen, Messen, Kalibrieren) immer zuerst ab, erst
+    Ausrichtung („Lage“; bei „Ausrichten“ „Fertig“ bzw. „Anwenden“ – alle Ziehen und Drehungen davor sind nur
+    Vorschau, #26) ein Schritt.
+  - Esc bricht eine laufende Interaktion (Ziehen, Aufziehen, Messen, Kalibrieren, Ausrichten) immer zuerst ab, erst
     danach greifen globale Kurzbefehle wie „Auswahl aufheben“ (QA-M3-01).
 - Oberfläche auf Deutsch, auch alle Fehlermeldungen.
 - Zahleneingaben: Komma als Dezimaltrennzeichen, Punkt wird ebenfalls als Dezimaltrennzeichen
