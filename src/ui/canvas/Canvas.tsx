@@ -601,16 +601,18 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   );
   const bg = page.background;
   const bgOverride = tool === 'align' ? alignTool.backgrounds : null;
-  const memberBgs = useMemo(
-    () =>
-      verbund
-        ? memberPages({ pages }, verbund).flatMap((m) => {
-            const b = bgOverride && m.id in bgOverride ? bgOverride[m.id] : m.background;
-            return b ? [{ id: m.id, bg: b }] : [];
-          })
-        : [],
-    [verbund, pages, bgOverride],
-  );
+  // „Ausrichten“ (#26): Der Hintergrund des gewählten Platzes liegt oben und halbtransparent (nur Anzeige)
+  const dim = tool === 'align' ? alignTool.dim : null;
+  const memberBgs = useMemo(() => {
+    if (!verbund) return [];
+    const list = memberPages({ pages }, verbund).flatMap((m) => {
+      const b = bgOverride && m.id in bgOverride ? bgOverride[m.id] : m.background;
+      return b ? [{ id: m.id, bg: b, fade: dim?.pageId === m.id ? dim.opacity : 1 }] : [];
+    });
+    const i = dim ? list.findIndex((x) => x.id === dim.pageId) : -1;
+    if (i >= 0) list.push(...list.splice(i, 1));
+    return list;
+  }, [verbund, pages, bgOverride, dim]);
   const origin = { x: view.tx, y: view.ty };
 
   const classes = ['stage', `tool-${tool}`];
@@ -639,11 +641,11 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
         </WorldLayer>
       )}
       {/* Gesamtansicht (#15): Hintergründe der Mitglieder übereinander, in der Reihenfolge des Verbunds (keine Masken);
-          „Ausrichten“ zeigt den bewegten Hintergrund als Vorschau */}
+          „Ausrichten“ zeigt den bewegten Hintergrund als Vorschau, der gewählte Platz liegt dabei oben und transparent */}
       {memberBgs.length > 0 && page.layers.background.visible && (
         <WorldLayer className="layer-plan" rv={rv} view={view} size={size}>
-          {memberBgs.map(({ id, bg: b }) => (
-            <BackgroundLayer key={id} background={b} bytes={assets[b.assetId]} view={rv} viewport={size} selected={false} interactive={false} />
+          {memberBgs.map(({ id, bg: b, fade }) => (
+            <BackgroundLayer key={id} background={b} bytes={assets[b.assetId]} view={rv} viewport={size} selected={false} interactive={false} fade={fade} pageId={id} />
           ))}
         </WorldLayer>
       )}

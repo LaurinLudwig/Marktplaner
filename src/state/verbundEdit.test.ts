@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createPage, createProject, createVerbund } from '../core/model/defaults';
 import type { Area, FestplatzPage, Project, Stand } from '../core/model/types';
 import { createArea, createStand } from '../core/objects';
-import { applyTransform, pageEnv, verbundRef } from '../core/verbund';
+import { applyTransform, pagePivot, pageEnv, transformPageContent, verbundRef } from '../core/verbund';
 import { decodeProjectFile, encodeProjectFile } from '../core/fileFormat';
 import { cachedWarningData, countWarnings } from '../core/warnings';
-import { twoPointTransform } from '../core/verbundView';
+import { alignPreview, fitRigid, NO_SESSION, sessionMove, sessionRotate, sessionTransform } from '../core/verbundView';
 import {
   activePage,
   addArea,
@@ -244,13 +244,12 @@ describe('#15 Ausrichten', () => {
     expect(pageById('B').stands[0]).toMatchObject({ cx: 30, cy: 5 });
   });
 
-  it('2-Punkt-Ausrichtung: Ecken des Ziegelturms auf die passenden Punkte, Drehung und Verschiebung', () => {
-    // Ziegelturm ist um 90° gedreht und verschoben: seine Grundflächen-Ecken (15|0) und (35|0) sollen auf (40|20) und (40|40)
-    const a1 = { x: 15, y: 0 };
-    const a2 = { x: 35, y: 0 };
-    const b1 = { x: 40, y: 20 };
-    const b2 = { x: 40, y: 40 };
-    const r = twoPointTransform(a1, a2, b1, b2)!;
+  it('Punkte (2 Paare): Ecken des Ziegelturms auf die passenden Punkte, Drehung und Verschiebung', () => {
+    // Ziegelturm soll um 90° gedreht und verschoben werden: seine Grundflächen-Ecken (15|0) und (35|0) auf (40|20) und (40|40)
+    const r = fitRigid([
+      { a: { x: 15, y: 0 }, b: { x: 40, y: 20 } },
+      { a: { x: 35, y: 0 }, b: { x: 40, y: 40 } },
+    ])!;
     expect(r.rot).toBeCloseTo(90, 6);
     expect(movePageContent('B', r.t)).toBe(true);
     const ar = pageById('B').areas[0]!;
@@ -260,13 +259,89 @@ describe('#15 Ausrichten', () => {
     expect(ar.cy).toBeCloseTo(expected.y, 1);
     expect(ar.rot).toBe(90);
   });
+
+  it('Punkte (4 Paare): „Anwenden“ ist ein Undo-Schritt mit Redo; die Vorschau ändert das Projekt nicht', () => {
+    const truth = { dx: -12.5, dy: 30.25, rot: 200, pivot: { x: 0, y: 0 } };
+    const as = [
+      { x: 15, y: 0 },
+      { x: 35, y: 0 },
+      { x: 35, y: 10 },
+      { x: 30, y: 5 },
+    ];
+    const r = fitRigid(as.map((a) => ({ a, b: applyTransform(truth, a) })))!;
+    const before = past();
+    const project = s().project;
+    alignPreview(pageById('B'), r.t);
+    expect(s().project).toBe(project);
+    expect(movePageContent('B', r.t, { precise: true })).toBe(true);
+    expect(past()).toBe(before + 1);
+    const moved = pageById('B');
+    const target = applyTransform(truth, { x: 30, y: 5 });
+    expect(Math.hypot(moved.stands[0]!.cx - target.x, moved.stands[0]!.cy - target.y)).toBeLessThanOrEqual(0.005);
+    expect(moved.stands[0]!.rot).toBeCloseTo(200, 6);
+    s().undo();
+    expect(pageById('B').stands[0]).toMatchObject({ cx: 30, cy: 5, rot: 0 });
+    expect(pageById('A').stands[0]!.cx).toBe(5);
+    s().redo();
+    expect(pageById('B').stands[0]!.cx).toBeCloseTo(target.x, 6);
+    expect(pageById('B').stands[0]!.cy).toBeCloseTo(target.y, 6);
+  });
+
+  it('manuelle Sitzung: mehrfach ziehen und drehen, „Fertig“ = ein Undo-Schritt wie die Einzelschritte nacheinander', () => {
+    const start = pageById('B');
+    const pivot = pagePivot(start);
+    // Ziehen, Drehgriff (90° um die bewegte Mitte), erneut ziehen, Gradfeld (+7,25°), Drehgriff mit Shift (15°-Schritte)
+    let session = sessionMove(NO_SESSION, { x: 10.004, y: -3 });
+    const c1 = { x: pivot.x + session.dx, y: pivot.y + session.dy };
+    session = sessionRotate(session, c1, { x: c1.x + 10, y: c1.y }, { x: c1.x, y: c1.y + 10 });
+    expect(session.rot).toBe(90);
+    session = sessionMove(session, { x: -2.5, y: 4 });
+    session = { ...session, rot: session.rot + 7.25 };
+    const c2 = { x: pivot.x + session.dx, y: pivot.y + session.dy };
+    const rotated = sessionRotate(session, c2, { x: c2.x + 10, y: c2.y }, { x: c2.x + 10, y: c2.y + 1 }, true);
+    expect(rotated.rot % 15).toBe(0);
+    expect(session).toEqual({ dx: 7.5, dy: 1, rot: 97.25 });
+    const t = sessionTransform(session, pivot)!;
+    // Vorschau verändert nichts; „Abbrechen“ = nichts übernehmen
+    const project = s().project;
+    alignPreview(start, t);
+    expect(s().project).toBe(project);
+    const before = past();
+    expect(movePageContent('B', t, { precise: true })).toBe(true);
+    expect(past()).toBe(before + 1);
+    // Vergleich: dieselben Schritte einzeln (Drehungen jeweils um die bewegte Mitte)
+    let seq = transformPageContent(start, { dx: 10, dy: -3, rot: 0, pivot: { x: 0, y: 0 } }, { round: false });
+    seq = transformPageContent(seq, { dx: 0, dy: 0, rot: 90, pivot: c1 }, { round: false });
+    seq = transformPageContent(seq, { dx: -2.5, dy: 4, rot: 0, pivot: { x: 0, y: 0 } }, { round: false });
+    seq = transformPageContent(seq, { dx: 0, dy: 0, rot: 7.25, pivot: c2 }, { round: false });
+    const got = pageById('B');
+    for (const [i, o] of got.stands.entries()) {
+      expect(o.cx).toBeCloseTo(seq.stands[i]!.cx, 6);
+      expect(o.cy).toBeCloseTo(seq.stands[i]!.cy, 6);
+      expect(o.rot).toBeCloseTo(seq.stands[i]!.rot, 6);
+    }
+    expect(got.areas[0]!.cx).toBeCloseTo(seq.areas[0]!.cx, 6);
+    s().undo();
+    expect(pageById('B').stands[0]).toMatchObject({ cx: 30, cy: 5, rot: 0 });
+    expect(past()).toBe(before);
+    s().redo();
+    expect(pageById('B').stands[0]!.cx).toBeCloseTo(seq.stands[0]!.cx, 6);
+  });
+
+  it('manuelle Sitzung ohne Änderung: nichts zu übernehmen', () => {
+    expect(sessionTransform(NO_SESSION, pagePivot(pageById('B')))).toBeNull();
+    expect(sessionTransform(null, { x: 0, y: 0 })).toBeNull();
+    const before = past();
+    expect(movePageContent('B', { dx: 0, dy: 0, rot: 0, pivot: { x: 0, y: 0 } }, { precise: true })).toBe(false);
+    expect(past()).toBe(before);
+  });
 });
 
 describe('#15 Ausrichten: Genauigkeit und Speichern', () => {
   /** Starre Bewegung wie `applyTransform`, für die erwarteten Zielpunkte. */
   const truth = { dx: 37.21, dy: -12.807, rot: 3.7234, pivot: { x: 0, y: 0 } };
 
-  it('2-Punkt-Ausrichtung mit Punkten in 200 m Abstand trifft beide Paare auf ≤ 0,005 m (Drehung nicht auf 0,1° gerundet)', () => {
+  it('Punkte in 200 m Abstand treffen beide Paare auf ≤ 0,005 m (Drehung nicht auf 0,1° gerundet)', () => {
     // Zwei Marker-Stände auf dem Ziegelturm, 200 m auseinander
     s().change('Marker', (p) => {
       p.pages[1]!.stands.push(stand('m1', 30, 5), stand('m2', 230, 5));
@@ -275,8 +350,11 @@ describe('#15 Ausrichten: Genauigkeit und Speichern', () => {
     const a2 = { x: 230, y: 5 };
     const b1 = applyTransform(truth, a1);
     const b2 = applyTransform(truth, a2);
-    const r = twoPointTransform(a1, a2, b1, b2)!;
-    expect(r.deviation).toBeLessThan(1e-9);
+    const r = fitRigid([
+      { a: a1, b: b1 },
+      { a: a2, b: b2 },
+    ])!;
+    expect(r.max).toBeLessThan(1e-9);
     const before = past();
     expect(movePageContent('B', r.t, { precise: true })).toBe(true);
     expect(past()).toBe(before + 1);

@@ -3,10 +3,9 @@
  * die Sicht der Zeichenfläche, die Pages, in deren Listen eine Änderung landet, die Zuordnung neuer Objekte und die
  * Rechnungen des Werkzeugs „Ausrichten“. Reine Logik ohne Oberfläche; die Grundlagen stehen in core/verbund.ts.
  */
-import { measure } from './measure';
 import type { Background, FestplatzPage, Id, Project, Rect, Vec, Verbund } from './model/types';
 import { usesAreas } from './pageAreas';
-import { assignPage, mergedPage, memberPages, ownerOf, VERBUND_PREFIX, verbundRef, type PageTransform } from './verbund';
+import { applyTransform, assignPage, mergedPage, memberPages, ownerOf, transformPageContent, VERBUND_PREFIX, verbundRef, type PageTransform } from './verbund';
 import type { PartsRect } from './footprint';
 
 type GroupsOf = { groups?: readonly Verbund[] };
@@ -154,36 +153,181 @@ export const copyFallback = (project: Pick<Project, 'pages'>, from: Readonly<Rec
 /** Reine Verschiebung einer Page (Ziehen mit dem Werkzeug „Ausrichten“). */
 export const translation = (dx: number, dy: number): PageTransform => ({ dx, dy, rot: 0, pivot: { x: 0, y: 0 } });
 
-/** Ergebnis der 2-Punkt-Ausrichtung. */
-export interface TwoPointResult {
-  /** Starre Bewegung (Maßstab 1): Mitte der Punkte auf diesem Plan → Mitte der Punkte auf dem Referenzplan, gedreht. */
-  t: PageTransform;
-  /** Drehung in Grad im Uhrzeigersinn (−180 … 180). */
-  rot: number;
-  /** Abstand der beiden Punkte auf diesem Plan bzw. auf dem Referenzplan (m). */
-  from: number;
-  to: number;
-  /** |to − from| in m: So weit passen die Punktpaare bei Maßstab 1 nicht zusammen (je Paar die Hälfte). */
-  deviation: number;
+/** Vorschau eines bewegten Platzes (`alignPreview`): für die Vorschau im Store und den Hintergrund der Zeichenfläche. */
+export interface AlignPreview {
+  /** Grundflächen, Stände und Infrastruktur an ihrer bewegten Stelle (`Preview.rects`). */
+  rects: Record<Id, Rect>;
+  /** Mitgedrehte, von Hand verschobene Beschriftungen (`Preview.labelOffsets`). */
+  labelOffsets: Record<Id, Vec>;
+  /** Bewegter Hintergrund (null = keiner). */
+  background: Background | null;
+  /** Bewegte Page (ungerundet), z. B. für den Fang an ihren Objekten. */
+  page: FestplatzPage;
 }
 
 /**
- * 2-Punkt-Ausrichtung (#15, Vorlage: Kalibrieren): Punkt a1 dieses Plans soll auf b1 des Referenzplans liegen, a2 auf
- * b2. Der Maßstab bleibt 1 (gleiche Stadtgrundkarte); gedreht wird um den Winkel zwischen a1→a2 und b1→b2, verschoben so,
- * dass die Mitte von a1/a2 auf die Mitte von b1/b2 fällt (bei abweichendem Abstand verteilt sich der Fehler gleich auf
- * beide Paare). null, wenn die Punkte eines Paares zusammenfallen (keine Richtung).
+ * Vorschau des Werkzeugs „Ausrichten“ (#26): die eine Stelle, an der eine Vorschau-Transformation je Platz auf
+ * Objekte, Beschriftungen und Hintergrund angewendet wird (`transformPageContent` ohne Rundung). Übernommen wird
+ * dieselbe Transformation mit `movePageContent`.
  */
-export function twoPointTransform(a1: Vec, a2: Vec, b1: Vec, b2: Vec): TwoPointResult | null {
-  const from = measure(a1, a2).distance;
-  const to = measure(b1, b2).distance;
-  if (from < 1e-6 || to < 1e-6) return null;
-  const angle = (p: Vec, q: Vec) => (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI;
-  let rot = angle(b1, b2) - angle(a1, a2);
-  rot = ((((rot + 180) % 360) + 360) % 360) - 180;
-  const ca = { x: (a1.x + a2.x) / 2, y: (a1.y + a2.y) / 2 };
-  const cb = { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 };
-  return { t: { dx: cb.x - ca.x, dy: cb.y - ca.y, rot, pivot: ca }, rot, from, to, deviation: Math.abs(to - from) };
+export function alignPreview(member: FestplatzPage, t: PageTransform): AlignPreview {
+  const page = transformPageContent(member, t, { round: false });
+  const rects: Record<Id, Rect> = {};
+  for (const o of [...page.areas, ...page.stands, ...page.infra]) rects[o.id] = { cx: o.cx, cy: o.cy, w: o.w, d: o.d, rot: o.rot };
+  const labelOffsets: Record<Id, Vec> = {};
+  for (const s of page.stands) if (s.labelOffset) labelOffsets[s.id] = s.labelOffset;
+  return { rects, labelOffsets, background: page.background, page };
 }
 
-/** Ab dieser Abweichung der Abstände (m) weist die 2-Punkt-Ausrichtung darauf hin (Toleranz wie bei der Geometrie). */
+/** Winkel in Grad auf (−180, 180] (Anzeige der Drehung im Werkzeug „Ausrichten“). */
+export const normRot = (deg: number) => {
+  const a = ((deg % 360) + 360) % 360;
+  return a > 180 ? a - 360 : a;
+};
+
+/**
+ * Offene Änderungen der manuellen Sitzung des Werkzeugs „Ausrichten“ (#26): Verschiebung in m und Drehung in Grad im
+ * Uhrzeigersinn um die Mitte des Platzes. Ziehen und Drehen sammeln sich hier, übernommen wird einmal (`sessionTransform`).
+ */
+export interface AlignSession {
+  dx: number;
+  dy: number;
+  rot: number;
+}
+
+export const NO_SESSION: AlignSession = Object.freeze({ dx: 0, dy: 0, rot: 0 });
+export const sessionOpen = (s: AlignSession | null): boolean => !!s && (s.dx !== 0 || s.dy !== 0 || s.rot !== 0);
+
+const round = (n: number, f: number) => Math.round(n * f) / f;
+const angleOf = (v: Vec) => (Math.atan2(v.y, v.x) * 180) / Math.PI;
+
+/** Ziehen um `delta` (m, Welt) auf die Sitzung `base`; die Verschiebung des Ziehens auf 0,01 m. */
+export const sessionMove = (base: AlignSession, delta: Vec): AlignSession => ({ ...base, dx: base.dx + round(delta.x, 100), dy: base.dy + round(delta.y, 100) });
+
+/**
+ * Drehgriff: Drehung von `from` nach `to` (Weltpunkte) um `center` (bewegte Mitte des Platzes) auf die Sitzung `base`,
+ * auf 0,1°; mit `step` (Shift) die gesamte Drehung der Sitzung auf 15°-Schritte. Ergebnis (−180 … 180].
+ */
+export function sessionRotate(base: AlignSession, center: Vec, from: Vec, to: Vec, step = false): AlignSession {
+  const delta = normRot(angleOf({ x: to.x - center.x, y: to.y - center.y }) - angleOf({ x: from.x - center.x, y: from.y - center.y }));
+  let rot = base.rot + round(delta, 10);
+  if (step) rot = Math.round(rot / 15) * 15;
+  return { ...base, rot: normRot(rot) };
+}
+
+/**
+ * Transformation der Sitzung für `pivot` (Mitte des Platzes, `pagePivot`): erst um die Mitte drehen, dann verschieben.
+ * Eine Drehung um die bewegte Mitte (pivot + d) addiert sich so einfach zur bisherigen Drehung: R(ψ)(R(φ)(p − c) + c +
+ * d − (c + d)) + c + d = R(φ + ψ)(p − c) + c + d. null ohne offene Änderungen.
+ */
+export const sessionTransform = (s: AlignSession | null, pivot: Vec): PageTransform | null => (s && sessionOpen(s) ? { dx: s.dx, dy: s.dy, rot: s.rot, pivot } : null);
+
+/** Punktpaar des Werkzeugs „Ausrichten“: `a` auf dem gewählten Plan soll auf `b` (Referenz) liegen. */
+export interface PointPair {
+  a: Vec;
+  b: Vec;
+}
+
+/** Ergebnis der Ausrichtung nach Punktpaaren (`fitRigid`). */
+export interface RigidFit {
+  /** Starre Bewegung (Maßstab 1): Schwerpunkt der A-Punkte → Schwerpunkt der B-Punkte, gedreht um ihn. */
+  t: PageTransform;
+  /** Drehung in Grad im Uhrzeigersinn (−180 … 180]. */
+  rot: number;
+  /** Restabweichung je Paar in m: Abstand zwischen bewegtem A und B. */
+  residuals: number[];
+  /** Mittlere (quadratisch gemittelte) und größte Restabweichung in m. */
+  rms: number;
+  max: number;
+  /**
+   * Auffälliges Paar oder null (Hinweis „prüfen oder entfernen“): ab `ALIGN_OUTLIER_MIN_PAIRS` Paaren das Paar, ohne das
+   * die übrigen am besten zusammenpassen, wenn es von deren Lösung mehr als `ALIGN_OUTLIER_FACTOR`-mal so weit abweicht,
+   * wie nach ihrer Streuung zu erwarten wäre (mindestens `ALIGN_DEVIATION_HINT`). `rmsWithout` = mittlere Abweichung
+   * der übrigen ohne dieses Paar.
+   */
+  outlier: { index: number; rmsWithout: number } | null;
+}
+
+/** Ab dieser Abweichung (m) gilt etwas als Abweichung (Toleranz wie bei der Geometrie). */
 export const ALIGN_DEVIATION_HINT = 0.01;
+/**
+ * Faktor für ein auffälliges Paar (`RigidFit.outlier`). Ein fester Faktor auf die gemeinsame mittlere Abweichung (etwa
+ * „> 3 × RMS“) taugt bei wenigen Paaren nicht: Die größte Abweichung ist höchstens √n-mal die mittlere, unter 10 Paaren
+ * also nie dreimal so groß. Deshalb der Vergleich mit der Lösung der übrigen; 8 ergab in Simulationen mit gleichmäßig
+ * verrauschten Paaren bei 4 Paaren in etwa 5 %, ab 5 Paaren in unter 1 % der Fälle einen Fehlalarm und erkennt ein um
+ * das 30-Fache der Streuung verschobenes Paar fast immer.
+ */
+export const ALIGN_OUTLIER_FACTOR = 8;
+/** Ab so vielen Paaren prüft `fitRigid` auf ein auffälliges Paar (mit 3 Paaren lässt sich keines verlässlich erkennen). */
+export const ALIGN_OUTLIER_MIN_PAIRS = 4;
+
+/** Kleinste-Quadrate-Lösung ohne Auffälligkeiten; null bei weniger als 2 Paaren oder ohne Ausdehnung. */
+function solveRigid(pairs: readonly PointPair[]): Omit<RigidFit, 'outlier'> | null {
+  const n = pairs.length;
+  if (n < 2) return null;
+  let ax = 0, ay = 0, bx = 0, by = 0;
+  for (const { a, b } of pairs) {
+    ax += a.x;
+    ay += a.y;
+    bx += b.x;
+    by += b.y;
+  }
+  const ca = { x: ax / n, y: ay / n };
+  const cb = { x: bx / n, y: by / n };
+  // Σ p·q und Σ p×q der zentrierten Punkte: tan θ = Σ p×q / Σ p·q minimiert Σ |R(θ)p − q|²
+  let dot = 0, cross = 0, spreadA = 0, spreadB = 0;
+  for (const { a, b } of pairs) {
+    const px = a.x - ca.x, py = a.y - ca.y;
+    const qx = b.x - cb.x, qy = b.y - cb.y;
+    dot += px * qx + py * qy;
+    cross += px * qy - py * qx;
+    spreadA += px * px + py * py;
+    spreadB += qx * qx + qy * qy;
+  }
+  // Alle A (bzw. alle B) an einer Stelle: keine Richtung
+  if (spreadA < 1e-12 || spreadB < 1e-12 || Math.hypot(dot, cross) < 1e-12) return null;
+  const rot = normRot((Math.atan2(cross, dot) * 180) / Math.PI);
+  const t: PageTransform = { dx: cb.x - ca.x, dy: cb.y - ca.y, rot, pivot: ca };
+  const residuals = pairs.map(({ a, b }) => {
+    const m = applyTransform(t, a);
+    return Math.hypot(m.x - b.x, m.y - b.y);
+  });
+  const rms = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / n);
+  return { t, rot, residuals, rms, max: Math.max(...residuals) };
+}
+
+/**
+ * Ausrichtung nach beliebig vielen Punktpaaren (#26, ersetzt die 2-Punkt-Ausrichtung): die starre Bewegung (Drehung
+ * und Verschiebung, Maßstab 1, gleiche Stadtgrundkarte), die die Summe der Abstandsquadrate |T(a_i) − b_i|² minimiert
+ * (2D-Procrustes/Kabsch ohne Skalierung). Lösung in geschlossener Form: Die Verschiebung bringt den Schwerpunkt der A
+ * auf den der B; mit den zentrierten Punkten p_i = a_i − ā, q_i = b_i − b̄ ist der Winkel θ = atan2(Σ p_i × q_i,
+ * Σ p_i · q_i) (in Bildschirmkoordinaten mit y nach unten = im Uhrzeigersinn, wie `PageTransform.rot`). Ergebnis als
+ * `PageTransform` mit Drehpunkt ā: p ↦ R(θ)(p − ā) + b̄. Für genau 2 Paare ist das die frühere 2-Punkt-Ausrichtung
+ * (Mitte auf Mitte, Winkel zwischen a1→a2 und b1→b2). null bei weniger als 2 Paaren oder wenn alle A (bzw. alle B)
+ * zusammenfallen.
+ */
+export function fitRigid(pairs: readonly PointPair[]): RigidFit | null {
+  const fit = solveRigid(pairs);
+  if (!fit) return null;
+  let outlier: RigidFit['outlier'] = null;
+  if (pairs.length >= ALIGN_OUTLIER_MIN_PAIRS) {
+    // Kandidat: das Paar, ohne das die übrigen am besten zusammenpassen (kleinste mittlere Abweichung)
+    let best: { index: number; rest: Omit<RigidFit, 'outlier'> } | null = null;
+    pairs.forEach((_, index) => {
+      const rest = solveRigid(pairs.filter((__, j) => j !== index));
+      if (rest && (!best || rest.rms < best.rest.rms)) best = { index, rest };
+    });
+    const c = best as { index: number; rest: Omit<RigidFit, 'outlier'> } | null;
+    if (c) {
+      // Streuung je Achse der übrigen m Paare (Freiheitsgrade 2m − 3); ein weiterer passender Punkt läge im Mittel
+      // etwa √2·σ neben ihrer Lösung
+      const m = pairs.length - 1;
+      const sigma = Math.sqrt((c.rest.rms * c.rest.rms * m) / (2 * m - 3));
+      const pair = pairs[c.index]!;
+      const q = applyTransform(c.rest.t, pair.a);
+      const error = Math.hypot(q.x - pair.b.x, q.y - pair.b.y);
+      if (error > ALIGN_OUTLIER_FACTOR * Math.max(Math.SQRT2 * sigma, ALIGN_DEVIATION_HINT)) outlier = { index: c.index, rmsWithout: c.rest.rms };
+    }
+  }
+  return { ...fit, outlier };
+}
