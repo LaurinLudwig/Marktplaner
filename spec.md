@@ -1115,7 +1115,9 @@ Test):
 - **Vorschau und Übernehmen:** Beide Modi zeigen bis zum Übernehmen nur eine Vorschau (eine Transformation des Platzes:
   Objekte, von Hand verschobene Beschriftungen – mitgedreht –, Hintergrund, Freiflächen und Warnungen live). Übernommen
   wird als **ein** Undo-Schritt wie bei „Lage“ (ganze Page samt Hintergrund); Esc oder „Abbrechen“ verwirft. Werkzeug-
-  oder Seitenwechsel verwirft offene Änderungen ebenfalls. Enter (außerhalb von Feldern) übernimmt.
+  oder Seitenwechsel verwirft offene Änderungen ebenfalls; die Hand (Leertaste) nicht. Enter übernimmt (auch in den
+  Feldern X/Y/Drehung; nicht im Regler „Deckkraft“ und in der Platzwahl – dort greifen Enter und Esc erst nach einem
+  Klick auf die Zeichenfläche).
 - **Manuell (Sitzung):** **Ziehen** verschiebt den Platz (Verschiebung je Ziehen auf 0,01 m; Bewegungen bis 3 px zählen
   als Klick). Der **Drehgriff** (Kreis über der Mitte des oberen Rands der Platz-Hülle, dreht mit) dreht um die Mitte des
   Platzes (wie „Lage“; auf 0,1°, mit **Shift** in 15°-Schritten der gesamten Drehung). Die Felder **X / Y** (m) und
