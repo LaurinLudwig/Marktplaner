@@ -21,7 +21,8 @@ Freiflächen-Logik steht in `prototype/freiflaechen.html`.
 - **Festplatz-Page**: eine Page pro Festplatz mit eigener Zeichenfläche. Pages lassen sich
   anlegen, umbenennen, umsortieren (Drag & Drop in der Tab-Leiste), duplizieren und löschen.
 - **Festplatz-Verbund** (#15): Pages, die räumlich zusammenhängen und sich am Rand überschneiden (z. B. „Unterstadt“),
-  in einem gemeinsamen Koordinatensystem. Eine Page gehört zu höchstens einem Verbund. Ein Objekt gehört genau der Page,
+  jede in ihrem eigenen Koordinatensystem; der Verbund speichert je Platz seine **Lage** (Verschiebung und Drehung, #27).
+  Eine Page gehört zu höchstens einem Verbund. Ein Objekt gehört genau der Page,
   in deren Liste es steht (Besitz); auf den anderen Plätzen des Verbunds erscheint es als **Nachbar** (§12). Die
   **Gesamtansicht** eines Verbunds (eigener Tab „Unterstadt (gesamt)“) zeigt alle Plätze aneinandergelegt und bearbeitbar.
 - **Hintergrundplan**: pro Festplatz-Page importiert, per Kalibrierung auf Meter skaliert.
@@ -431,8 +432,8 @@ Entscheidungen 2026-10-12 (M5-Planung).
     an B (nicht im PDF). Das Auswahlwerkzeug zieht A und B (Fang wie beim Setzen, ein Undo-Schritt, Esc bricht ab).
   - Erstes Umschalten: A und B laufen waagrecht durch die Mitte aller Stände (vom linken bis zum rechten Rand ihrer
     Hülle; ohne Stände der Grundflächen), nummeriert also wie links → rechts.
-  - Verschieben oder Drehen einer Page im Verbund (#15, §12) bewegt A und B mit (Entscheidung: A/B folgen der
-    Transformation).
+  - „Platz in der Einzelansicht drehen“ (#27, §12) dreht A und B mit (Entscheidung: A/B folgen der Transformation); die
+    Lage im Verbund zu ändern berührt sie nicht (die Page behält ihre Koordinaten).
   - Formatversion 13 (Page `numberingMode` zusätzlich `rightToLeft`, `topToBottom`, `bottomToTop`, `direction`,
     `counterClockwise`; Page `direction` mit `from` und `to` in Metern). `frontLtr` bleibt der Name für links → rechts.
 - **Uhrzeigersinn:** um einen pro Festplatz gesetzten Mittelpunkt (Klick auf die Zeichenfläche nach „Mittelpunkt
@@ -736,7 +737,7 @@ Papier festgelegt, nicht in Metern auf dem Plan. Damit sind sie im PDF bei jedem
 
 **Nordpfeil** (seit M8, Entscheidung 2026-10-12): Papier-Element, 20 × 20 mm, gestaltet wie der Nordpfeil der
 Zeichenfläche (Kreis, Nadel), gedreht um die Nordrichtung der Page (§1); in der Gesamtansicht eines Verbunds um die
-des ersten Mitglieds (wie die Zeichenfläche dort, §12). Das „N“ steht aufrecht an der Spitze.
+des ersten Mitglieds samt Drehung seiner Lage (wie die Zeichenfläche dort, §12). Das „N“ steht aufrecht an der Spitze.
 Standardposition: oben rechts, 10 mm Abstand.
 
 ### 9. PDF-Export
@@ -990,28 +991,36 @@ Löschen eines verwendeten Typs: Die App fragt nach und löscht seine Objekte mi
 **Nummerierung.** Infrastruktur-Objekte bekommen keine Platznummer und zählen in der Nummerierung nicht mit.
 
 ### 12. Verbund / Gesamtansicht
-Entscheidungen 2026-11-03 und 2026-11-06 (#15). Mehrere Festplätze hängen räumlich zusammen und überschneiden sich am
+Entscheidungen 2026-11-03, 2026-11-06 (#15) und 2026-11-10 (#27). Mehrere Festplätze hängen räumlich zusammen und überschneiden sich am
 Rand (Unterstadt: Müllerwiese, Ziegelturm, Bleiche, Schifftor, Seestraße und Escher; dazu „Oberstadt“ aus Obermarkt und
 Untermarkt). Im alten Illustrator-Plan erscheinen Nachbarstände deshalb doppelt. Umsetzung in Teilen: **a** (Kern,
 Dateiformat, Verbund verwalten, Lage, Nachbarn in der Einzelansicht) und **b** (Gesamtansicht mit Bearbeiten, Werkzeug
 „Ausrichten“) und **c** (Blatt und PDF der Gesamtansicht, Nachbarn im PDF einer Einzelansicht) sind umgesetzt;
-„Ausrichten“ wurde mit #26 überarbeitet (Transparenz, beliebig viele Punktpaare, manuelle Sitzung).
+„Ausrichten“ wurde mit #26 überarbeitet (Transparenz, beliebig viele Punktpaare, manuelle Sitzung). Mit #27 behält
+jeder Platz sein eigenes Koordinatensystem; der Verbund speichert nur die Lage (Formatversion 18).
 
 **Grundsätze.**
-- **Gemeinsames Koordinatensystem:** Beim Einrichten wird jede Page einmal samt Hintergrund und allen Objekten an ihre
-  echte Lage verschoben bzw. gedreht. Danach rechnet nichts zwischen Pages um; Zeichnen, Fang, Warnungen und Freiflächen
-  über Platzgrenzen sind dadurch einfach.
+- **Eigene Koordinaten, gespeicherte Lage** (Entscheidung Laurin 2026-11-10, #27; ersetzt Entscheidung 1 vom 2026-11-03,
+  „gemeinsames Koordinatensystem“, bei der eine Page beim Einrichten samt Inhalt real verschoben bzw. gedreht wurde –
+  nach dem Ausrichten war ein Platz dadurch auch in seiner Einzelansicht und im Einzel-PDF gedreht): Jede Page behält
+  ihr eigenes Koordinatensystem. Einzelansicht, Einzel-PDF, Nummerierung, Blatt und Raster eines Platzes verhalten sich
+  exakt wie ohne Verbund. Der Verbund speichert je Mitglied nur seine **Lage**, eine starre Abbildung (Drehung und
+  Verschiebung, Maßstab 1) in das System des Verbunds: welt = R(rot) · lokal + (x, y), `rot` in Grad im Uhrzeigersinn um
+  den Ursprung der Page. Gesamtansicht, Nachbarn, Zuordnung neuer Objekte, Freiflächen und Warnungen über Platzgrenzen
+  und das PDF der Gesamtansicht rechnen mit der Lage um (abgebildete Kopien mit denselben IDs); Änderungen aus der
+  Gesamtansicht werden in die Koordinaten des Besitzer-Platzes zurückgerechnet.
 - **Besitz:** Ein Objekt gehört der Page, in deren Liste es steht (kein eigenes Feld). Es zählt nur dort: Statistik,
   Strom, Standgeld, CSV, Nummerierung.
 - Eine Page gehört zu höchstens einem Verbund; ein Projekt kann mehrere Verbünde haben.
 - Hintergründe werden in der Gesamtansicht übereinandergelegt (gleiche Stadtgrundkarte), ohne Masken.
 
 **Verbund verwalten** (Projekteinstellungen, Bereich „Festplatz-Verbünde“): „+“ legt einen Verbund an (Name „Verbund“,
-„Verbund 2“ …, ohne Mitglieder); Name, Löschen (mit Rückfrage; die Pages bleiben an ihrer Lage), „Festplatz aufnehmen“
-(Auswahl der Pages ohne Verbund), Reihenfolge (↑/↓) und Herausnehmen. Jede Änderung ist ein Undo-Schritt. Wird eine
-Page gelöscht, verlässt sie ihren Verbund im selben Undo-Schritt. Die Seitenleiste einer Page zeigt ihren Verbund mit
-den anderen Plätzen (Bereich „Festplatz-Verbund“, nur Anzeige, mit „Gesamtansicht“ und einem Link zu den
-Projekteinstellungen). Zusätzlich über das **Tab-Menü** (Rechtsklick, Teil b):
+„Verbund 2“ …, ohne Mitglieder); Name, Löschen (mit Rückfrage; die Pages bleiben unverändert, ihre Lagen entfallen),
+„Festplatz aufnehmen“ (Auswahl der Pages ohne Verbund; Lage „keine Verschiebung, keine Drehung“), Reihenfolge (↑/↓) und
+Herausnehmen (der Inhalt der Page bleibt in ihren Koordinaten, die Lage entfällt). Jede Änderung ist ein Undo-Schritt.
+Wird eine Page gelöscht, verlässt sie ihren Verbund im selben Undo-Schritt. Die Seitenleiste einer Page zeigt ihren
+Verbund mit den anderen Plätzen (Bereich „Festplatz-Verbund“, mit „Gesamtansicht“, einem Link zu den
+Projekteinstellungen und „Platz in der Einzelansicht drehen …“). Zusätzlich über das **Tab-Menü** (Rechtsklick, Teil b):
 - Tab einer Page ohne Verbund: „Neuer Verbund mit „Seestraße““ (Name wie bei „+“, die Page als erstes Mitglied), „In
   Verbund aufnehmen ▸“ (Liste der Verbünde) und „Verbünde verwalten …“ (Projekteinstellungen);
 - Tab einer Page im Verbund: „Gesamtansicht „Unterstadt (gesamt)““, „Aus Verbund „Unterstadt“ nehmen“ und „Verbünde
@@ -1019,24 +1028,43 @@ Projekteinstellungen). Zusätzlich über das **Tab-Menü** (Rechtsklick, Teil b)
 - Tab der Gesamtansicht: „Verbund umbenennen“ (auch Doppelklick und F2), „Festplatz aufnehmen ▸“ (Pages ohne Verbund),
   „Verbünde verwalten …“ und „Verbund löschen“ (mit Rückfrage).
 
-**Lage** je Mitglied (Knopf neben dem Platz): Verschieben X/Y in m (auf 0,01 m) und Drehen in Grad im Uhrzeigersinn (auf
-0,1°) um die Mitte des Platzes (Mitte des Hüllrechtecks aus Grundflächen, Ständen und Infrastruktur; ohne sie die Mitte
-des Hintergrunds), „Anwenden“ = ein Undo-Schritt. Der Hinweis nennt, dass die ganze Page bewegt wird. Mitbewegt werden:
+**Lage** je Mitglied (Knopf neben dem Platz, #27): Die Felder zeigen und setzen die gespeicherte Lage direkt –
+**Verschiebung X / Y** in m (Verschiebung des Ursprungs der Page) und **Drehung** in Grad im Uhrzeigersinn. Eine neue
+Drehung dreht den Platz in der Gesamtansicht um seine Mitte (Mitte des Hüllrechtecks aus Grundflächen, Ständen und
+Infrastruktur in der Gesamtansicht; ohne sie die Mitte des Hintergrunds), die Verschiebung passt sich dabei an. Jede
+Eingabe ist ein Undo-Schritt; „Lage zurücksetzen“ setzt „keine Verschiebung, keine Drehung“. Eingegebene Werte werden
+nicht gerundet. Geändert wird nur die Lage: Inhalt, Einzelansicht (auch ihre Ansicht), Einzel-PDF, Nummerierung, Blatt,
+Nordrichtung und ausgeblendete Freiflächen der Page bleiben unverändert. Die Gesamtansicht behält ihre Ansicht (der
+Platz bewegt sich darin). Der Hinweis nennt das und verweist für genaues Ausrichten auf das Werkzeug „Ausrichten“.
+Gespeichert wird die Lage ungerundet (nur Gleitkomma-Reste unter 10⁻⁸ entfallen). Da nur die Lage sich ändert, wird kein
+Objekt einzeln gerundet: Stände und Grundflächen eines Platzes bleiben zueinander starr (keine Fehlwarnungen).
+
+**Platz in der Einzelansicht drehen …** (#27; Seitenleiste der Page, Bereich „Festplatz-Verbund“): dreht den Inhalt des
+Platzes in seinen eigenen Koordinaten um die eingegebene Drehung (im Uhrzeigersinn um seine Mitte) und gleicht die Lage
+so aus, dass der Platz in der Gesamtansicht und für seine Nachbarn an derselben Stelle bleibt (Lage′ = Lage ∘ T⁻¹). Ein
+Undo-Schritt. Mitgedreht werden wie früher bei „Lage“:
 - Grundflächen, Stände (Teile einer eigenen Form hängen am Stand), Infrastruktur (Linien über Mitte und Richtung,
   Marker ohne Drehung), von Hand verschobene Beschriftungen (Versatz mitgedreht);
 - der Hintergrund (auch gesperrt; die Kalibrierung bleibt gültig);
 - das Blatt: Mitte; ein **Ausschnitt** (§8) bleibt achsenparallel, nur seine Mitte wandert (Breite und Höhe bleiben;
   nach einer Drehung zeigt er also nicht mehr genau denselben Inhalt);
 - Mittelpunkt der Nummerierung im bzw. gegen den Uhrzeigersinn (die Startrichtung gilt relativ zum Norden und dreht mit
-  ihm), Start- und Zielpunkt der eigenen Richtung (A/B folgen der Bewegung), die Nordrichtung (+ Drehung);
-- die Ansicht der Page (der Drehpunkt bleibt an seiner Bildschirmstelle); Undo und Redo führen sie mit zurück bzw.
+  ihm), Start- und Zielpunkt der eigenen Richtung, die Nordrichtung (+ Drehung);
+- die Ansicht der Einzelansicht (die Mitte bleibt an ihrer Bildschirmstelle); Undo und Redo führen sie mit zurück bzw.
   wieder vor, damit der Inhalt danach nicht versetzt erscheint.
 Unverändert bleiben Papier-Elemente (mm auf dem Papier), Raster und ausgeblendete Freiflächen (Schlüssel und Intervall
-beziehen sich auf die Achse der Grundfläche). Die bewegten Positionen werden nicht auf 0,01 m gerundet (nur Gleitkomma-Reste
-unter 10⁻⁸ m entfallen): Würde jedes Objekt nach einer Drehung einzeln gerundet, verschöben sich Stand und Grundfläche
-bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die Toleranz (Fehlwarnungen, andere Freiflächen).
+beziehen sich auf die Achse der Grundfläche). Positionen und Lage werden nicht auf 0,01 m gerundet (nur Gleitkomma-Reste
+unter 10⁻⁸ entfallen): Würde jedes Objekt nach einer Drehung einzeln gerundet, verschöben sich Stand und Grundfläche bzw.
+zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die Toleranz. Zweck: bereits ausgerichtete Plätze
+wieder gerade stellen – mit Formatversion 17 ausgerichtete Plätze sind nach der Migration noch in ihrer Einzelansicht
+gedreht. Vorschläge als Knöpfe: **„Hintergrund gerade (θ°)“** (θ = −Drehung des Hintergrunds, nur wenn er gedreht ist:
+stellt die Einzelansicht so, wie sie vor dem Ausrichten war, wenn der Plan vorher gerade lag) und **„Wie in der
+Gesamtansicht (θ°)“** (θ = Drehung der Lage, nur wenn sie nicht 0 ist: danach liegt die Einzelansicht so wie in der
+Gesamtansicht und die Lage hat keine Drehung). Ohne Verbund erscheint der Bereich nicht.
 
 **Nachbarn in der Einzelansicht** (Entscheidung 2026-11-03):
+- Nachbarn liegen im Koordinatensystem der betrachteten Page (#27): lokal = Lage⁻¹ · Lage des anderen Platzes · lokal des
+  anderen. Freiflächen, Überlappung, Abstand, „außerhalb“, Fang und Darstellung rechnen damit.
 - Nachbarn einer Page sind die Stände und Infrastruktur-Objekte der anderen Plätze ihres Verbunds, deren Hüllrechteck die
   **Ausdehnung** der Page berührt: das achsenparallele Hüllrechteck ihrer wirkenden Grundflächen, Stände und
   Infrastruktur, erweitert um 10 m bzw. um den größten Mindestabstand einer Kategorie (§3, damit der Konkurrenzschutz
@@ -1063,10 +1091,11 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   ein Verbund ohne Mitglieder hat keinen. Der Tab lässt sich nicht ziehen (die Reihenfolge folgt den Pages); Ctrl+Tab
   (nächste/vorherige Page) hält dort an, Alt+1 … 9 zählen nur Festplätze. Verliert der Verbund sein letztes Mitglied
   oder wird er gelöscht, wechselt die App auf den ersten Festplatz.
-- **Zeichenfläche:** je Mitglied sein Hintergrund, übereinandergelegt in der Reihenfolge des Verbunds (spätere oben,
+- **Zeichenfläche:** je Mitglied sein Hintergrund (mit seiner Lage abgebildet), übereinandergelegt in der Reihenfolge des Verbunds (spätere oben,
   keine Masken; Ebene „Hintergrund“ des Verbunds blendet alle aus, sperrbar ist dort keiner, auswählen und verschieben
-  geht nur in der Einzelansicht), dazu die Objekte aller Mitglieder (wirkende Grundflächen, Stände, Infrastruktur). Es
-  gibt keine Nachbarn: Alle Objekte sind bearbeitbar. Raster und Nordrichtung kommen vom ersten Mitglied, Ebenen und
+  geht nur in der Einzelansicht), dazu die Objekte aller Mitglieder (wirkende Grundflächen, Stände, Infrastruktur), jeweils
+  mit der Lage ihres Platzes. Es gibt keine Nachbarn: Alle Objekte sind bearbeitbar. Das Raster kommt vom ersten Mitglied
+  (achsenparallel im System des Verbunds), die Nordrichtung vom ersten Mitglied samt Drehung seiner Lage; Ebenen und
   Ansicht vom Verbund (Ansicht in `Verbund.view` gespeichert, kein Undo-Schritt; hat der Verbund noch keine, passt die
   Gesamtansicht beim ersten Öffnen Objekte und Hintergründe ins Fenster). Dazu das Blatt des Verbunds mit seinen
   Papier-Elementen auf der Ebene „Blatt“ des Verbunds (Teil c, „PDF der Gesamtansicht“).
@@ -1078,6 +1107,17 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   Freiflächen und Fang rechnen über alle Mitglieder. Die Warnungen sind genau die der Einzelansichten zusammen:
   Überlappung, Abstand (Konkurrenzschutz) und „außerhalb“ über die Platzgrenzen, Infrastruktur („freihalten“) nur an
   Ständen desselben Platzes (Entscheidung 2026-11-07, wie bei den Nachbarn).
+- **Koordinaten beim Bearbeiten** (#27): Alles in der Gesamtansicht arbeitet im System des Verbunds; gespeichert wird je
+  Objekt im System seines Besitzer-Platzes (Umkehrung seiner Lage), erst dann wird wie immer auf 0,01 m bzw. 0,1° gerundet
+  (in den Koordinaten des Platzes; in der Gesamtansicht liegt ein bearbeitetes Objekt deshalb bis auf etwa 0,007 m genau
+  an der gezogenen Stelle, innerhalb der Toleranz). Verschieben und Pfeiltasten (die Richtung gilt auf dem Bildschirm
+  der Gesamtansicht), Größe, Drehen (gespeichert: Drehung − Drehung der Lage), Beschriftung von Hand (Versatz
+  zurückgedreht), Einfügen, Duplizieren, Alt+Ziehen, Zeichnen (Zuordnung über die Grundflächen in der Gesamtansicht),
+  Form und Teile, Zusammenfassen und Auflösen (Ergebnis im System des Besitzers). Die Felder der Steuerungs- und
+  Seitenleiste (X, Y, Drehung) zeigen und setzen in der Gesamtansicht die Werte im System des Verbunds, also so, wie
+  das Objekt dort zu sehen ist; Breite und Tiefe sind in beiden Systemen gleich. Einfügen aus der Zwischenablage legt
+  Objekte innerhalb eines Verbunds (Gesamtansicht und Mitglieder) an dieselbe Stelle der Gesamtansicht; zwischen
+  Plätzen ohne gemeinsamen Verbund an dieselben Koordinaten wie bisher.
 - **Neue Objekte** (Zeichnen, Einfügen) gehören dem Platz, auf dessen wirkender Grundfläche sie stehen (mehr als 0,01 m
   hinein; Linien und Punkte mit 0,05 m Breite). Stehen sie auf mehreren oder auf keiner, entscheidet die Auswahl **„Neue
   Objekte auf: …“** rechts in der Steuerungsleiste (nur in der Gesamtansicht; je Verbund, anfangs das erste Mitglied; nur
@@ -1086,7 +1126,8 @@ bzw. zwei bündige Stände um bis zu etwa 0,014 m gegeneinander, mehr als die To
   sonst auf das erste solche Mitglied.
 - **Verschieben ändert die Zuordnung nie.** Umhängen geht nur über das Feld **„Festplatz“** der Seitenleiste (oberstes
   Feld der Auswahl; bei verschiedenen Besitzern „verschiedene“): Die Objekte wechseln in die Liste der gewählten Page,
-  Lage und Attribute bleiben, eine Grundfläche nimmt ihre ausgeblendeten Freiflächen mit; ein Undo-Schritt, auch für
+  Stelle in der Gesamtansicht und Attribute bleiben (umgerechnet lokal A → Verbund → lokal B, ungerundet bis auf
+  Gleitkomma-Reste unter 10⁻⁸, #27), eine Grundfläche nimmt ihre ausgeblendeten Freiflächen mit; ein Undo-Schritt, auch für
   eine Mehrfachauswahl. Grundflächen kommen nicht auf eine Page ohne Grundflächen: Sind nur Grundflächen ausgewählt,
   sind solche Plätze im Feld ausgegraut („verwendet keine Grundflächen“); bei gemischter Auswahl wechseln die übrigen
   Objekte, und ein Hinweis nennt die Grundflächen, die bleiben. Das Stromlimit (§6) gilt wie beim Ändern.
@@ -1113,8 +1154,10 @@ Test):
   Modus; Erklärungen als Tooltip. Knöpfe und Beschriftungen brechen nicht um; bei schmalem Fenster bricht das Panel
   zwischen den Gruppen in weitere Zeilen um (es darf so breit werden wie die Zeichenfläche).
 - **Vorschau und Übernehmen:** Beide Modi zeigen bis zum Übernehmen nur eine Vorschau (eine Transformation des Platzes:
-  Objekte, von Hand verschobene Beschriftungen – mitgedreht –, Hintergrund, Freiflächen und Warnungen live). Übernommen
-  wird als **ein** Undo-Schritt wie bei „Lage“ (ganze Page samt Hintergrund); Esc oder „Abbrechen“ verwirft. Werkzeug-
+  Objekte, von Hand verschobene Beschriftungen – mitgedreht –, Hintergrund, Freiflächen und Warnungen live). Seit #27
+  ist die Vorschau eine **Vorschau-Lage** des Platzes (Transformation ∘ Lage), aus der Objekte und Hintergrund der
+  Gesamtansicht abgebildet werden; übernommen wird als **ein** Undo-Schritt, der nur die **Lage** ändert (der Inhalt der
+  Page und ihre Einzelansicht bleiben); Esc oder „Abbrechen“ verwirft. Werkzeug-
   oder Seitenwechsel verwirft offene Änderungen ebenfalls; die Hand (Leertaste) nicht. Enter übernimmt (auch in den
   Feldern X/Y/Drehung; nicht im Regler „Deckkraft“ und in der Platzwahl – dort greifen Enter und Esc erst nach einem
   Klick auf die Zeichenfläche).
@@ -1152,10 +1195,10 @@ Test):
 - **Genauigkeit:** Punkte und manuelle Sitzung runden Drehung und Verschiebung beim Übernehmen nicht (nur
   Gleitkomma-Reste unter 10⁻⁸ entfallen, wie bei den bewegten Positionen): Mit 0,1° läge ein Punkt 200 m vom Drehpunkt bis
   etwa 0,17 m daneben; so treffen exakte Punktpaare auf Bruchteile eines Millimeters (≤ 5 mm). Die Objekte bleiben
-  zueinander starr (keine Rundung je Objekt, also keine Fehlwarnungen). Drehungen der Objekte, des Hintergrunds und der
-  Nordrichtung bleiben beim Speichern und Laden unverändert erhalten. Wird ein Objekt danach bearbeitet (Ziehen, Felder),
-  rundet es wie immer beim Übernehmen auf 0,01 m und 0,1° (§ Begriffe). „Lage“ (Zahlenfelder in den
-  Projekteinstellungen) rundet weiter auf 0,01 m bzw. 0,1°.
+  zueinander starr (nur die Lage ändert sich, #27). Die Lage bleibt beim Speichern und Laden unverändert erhalten. Wird
+  ein Objekt danach bearbeitet (Ziehen, Felder), rundet es wie immer beim Übernehmen auf 0,01 m und 0,1° in den
+  Koordinaten seines Platzes (§ Begriffe). Die Felder der „Lage“ (Projekteinstellungen) übernehmen die eingegebenen
+  Werte ungerundet.
 
 **PDF der Gesamtansicht** (Teil c): Der Verbund hat ein eigenes Blatt (z. B. Übersichtsplan „Unterstadt“), gespeichert in
 seinen Feldern `sheet`, `titleBlock`, `titleBlockText`, `legend`, `scaleBar`, `northArrow` und `layers`.
@@ -1169,12 +1212,13 @@ seinen Feldern `sheet`, `titleBlock`, `titleBlockText`, `legend`, `scaleBar`, `n
   kommt ebenso aus allen Mitgliedern.
 - **Schriftfeld:** Projektname, als Festplatz der Name des Verbunds, Maßstab und Format seines Blatts, Freitext des
   Verbunds („Freitext der Gesamtansicht“). **Legende** über alle Mitglieder (Einträge wie §8). **Nordpfeil:** Nordrichtung
-  des ersten Mitglieds, wie Nordpfeil und Raster der Zeichenfläche der Gesamtansicht (alle Mitglieder liegen nach dem
-  Ausrichten in einem Koordinatensystem; ist das erste Mitglied genordet, sind es alle). Einstellen in dessen
-  Einzelansicht; die Seitenleiste des ausgewählten Nordpfeils sagt das.
+  des ersten Mitglieds samt Drehung seiner Lage, wie Nordpfeil der Zeichenfläche der Gesamtansicht (sind die Plätze
+  richtig ausgerichtet und ihre Nordrichtungen richtig gesetzt, ergibt jedes Mitglied dieselbe Richtung). Einstellen in
+  dessen Einzelansicht; die Seitenleiste des ausgewählten Nordpfeils sagt das.
 - **Export:** Der Export-Dialog bietet die Gesamtansicht als eigene Seite „Unterstadt (gesamt)“ vor ihren Mitgliedern an
   (Häkchen, Vorschau, Blatt des Verbunds; §9). Die Seite enthält die Objekte aller Mitglieder (keine Nachbarn, keine
-  doppelten Stände) und je Mitglied seinen Hintergrund (§9 „Mehrere Hintergründe je Seite“). Warnungen und Freiflächen
+  doppelten Stände) und je Mitglied seinen Hintergrund (§9 „Mehrere Hintergründe je Seite“), alles mit der Lage des
+  jeweiligen Platzes abgebildet (#27). Das PDF einer Einzelansicht bleibt in den Koordinaten des Platzes. Warnungen und Freiflächen
   rechnen über alle Mitglieder wie auf der Zeichenfläche. Im Anhang steht die Gesamtansicht für ihre Mitglieder (§9).
 - Ein Verbund ohne Mitglieder hat keine Gesamtansicht und damit auch keine Seite im Export.
 
@@ -1183,6 +1227,11 @@ legend, scaleBar, northArrow, layers, view }` (Papierfelder wie bei einer Page; 
 Formatversion 17 (Teil c): Ebene `neighbours` („Nachbarn“) in `layers` jeder Page und jedes Verbunds; die Migration
 16 → 17 ergänzt sie sichtbar und nicht gesperrt (bisher waren Nachbarn immer sichtbar). In der Gesamtansicht hat sie
 keine Wirkung (dort gibt es keine Nachbarn).
+Formatversion 18 (#27): `placements` je Verbund, `{ [pageId]: { x, y, rot } }` (Lage je Mitglied, ungerundet). Die
+Migration 17 → 18 gibt jedem Mitglied die Lage „keine Verschiebung, keine Drehung“ und lässt den Inhalt unverändert –
+bisher lag der Inhalt ausgerichteter Plätze schon im gemeinsamen System, die Gesamtansicht bleibt also gleich; ein beim
+Ausrichten gedrehter Platz bleibt allerdings auch in seiner Einzelansicht gedreht, bis er mit „Platz in der Einzelansicht
+drehen …“ gerade gestellt wird. Beim Laden gelten Lagen nur für Mitglieder; fehlende oder unbrauchbare sind die Identität.
 Beim Laden entfallen unbekannte und doppelte Mitglieder; eine Page in mehreren Verbünden bleibt im ersten. Ein Verbund
 ohne Mitglieder bleibt erhalten. Ältere Dateien: keine Verbünde.
 
