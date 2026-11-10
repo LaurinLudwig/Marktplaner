@@ -31,6 +31,8 @@ async function seed(page: Page, { shift = 0, verbund = false } = {}) {
             id: 'u',
             name: 'Unterstadt',
             pageIds: [z.id, 'S'],
+            // Formatversion 18 (#27): Lage je Mitglied (Testdaten kommen am Laden vorbei in den Store)
+            placements: { [z.id]: { x: 0, y: 0, rot: 0 }, S: { x: 0, y: 0, rot: 0 } },
             sheet: JSON.parse(JSON.stringify(z.sheet)),
             titleBlock: { ...z.titleBlock },
             titleBlockText: '',
