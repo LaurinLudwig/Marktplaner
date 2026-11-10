@@ -620,6 +620,8 @@ export function Canvas({ page: storedPage }: { page: FestplatzPage }) {
   const origin = { x: view.tx, y: view.ty };
 
   const classes = ['stage', `tool-${tool}`];
+  // Plan sichtbar: Beschriftungen liegen auf hellem Papier (app.css, Farben der Grundflächen- und Infrastruktur-Beschriftung)
+  if ((bg || memberBgs.length) && page.layers.background.visible) classes.push('has-bg');
   if (spaceDown || panning) classes.push('panning');
   if (panning) classes.push('dragging');
   if (altDown) classes.push('alt');

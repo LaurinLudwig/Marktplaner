@@ -646,6 +646,14 @@ kbd {
   --area-label-ink: #1a1a1a;
   --area-label-halo: rgba(255, 255, 255, 0.75);
 }
+/*
+ * Mit Plan liegen Grundflächen- und Infrastruktur-Beschriftung auf hellem Papier, auch im dunklen Thema: dunkle Schrift.
+ * Der Rand (Halo) kommt erst ab HALO_LABEL_PX; ohne ihn wäre helle Schrift beim Herauszoomen weiß auf weiß.
+ */
+.stage.has-bg {
+  --area-label-ink: #1a1a1a;
+  --area-label-halo: rgba(255, 255, 255, 0.75);
+}
 /* Objekte werden geometrisch getroffen (core/hit.ts); das DOM fängt keine Klicks ab. */
 .world * { pointer-events: none; }
 .world .area-body { fill: var(--area-fill); stroke: var(--area-stroke); stroke-width: 1; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
