@@ -5,7 +5,7 @@ import { createArea, createStand } from './objects';
 import { applyTransform, mergedPage, pageEnv, verbundRef, type PageTransform } from './verbund';
 import { createInfra } from './infra';
 import { cachedWarningData } from './warnings';
-import { alignPreview, assignObjects, copyFallback, fallbackPage, fitRigid, hasOverview, isVerbundRef, normRot, ownerPages, pageView, tabOrder, verbundOfRef, type PointPair } from './verbundView';
+import { alignPreview, assignObjects, copyFallback, fallbackPage, fitRigid, hasOverview, isVerbundRef, normRot, ownerPages, pageView, sessionMove, sessionRotate, tabOrder, verbundOfRef, type PointPair } from './verbundView';
 import { effectivePage } from './derive';
 
 const area = (id: string, cx: number, cy: number, w: number, d: number): Area => ({ ...createArea({ cx, cy, w, d, rot: 0 }), id });
@@ -275,6 +275,34 @@ describe('#26 Ausrichten nach Punktpaaren (fitRigid)', () => {
     const shown = effectivePage(page, { pageId: page.id, rects: pv.rects, labelOffsets: pv.labelOffsets });
     expect(shown.stands[0]!.labelOffset).toEqual(pv.labelOffsets.sA);
     expect(shown.stands[0]!.cx).toBe(6);
+  });
+
+  it('weit entfernte Koordinaten (Stadtgrundkarte mit großem Ursprung): exakt, ohne Auslöschung', () => {
+    const truth = { dx: -812.4, dy: 233.9, rot: -137.25, pivot: { x: 0, y: 0 } };
+    const far = pts.map((p) => ({ x: p.x + 512_000, y: p.y + 5_270_000 }));
+    const r = fitRigid(pairsOf(truth, far))!;
+    expect(normRot(r.rot + 137.25)).toBeCloseTo(0, 7);
+    expect(r.max).toBeLessThan(1e-6);
+  });
+
+  it('genau 4 Paare: ein falsches Paar wird erkannt, egal an welcher Stelle', () => {
+    const truth = { dx: 5, dy: -3, rot: 71, pivot: { x: 0, y: 0 } };
+    for (let bad = 0; bad < 4; bad++) {
+      const pairs = pairsOf(truth, pts.slice(0, 4)).map((p, i) => (i === bad ? { a: p.a, b: { x: p.b.x + 0.8, y: p.b.y + 0.6 } } : p));
+      expect(fitRigid(pairs)!.outlier).toMatchObject({ index: bad });
+    }
+  });
+
+  it('Sitzung: Drehgriff über ±180° hinweg, Shift rastet die gesamte Drehung, Ziehen auf 0,01 m', () => {
+    const c = { x: 10, y: 10 };
+    // 170° + 20° (von rechts nach unten-rechts gedreht) = −170°
+    const from = { x: 20, y: 10 };
+    const to = { x: 10 + 10 * Math.cos((20 * Math.PI) / 180), y: 10 + 10 * Math.sin((20 * Math.PI) / 180) };
+    expect(sessionRotate({ dx: 0, dy: 0, rot: 170 }, c, from, to).rot).toBeCloseTo(-170, 9);
+    // Shift: 7° gesammelt + 5° gedreht = 12° → 15°
+    const to5 = { x: 10 + 10 * Math.cos((5 * Math.PI) / 180), y: 10 + 10 * Math.sin((5 * Math.PI) / 180) };
+    expect(sessionRotate({ dx: 0, dy: 0, rot: 7 }, c, from, to5, true).rot).toBe(15);
+    expect(sessionMove({ dx: 1, dy: 2, rot: 3 }, { x: 0.12345, y: -0.006 })).toEqual({ dx: 1.12, dy: 1.99, rot: 3 });
   });
 
   it('mergedPage bleibt Grundlage: Sicht nutzt sie', () => {
