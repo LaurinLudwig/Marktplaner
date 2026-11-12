@@ -16,3 +16,6 @@ public/pdfjs
 local-fixtures/
 # Bei jedem Testlauf neu erzeugte Screenshots/Logs
 test-artifacts/
+
+# TypeScript-Zwischenstand
+*.tsbuildinfo

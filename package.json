@@ -1,7 +1,7 @@
 {
   "name": "marktplaner",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Maßstabsgetreue Marktpläne für Märkte und Feste: Freiflächen, Nummern, Strom und PDF-Export",
   "license": "AGPL-3.0-or-later",
   "author": "Laurin Ludwig",
