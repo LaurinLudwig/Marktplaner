@@ -872,9 +872,13 @@ unter den Papier-Elementen und ist in den Export-Profilen nicht abschaltbar; er 
 - Dialog: Profil (mit „Profile verwalten …“), Umfang, Anhang, Raster-Auflösung, Blatt je Seite (Page bzw.
   Gesamtansicht „Unterstadt (gesamt)“ mit dem Blatt des Verbunds), Vorschau.
 - Vorschau: das echte PDF der gewählten Seite (Rasterbilder dafür mit 72 dpi), mit pdf.js gezeichnet, aktualisiert
-  kurz nach jeder Änderung. Geöffnet in der Gesamtansicht zeigt sie die Gesamtansicht.
+  kurz nach jeder Änderung. Geöffnet in der Gesamtansicht zeigt sie die Gesamtansicht. Solange sie lädt (#33), ist die
+  alte Vorschau abgeblendet; darüber „Vorschau wird erzeugt …“ mit Arbeitsschritt (z. B. „Hintergrund Müllerwiese“,
+  „Page 1 von 1“, „Vorschau wird gezeichnet …“), Fortschrittsbalken und „noch etwa N s“. Die Restzeit stammt aus der
+  Dauer der letzten Vorschau derselben Seite (sonst irgendeiner Seite, nur in dieser Sitzung), danach aus dem bisherigen
+  Fortschritt hochgerechnet; unter 2 s steht keine Zeit.
 - Der Export läuft im Hintergrund auf einem Stand des Projekts zum Zeitpunkt des Starts; die Oberfläche bleibt
-  bedienbar. Fortschritt unten links, nicht modal („PDF: Page 3 von 8“, Balken, Prozent) mit „Abbrechen“.
+  bedienbar. Fortschritt unten links, nicht modal („PDF: Page 3 von 8“ … „PDF fertigstellen“, Balken, Prozent) mit „Abbrechen“.
 - Speichern über den Dateidialog (Desktop) bzw. als Download (Browser). Dateiname-Vorschlag
   „{Projekt} – {Profil} – {JJJJ-MM-TT}.pdf“, bei genau einer Seite „{Projekt} – {Festplatz} – {Profil} – {Datum}.pdf“
   (Gesamtansicht: „… – Unterstadt (gesamt) – …“);

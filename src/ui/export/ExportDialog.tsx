@@ -26,6 +26,7 @@ import { fixSheetScale, setSheet } from '../../state/paper';
 import { useStore } from '../../state/store';
 import { openPdf } from '../canvas/background/renderer';
 import { estimateExportBytes, sizeText } from '../../app/pdfEstimate';
+import { lastDuration, rememberDuration, remainingSeconds } from '../../app/previewEta';
 import { NumberField } from '../panels/NumberField';
 import { SheetFormatSelect } from '../panels/PaperPanels';
 import { TextField } from '../panels/TextField';
@@ -338,21 +339,29 @@ function ProfileEditor({ profile: p }: { profile: ExportProfile }) {
   );
 }
 
-/** Echte PDF-Vorschau der gewählten Page, 300 ms nach der letzten Änderung (Page, Profil oder Projekt). */
+/**
+ * Echte PDF-Vorschau der gewählten Page, 300 ms nach der letzten Änderung (Page, Profil oder Projekt). Solange sie
+ * lädt, ist die alte Vorschau abgeblendet; darüber Arbeitsschritt, Fortschritt und geschätzte Restzeit (#33).
+ */
 function Preview({ pageId, profile }: { pageId: string | null; profile: ExportProfile }) {
   const project = useStore((s) => s.project);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Anfrage = aktueller Stand; das Ergebnis gehört zu genau einer Anfrage (sonst „wird erzeugt …“)
   const request = useMemo(() => ({ pageId, profile, project }), [pageId, profile, project]);
   const [result, setResult] = useState<{ for: unknown; error: string | null } | null>(null);
+  const [progress, setProgress] = useState<{ for: unknown; share: number; label: string; start: number } | null>(null);
   useEffect(() => {
     const id = request.pageId;
     if (!id) return;
     let alive = true;
     const t = setTimeout(async () => {
+      const start = performance.now();
+      const report = (share: number, label: string) => alive && setProgress({ for: request, share, label, start });
+      report(0, 'Vorbereiten …');
       try {
-        const bytes = await previewPdf(id);
+        const bytes = await previewPdf(id, report);
         if (!alive || !bytes) return;
+        report(1, 'Vorschau wird gezeichnet …');
         const doc = await openPdf(bytes);
         const page = await doc.getPage(1);
         const canvas = canvasRef.current;
@@ -367,7 +376,10 @@ function Preview({ pageId, profile }: { pageId: string | null; profile: ExportPr
         canvas.style.width = `${Math.round(vp.width / ratio)}px`;
         canvas.style.height = `${Math.round(vp.height / ratio)}px`;
         await page.render({ canvas, viewport: vp }).promise;
-        if (alive) setResult({ for: request, error: null });
+        if (alive) {
+          rememberDuration(id, performance.now() - start);
+          setResult({ for: request, error: null });
+        }
         void doc.cleanup();
       } catch (e) {
         if (alive) setResult({ for: request, error: userMessage(e, 'Die Vorschau konnte nicht erzeugt werden.') });
@@ -380,6 +392,15 @@ function Preview({ pageId, profile }: { pageId: string | null; profile: ExportPr
   }, [request]);
   const busy = result?.for !== request;
   const error = !busy ? result?.error : null;
+  // Restzeit sekündlich nachführen, solange die Vorschau lädt
+  const [now, setNow] = useState(() => performance.now());
+  useEffect(() => {
+    if (!busy) return;
+    const i = setInterval(() => setNow(performance.now()), 250);
+    return () => clearInterval(i);
+  }, [busy]);
+  const step = progress?.for === request ? progress : null;
+  const eta = step && pageId ? remainingSeconds(Math.max(0, now - step.start), step.share, lastDuration(pageId)) : null;
   // Page oder Gesamtansicht eines Verbunds (#15 Teil c)
   const entry = useMemo(() => exportEntries(project).find((e) => e.ref === pageId), [project, pageId]);
   const page = entry?.page;
@@ -396,9 +417,27 @@ function Preview({ pageId, profile }: { pageId: string | null; profile: ExportPr
           </span>
         )}
       </div>
-      <div className="export-preview-box">
+      <div className={`export-preview-box${busy ? ' busy' : ''}`}>
         <canvas ref={canvasRef} />
-        {busy && <span className="hint export-preview-busy">Vorschau wird erzeugt …</span>}
+        {busy && (
+          <div className="export-preview-busy" data-testid="export-preview-progress">
+            <div className="export-preview-title">
+              <span className="spinner" aria-hidden="true" />
+              <span role="status">Vorschau wird erzeugt …</span>
+            </div>
+            <span className="export-bar" aria-hidden="true">
+              <span style={{ width: `${Math.round((step?.share ?? 0) * 100)}%` }} />
+            </span>
+            <div className="export-preview-step">
+              <span>{step?.label ?? 'Vorbereiten …'}</span>
+              {eta !== null && (
+                <span className="num" data-testid="export-preview-eta">
+                  noch etwa {eta} s
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {error && <span className="warn-chip outside">{error}</span>}
       </div>
     </div>

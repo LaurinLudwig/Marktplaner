@@ -229,12 +229,13 @@ let preview: { cancel: () => void } | null = null;
 
 /**
  * Vorschau: das echte PDF der Seite (Page oder Gesamtansicht; Rasterbilder mit 72 dpi, ohne Anhang). Eine laufende
- * Vorschau wird abgebrochen. null = abgebrochen oder fehlgeschlagen (Meldung im Dialog).
+ * Vorschau wird abgebrochen. null = abgebrochen oder fehlgeschlagen (Meldung im Dialog). `onProgress` wie beim
+ * Export (Anteil 0–1, Arbeitsschritt), für die Ladeanzeige im Dialog (#33).
  */
-export async function previewPdf(pageId: Id): Promise<Uint8Array | null> {
+export async function previewPdf(pageId: Id, onProgress?: (share: number, label: string) => void): Promise<Uint8Array | null> {
   preview?.cancel();
   const { project } = useStore.getState();
-  const r = run({ project, profile: currentProfile(), scope: { pageIds: [pageId], appendix: { stands: false, free: false, infra: false } }, dpi: 72 });
+  const r = run({ project, profile: currentProfile(), scope: { pageIds: [pageId], appendix: { stands: false, free: false, infra: false } }, dpi: 72, onProgress });
   preview = r;
   try {
     return await r.done;
