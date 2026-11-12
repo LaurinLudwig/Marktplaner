@@ -5,6 +5,12 @@ import { artifact, collectErrors, MOD, openApp } from './helpers';
 
 const st = (page: Page) => page.evaluate(() => (window as any).__marktplanerStore.getState());
 const label = (page: Page, id: string) => page.locator(`.layer-labels .stand-label[data-id="${id}"]`);
+/** Kasten einer Beschriftung im Browser gemessen: Playwrights `boundingBox()` liefert für SVG-Text in WebKit falsche, veraltete Werte. */
+const labelBox = (page: Page, id: string) =>
+  label(page, id).evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
 const leader = (page: Page, id: string) => page.locator(`.layer-labels .label-leader[data-leader="${id}"]`);
 
 /** Grundfläche mit Vorderseite unten (y = 10); drei Stände an der Vorderseite, lange Kategorie. */
@@ -41,7 +47,7 @@ test.describe('#9 Beschriftung', () => {
       await expect(leader(page, id)).toHaveCount(1);
     }
     // hinter dem Stand = oberhalb (Vorderseite der Grundfläche unten); kein Text überdeckt einen anderen
-    const box = async (id: string) => (await label(page, id).boundingBox())!;
+    const box = (id: string) => labelBox(page, id);
     const lukas = await box('lukas');
     const corn = await box('corn');
     const stand = (await page.locator('.stand[data-id="lukas"]').boundingBox())!;
@@ -57,7 +63,7 @@ test.describe('#9 Beschriftung', () => {
     const errors = collectErrors(page);
     await openApp(page);
     await seed(page);
-    const b = (await label(page, 'lukas').boundingBox())!;
+    const b = await labelBox(page, 'lukas');
     const n0 = (await st(page)).history.past.length;
 
     // Klick ohne Ziehen: Stand ausgewählt, nichts geändert
@@ -76,7 +82,7 @@ test.describe('#9 Beschriftung', () => {
     expect(s1.labelOffset).not.toBeNull();
     expect((await st(page)).history.past.length).toBe(n0 + 1);
     await expect(label(page, 'lukas')).toHaveAttribute('data-mode', 'manual');
-    const moved = (await label(page, 'lukas').boundingBox())!;
+    const moved = await labelBox(page, 'lukas');
     expect(moved.x - b.x).toBeGreaterThan(100);
 
     // Rückgängig und wiederherstellen
@@ -97,14 +103,15 @@ test.describe('#9 Beschriftung', () => {
     const errors = collectErrors(page);
     await openApp(page);
     await seed(page);
-    const l0 = (await label(page, 'corn').boundingBox())!;
+    const l0 = await labelBox(page, 'corn');
     const s = (await page.locator('.stand[data-id="corn"]').boundingBox())!;
     await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
     await page.mouse.down();
     await page.mouse.move(s.x + s.width / 2 + 20, s.y + s.height / 2, { steps: 3 });
     await page.mouse.move(s.x + s.width / 2 + 220, s.y + s.height / 2, { steps: 8 });
-    const during = (await label(page, 'corn').boundingBox())!;
-    expect(during.x - l0.x).toBeCloseTo(220, -1);
+    // WebKit verarbeitet die letzte Mausbewegung erst im nächsten Frame
+    await expect.poll(async () => (await labelBox(page, 'corn')).x - l0.x).toBeCloseTo(220, -1);
+    const during = await labelBox(page, 'corn');
     expect(during.y).toBeCloseTo(l0.y, 0);
     await page.mouse.up();
     // nach dem Loslassen: weit weg von den Nachbarn ist direkt hinter dem Stand frei
