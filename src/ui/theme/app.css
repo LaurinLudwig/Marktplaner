@@ -1014,7 +1014,14 @@ kbd {
 .export-preview-head { color: var(--muted); font-size: 11px; }
 .export-preview-box { position: relative; display: grid; place-items: center; background: var(--canvas); border-radius: 3px; min-height: 340px; overflow: hidden; }
 .export-preview-box canvas { box-shadow: var(--shadow); background: #fff; }
-.export-preview-busy { position: absolute; }
+/* Ladeanzeige der Vorschau (#33): alte Vorschau abgeblendet, darüber Schritt, Fortschritt und Restzeit */
+.export-preview-box canvas { transition: opacity 0.2s; }
+.export-preview-box.busy canvas { opacity: 0.3; }
+.export-preview-busy { position: absolute; display: grid; gap: 8px; width: min(260px, calc(100% - 32px)); padding: 12px 14px; background: var(--panel-raised); border: 1px solid var(--border); border-radius: 4px; box-shadow: var(--shadow); }
+.export-preview-busy .export-bar { width: 100%; }
+.export-preview-title { display: flex; align-items: center; gap: 8px; }
+.export-preview-step { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
+.export-preview-step > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dialog p.export-file { padding: 8px 16px 6px; }
 .export-progress { position: fixed; left: 12px; bottom: 12px; z-index: 70; display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--panel-raised); border: 1px solid var(--border); border-radius: 4px; box-shadow: var(--shadow); }
 .export-bar { width: 160px; height: 6px; border-radius: 3px; background: var(--panel-sunken); overflow: hidden; }

@@ -69,6 +69,8 @@ self.addEventListener('message', async (e: MessageEvent<ExportJob>) => {
       pages.push({ scene, backgrounds });
     }
     const n = content.scenes.length;
+    // writePdf meldet erst nach der ersten Seite: vorher steht sonst noch „Hintergrund …“ da (#33)
+    post({ type: 'progress', id: job.id, share: 0.4, label: n ? `Page 1 von ${n}` : 'PDF fertigstellen' });
     const bytes = await writePdf({
       title: content.title,
       projectName: content.projectName,
@@ -77,7 +79,7 @@ self.addEventListener('message', async (e: MessageEvent<ExportJob>) => {
       fonts: await loadFonts(),
       iconPath,
       onProgress: (done, total) => {
-        const label = done < n ? `Page ${done + 1} von ${n}` : done < total - 1 ? 'Anhang' : 'Speichern';
+        const label = done < n ? `Page ${done + 1} von ${n}` : done < total - 1 ? 'Anhang' : 'PDF fertigstellen';
         post({ type: 'progress', id: job.id, share: 0.4 + (0.6 * done) / total, label });
       },
     });
